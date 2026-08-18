@@ -7,5 +7,6 @@ public interface IFileFingerprintService
 {
     Task<FileFingerprint> CalculateAsync(
         DiscoveredFile file,
+        Action<FileHashProgress>? progress = null,
         CancellationToken cancellationToken = default);
 }

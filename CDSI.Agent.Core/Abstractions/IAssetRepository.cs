@@ -1,5 +1,6 @@
 using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Duplicates;
+using CDSI.Agent.Core.Fingerprints;
 using CDSI.Agent.Core.Scanning;
 
 namespace CDSI.Agent.Core.Abstractions;
@@ -41,6 +42,16 @@ public interface IAssetRepository
         long expectedSize,
         DateTimeOffset expectedModifiedAt,
         string sha256,
+        CancellationToken cancellationToken = default);
+
+    Task<FingerprintWorkSummary> GetFingerprintWorkSummaryAsync(
+        FingerprintMode mode,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<FingerprintCandidate>> ListFingerprintCandidatesAsync(
+        FingerprintMode mode,
+        Guid? afterAssetId,
+        int limit,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<AssetListItem>> ListAssetsAsync(

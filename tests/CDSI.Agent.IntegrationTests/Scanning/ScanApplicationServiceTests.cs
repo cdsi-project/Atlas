@@ -1,5 +1,7 @@
+using CDSI.Agent.Application.Fingerprints;
 using CDSI.Agent.Application.Scanning;
 using CDSI.Agent.Core.Assets;
+using CDSI.Agent.Core.Fingerprints;
 using CDSI.Agent.Core.Scanning;
 using CDSI.Agent.Infrastructure.FileSystem;
 using CDSI.Agent.Infrastructure.Fingerprints;
@@ -29,24 +31,30 @@ public sealed class ScanApplicationServiceTests
 
         var repository = new SqliteAssetRepository(
             Path.Combine(directory.Path, "State", "cdsi.db"));
-        var service = new ScanApplicationService(
-            new FileSystemScanner(),
+        var service = new ScanApplicationService(new FileSystemScanner(), repository);
+        var fingerprintService = new FingerprintApplicationService(
             new Sha256FileFingerprintService(),
             repository);
         await service.InitializeAsync();
 
         var firstScan = await service.ScanDirectoryAsync(scanRoot.FullName);
         var firstAssets = await service.ListAssetsAsync();
+        var fastFingerprint = await fingerprintService.ProcessPendingAsync(
+            FingerprintMode.DuplicateCandidates);
+        var duplicateGroups = await service.ListExactDuplicateGroupsAsync();
         var secondScan = await service.ScanDirectoryAsync(scanRoot.FullName);
         var secondAssets = await service.ListAssetsAsync();
-        var duplicateGroups = await service.ListExactDuplicateGroupsAsync();
+        var cachedFastFingerprint = await fingerprintService.ProcessPendingAsync(
+            FingerprintMode.DuplicateCandidates);
+        var completeFingerprint = await fingerprintService.ProcessPendingAsync(
+            FingerprintMode.Complete);
+        var cachedCompleteFingerprint = await fingerprintService.ProcessPendingAsync(
+            FingerprintMode.Complete);
 
         Assert.Equal(ScanJobStatus.Completed, firstScan.Status);
         Assert.Equal(3, firstScan.FilesIndexed);
-        Assert.Equal(3, firstScan.FilesFingerprinted);
         Assert.Equal(ScanJobStatus.Completed, secondScan.Status);
         Assert.Equal(3, secondScan.FilesIndexed);
-        Assert.Equal(0, secondScan.FilesFingerprinted);
         Assert.Equal(3, firstAssets.Count);
         Assert.Equal(3, secondAssets.Count);
         Assert.Equal(
@@ -55,8 +63,64 @@ public sealed class ScanApplicationServiceTests
         Assert.Equal(originalArticle, await File.ReadAllTextAsync(articlePath));
         var duplicateGroup = Assert.Single(duplicateGroups);
         Assert.Equal(2, duplicateGroup.Assets.Count);
+        Assert.Equal(2, fastFingerprint.TotalFiles);
+        Assert.Equal(2, fastFingerprint.FingerprintedFiles);
+        Assert.Equal(0, fastFingerprint.Errors);
+        Assert.Equal(0, cachedFastFingerprint.TotalFiles);
+        Assert.Equal(0, cachedFastFingerprint.FingerprintedFiles);
+        Assert.Equal(1, completeFingerprint.TotalFiles);
+        Assert.Equal(1, completeFingerprint.FingerprintedFiles);
+        Assert.Equal(0, completeFingerprint.Errors);
+        Assert.Equal(0, cachedCompleteFingerprint.TotalFiles);
+        Assert.Equal(0, cachedCompleteFingerprint.FingerprintedFiles);
         Assert.Contains(duplicateGroup.Assets, asset => asset.Path == articlePath);
         Assert.Contains(duplicateGroup.Assets, asset => asset.Path == articleCopyPath);
+
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
+    public async Task ProcessPendingAsync_WhenCancelled_ResumesWithoutRehashingCompletedFiles()
+    {
+        using var directory = new TestDirectory();
+        var scanRoot = Directory.CreateDirectory(Path.Combine(directory.Path, "Assets"));
+        await File.WriteAllBytesAsync(Path.Combine(scanRoot.FullName, "one.bin"), [1, 2, 3]);
+        await File.WriteAllBytesAsync(Path.Combine(scanRoot.FullName, "two.bin"), [4, 5, 6]);
+        await File.WriteAllBytesAsync(Path.Combine(scanRoot.FullName, "three.bin"), [7, 8, 9]);
+
+        var repository = new SqliteAssetRepository(
+            Path.Combine(directory.Path, "State", "cdsi.db"));
+        var scanService = new ScanApplicationService(new FileSystemScanner(), repository);
+        var fingerprintService = new FingerprintApplicationService(
+            new Sha256FileFingerprintService(),
+            repository);
+        await scanService.InitializeAsync();
+        await scanService.ScanDirectoryAsync(scanRoot.FullName);
+
+        using var cancellation = new CancellationTokenSource();
+        var progress = new InlineProgress<FingerprintProgress>(value =>
+        {
+            if (value.FingerprintedFiles == 1)
+            {
+                cancellation.Cancel();
+            }
+        });
+
+        var cancelled = await fingerprintService.ProcessPendingAsync(
+            FingerprintMode.DuplicateCandidates,
+            progress,
+            cancellation.Token);
+        var resumed = await fingerprintService.ProcessPendingAsync(
+            FingerprintMode.DuplicateCandidates);
+        var cached = await fingerprintService.ProcessPendingAsync(
+            FingerprintMode.DuplicateCandidates);
+
+        Assert.True(cancelled.Cancelled);
+        Assert.Equal(1, cancelled.FingerprintedFiles);
+        Assert.Equal(2, resumed.TotalFiles);
+        Assert.Equal(2, resumed.FingerprintedFiles);
+        Assert.False(resumed.Cancelled);
+        Assert.Equal(0, cached.TotalFiles);
 
         SqliteConnection.ClearAllPools();
     }
@@ -73,10 +137,7 @@ public sealed class ScanApplicationServiceTests
 
         var repository = new SqliteAssetRepository(
             Path.Combine(directory.Path, "State", "cdsi.db"));
-        var service = new ScanApplicationService(
-            new FileSystemScanner(),
-            new Sha256FileFingerprintService(),
-            repository);
+        var service = new ScanApplicationService(new FileSystemScanner(), repository);
         await service.InitializeAsync();
         await service.ScanDirectoryAsync(scanRoot.FullName);
 
@@ -94,5 +155,15 @@ public sealed class ScanApplicationServiceTests
         Assert.Equal("retained", await File.ReadAllTextAsync(retainedPath));
 
         SqliteConnection.ClearAllPools();
+    }
+
+    private sealed class InlineProgress<T>(Action<T> report) : IProgress<T>
+    {
+        private readonly Action<T> _report = report;
+
+        public void Report(T value)
+        {
+            _report(value);
+        }
     }
 }

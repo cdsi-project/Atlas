@@ -7,6 +7,10 @@ public sealed record FileFingerprint(
     long Size,
     DateTimeOffset ModifiedAt);
 
+public sealed record FileHashProgress(
+    long BytesProcessed,
+    long TotalBytes);
+
 public sealed class FileChangedDuringFingerprintException : IOException
 {
     public FileChangedDuringFingerprintException(DiscoveredFile file)

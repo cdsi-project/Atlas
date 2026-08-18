@@ -15,12 +15,15 @@ public sealed class Sha256FileFingerprintServiceTests
         var discoveredFile = CreateDiscoveredFile(path);
         var service = new Sha256FileFingerprintService();
 
-        var fingerprint = await service.CalculateAsync(discoveredFile);
+        var reports = new List<FileHashProgress>();
+        var fingerprint = await service.CalculateAsync(discoveredFile, reports.Add);
 
         Assert.Equal(
             "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
             fingerprint.Sha256);
         Assert.Equal(discoveredFile.Size, fingerprint.Size);
+        Assert.NotEmpty(reports);
+        Assert.Equal(discoveredFile.Size, reports[^1].BytesProcessed);
         Assert.Equal(discoveredFile.ModifiedAt, fingerprint.ModifiedAt);
     }
 

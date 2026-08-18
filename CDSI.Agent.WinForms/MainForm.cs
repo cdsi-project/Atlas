@@ -1,5 +1,7 @@
+using CDSI.Agent.Application.Fingerprints;
 using CDSI.Agent.Application.Scanning;
 using CDSI.Agent.Core.Assets;
+using CDSI.Agent.Core.Fingerprints;
 using CDSI.Agent.Core.Scanning;
 
 namespace CDSI.Agent.WinForms;
@@ -8,6 +10,8 @@ public sealed class MainForm : Form
 {
     private readonly ScanApplicationService _scanService;
     private readonly TextBox _rootPathTextBox = new();
+    private readonly FingerprintApplicationService _fingerprintService;
+    private readonly CheckBox _fullVerificationCheckBox = new();
     private readonly Button _browseButton = new();
     private readonly Button _scanButton = new();
     private readonly Button _cancelButton = new();
@@ -22,9 +26,13 @@ public sealed class MainForm : Form
     private readonly ToolStripStatusLabel _databaseStatusLabel = new();
     private CancellationTokenSource? _scanCancellation;
 
-    public MainForm(ScanApplicationService scanService, string dataDirectory)
+    public MainForm(
+        ScanApplicationService scanService,
+        FingerprintApplicationService fingerprintService,
+        string dataDirectory)
     {
         _scanService = scanService;
+        _fingerprintService = fingerprintService;
         InitializeLayout(dataDirectory);
 
         Shown += MainForm_Shown;
@@ -83,12 +91,13 @@ public sealed class MainForm : Form
         var commandPanel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 4,
+            ColumnCount = 5,
             Padding = new Padding(28, 14, 28, 10),
             BackColor = Color.White
         };
         commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
+        commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 104));
         commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
         commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
 
@@ -99,6 +108,13 @@ public sealed class MainForm : Form
 
         ConfigureCommandButton(_browseButton, "选择目录", Color.FromArgb(236, 239, 242), Color.FromArgb(31, 37, 43));
         ConfigureCommandButton(_scanButton, "开始扫描", Color.FromArgb(24, 121, 78), Color.White);
+        _fullVerificationCheckBox.Text = "完整校验";
+        _fullVerificationCheckBox.AutoSize = true;
+        _fullVerificationCheckBox.Dock = DockStyle.Fill;
+        _fullVerificationCheckBox.Margin = new Padding(8, 0, 4, 0);
+        _fullVerificationCheckBox.TextAlign = ContentAlignment.MiddleLeft;
+        _fullVerificationCheckBox.ForeColor = Color.FromArgb(52, 61, 69);
+
         ConfigureCommandButton(_cancelButton, "取消", Color.FromArgb(236, 239, 242), Color.FromArgb(137, 49, 49));
         _cancelButton.Enabled = false;
 
@@ -108,8 +124,9 @@ public sealed class MainForm : Form
 
         commandPanel.Controls.Add(_rootPathTextBox, 0, 0);
         commandPanel.Controls.Add(_browseButton, 1, 0);
-        commandPanel.Controls.Add(_scanButton, 2, 0);
-        commandPanel.Controls.Add(_cancelButton, 3, 0);
+        commandPanel.Controls.Add(_fullVerificationCheckBox, 2, 0);
+        commandPanel.Controls.Add(_scanButton, 3, 0);
+        commandPanel.Controls.Add(_cancelButton, 4, 0);
         mainLayout.Controls.Add(commandPanel, 0, 1);
 
         var progressPanel = new TableLayoutPanel
@@ -328,7 +345,8 @@ public sealed class MainForm : Form
 
         _scanCancellation?.Dispose();
         _scanCancellation = new CancellationTokenSource();
-        var progress = new Progress<ScanProgress>(UpdateProgress);
+        var scanProgress = new Progress<ScanProgress>(UpdateScanProgress);
+        var fingerprintProgress = new Progress<FingerprintProgress>(UpdateFingerprintProgress);
 
         SetBusy(true);
         _progressBar.Style = ProgressBarStyle.Marquee;
@@ -337,17 +355,47 @@ public sealed class MainForm : Form
 
         try
         {
-            var summary = await Task.Run(
+            var scanSummary = await Task.Run(
                 () => _scanService.ScanDirectoryAsync(
                     scanRoot,
-                    progress,
+                    scanProgress,
                     _scanCancellation.Token),
                 _scanCancellation.Token);
 
             await RefreshAssetsAsync();
-            _statusLabel.Text = summary.Status == ScanJobStatus.Cancelled
-                ? "扫描已取消"
-                : $"扫描完成，已索引 {summary.FilesIndexed:N0} 个文件";
+            if (scanSummary.Status == ScanJobStatus.Cancelled)
+            {
+                _statusLabel.Text = "扫描已取消";
+                return;
+            }
+
+            var mode = _fullVerificationCheckBox.Checked
+                ? FingerprintMode.Complete
+                : FingerprintMode.DuplicateCandidates;
+            _progressBar.MarqueeAnimationSpeed = 0;
+            _progressBar.Style = ProgressBarStyle.Continuous;
+            _progressBar.Minimum = 0;
+            _progressBar.Maximum = 1_000;
+            _progressBar.Value = 0;
+            _statusLabel.Text = mode == FingerprintMode.Complete
+                ? "正在进行完整校验"
+                : "正在检查重复候选";
+
+            var fingerprintSummary = await Task.Run(
+                () => _fingerprintService.ProcessPendingAsync(
+                    mode,
+                    fingerprintProgress,
+                    _scanCancellation.Token),
+                _scanCancellation.Token);
+
+            await RefreshAssetsAsync();
+            _statusLabel.Text = fingerprintSummary.Cancelled
+                ? $"哈希已取消，已完成 {fingerprintSummary.FingerprintedFiles:N0} 个文件"
+                : $"扫描完成，已索引 {scanSummary.FilesIndexed:N0} 个文件，已哈希 {fingerprintSummary.FingerprintedFiles:N0} 个文件";
+        }
+        catch (OperationCanceledException)
+        {
+            _statusLabel.Text = "操作已取消";
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -362,16 +410,33 @@ public sealed class MainForm : Form
         }
     }
 
-    private void UpdateProgress(ScanProgress progress)
+    private void UpdateScanProgress(ScanProgress progress)
     {
         _progressLabel.Text =
-            $"发现 {progress.FilesDiscovered:N0}  ·  已索引 {progress.FilesIndexed:N0}  ·  已哈希 {progress.FilesFingerprinted:N0}  ·  错误 {progress.Errors:N0}";
+            $"发现 {progress.FilesDiscovered:N0}  ·  已索引 {progress.FilesIndexed:N0}  ·  错误 {progress.Errors:N0}";
         _currentPathLabel.Text = progress.CurrentPath ?? progress.Message ?? string.Empty;
 
         if (progress.Stage == ScanStage.Failed)
         {
             _currentPathLabel.Text = progress.Message ?? "扫描失败";
         }
+    }
+
+    private void UpdateFingerprintProgress(FingerprintProgress progress)
+    {
+        var modeText = progress.Mode == FingerprintMode.Complete
+            ? "完整校验"
+            : "重复候选";
+        _progressLabel.Text =
+            $"{modeText} {progress.CompletedFiles:N0}/{progress.TotalFiles:N0}  ·  已哈希 {progress.FingerprintedFiles:N0}  ·  {FormatFileSize(progress.ProcessedBytes)}/{FormatFileSize(progress.TotalBytes)}  ·  {FormatFileSize((long)progress.BytesPerSecond)}/s  ·  错误 {progress.Errors:N0}";
+        _currentPathLabel.Text = progress.Message ?? progress.CurrentPath ?? string.Empty;
+
+        _progressBar.Value = progress.TotalBytes == 0
+            ? 0
+            : (int)Math.Clamp(
+                progress.ProcessedBytes * 1_000d / progress.TotalBytes,
+                0d,
+                1_000d);
     }
 
     private async Task RefreshAssetsAsync()
@@ -424,6 +489,7 @@ public sealed class MainForm : Form
         _browseButton.Enabled = !busy;
         _scanButton.Enabled = !busy;
         _cancelButton.Enabled = busy && allowCancel;
+        _fullVerificationCheckBox.Enabled = !busy;
         UseWaitCursor = busy && !allowCancel;
     }
 

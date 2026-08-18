@@ -6,15 +6,13 @@ public sealed record ScanProgress(
     int FilesIndexed,
     int Errors,
     string? CurrentPath,
-    string? Message = null,
-    int FilesFingerprinted = 0);
+    string? Message = null);
 
 public enum ScanStage
 {
     Initializing,
     Discovering,
     Indexing,
-    Fingerprinting,
     Completed,
     Cancelled,
     Failed
@@ -25,5 +23,4 @@ public sealed record ScanSummary(
     ScanJobStatus Status,
     int FilesDiscovered,
     int FilesIndexed,
-    int Errors,
-    int FilesFingerprinted = 0);
+    int Errors);

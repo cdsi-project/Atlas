@@ -10,16 +10,13 @@ public sealed class ScanApplicationService
     private const int BatchSize = 200;
 
     private readonly IFileScanner _scanner;
-    private readonly IFileFingerprintService _fingerprintService;
     private readonly IAssetRepository _repository;
 
     public ScanApplicationService(
         IFileScanner scanner,
-        IFileFingerprintService fingerprintService,
         IAssetRepository repository)
     {
         _scanner = scanner;
-        _fingerprintService = fingerprintService;
         _repository = repository;
     }
 
@@ -89,7 +86,6 @@ public sealed class ScanApplicationService
         var buffer = new List<DiscoveredFile>(BatchSize);
         var discovered = 0;
         var indexed = 0;
-        var fingerprinted = 0;
         var errors = 0;
 
         void Report(ScanStage stage, string? path, string? message = null)
@@ -100,60 +96,10 @@ public sealed class ScanApplicationService
                 indexed,
                 errors,
                 path,
-                message,
-                fingerprinted));
+                message));
         }
 
-        async Task FingerprintAsync(
-            IReadOnlyList<RegisteredLocalAsset> registeredAssets,
-            CancellationToken token)
-        {
-            foreach (var registeredAsset in registeredAssets)
-            {
-                if (!registeredAsset.RequiresFingerprint)
-                {
-                    continue;
-                }
-
-                try
-                {
-                    Report(ScanStage.Fingerprinting, registeredAsset.File.FullPath);
-                    var fingerprint = await _fingerprintService.CalculateAsync(
-                        registeredAsset.File,
-                        token);
-                    var saved = await _repository.SaveSha256Async(
-                        registeredAsset.AssetId,
-                        fingerprint.Size,
-                        fingerprint.ModifiedAt,
-                        fingerprint.Sha256,
-                        token);
-
-                    if (saved)
-                    {
-                        fingerprinted++;
-                        Report(ScanStage.Fingerprinting, registeredAsset.File.FullPath);
-                    }
-                    else
-                    {
-                        errors++;
-                        Report(
-                            ScanStage.Fingerprinting,
-                            registeredAsset.File.FullPath,
-                            "File metadata changed before its fingerprint could be saved.");
-                    }
-                }
-                catch (Exception exception) when (exception is not OperationCanceledException)
-                {
-                    errors++;
-                    Report(
-                        ScanStage.Fingerprinting,
-                        registeredAsset.File.FullPath,
-                        exception.Message);
-                }
-            }
-        }
-
-        async Task RegisterAndFingerprintAsync(
+        async Task RegisterAsync(
             IReadOnlyCollection<DiscoveredFile> files,
             CancellationToken token)
         {
@@ -163,7 +109,6 @@ public sealed class ScanApplicationService
                 DateTimeOffset.UtcNow,
                 token);
             indexed += registered.Count;
-            await FingerprintAsync(registered, token);
         }
 
         async Task FlushAsync(CancellationToken token)
@@ -178,7 +123,7 @@ public sealed class ScanApplicationService
 
             try
             {
-                await RegisterAndFingerprintAsync(currentBatch, token);
+                await RegisterAsync(currentBatch, token);
             }
             catch (Exception batchException)
                 when (currentBatch.Length > 1 && batchException is not OperationCanceledException)
@@ -187,7 +132,7 @@ public sealed class ScanApplicationService
                 {
                     try
                     {
-                        await RegisterAndFingerprintAsync([file], token);
+                        await RegisterAsync([file], token);
                     }
                     catch (Exception exception) when (exception is not OperationCanceledException)
                     {
@@ -256,8 +201,7 @@ public sealed class ScanApplicationService
                 job.Status,
                 discovered,
                 indexed,
-                errors,
-                fingerprinted);
+                errors);
         }
         catch (OperationCanceledException)
         {
@@ -277,8 +221,7 @@ public sealed class ScanApplicationService
                 job.Status,
                 discovered,
                 indexed,
-                errors,
-                fingerprinted);
+                errors);
         }
         catch (Exception exception)
         {

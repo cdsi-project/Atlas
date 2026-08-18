@@ -1,3 +1,4 @@
+using CDSI.Agent.Application.Fingerprints;
 using CDSI.Agent.Application.Scanning;
 using CDSI.Agent.Infrastructure.FileSystem;
 using CDSI.Agent.Infrastructure.Fingerprints;
@@ -21,10 +22,14 @@ static class Program
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "CDSI");
         var repository = new SqliteAssetRepository(Path.Combine(dataDirectory, "cdsi.db"));
-        var scanService = new ScanApplicationService(
-            new FileSystemScanner(),
-            new Sha256FileFingerprintService(),
+        var fingerprintEngine = new Sha256FileFingerprintService();
+        var scanService = new ScanApplicationService(new FileSystemScanner(), repository);
+        var fingerprintService = new FingerprintApplicationService(
+            fingerprintEngine,
             repository);
-        System.Windows.Forms.Application.Run(new MainForm(scanService, dataDirectory));
+        System.Windows.Forms.Application.Run(new MainForm(
+            scanService,
+            fingerprintService,
+            dataDirectory));
     }
 }

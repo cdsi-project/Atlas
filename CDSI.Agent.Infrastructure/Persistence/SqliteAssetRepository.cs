@@ -2,6 +2,7 @@ using System.Globalization;
 using CDSI.Agent.Core.Abstractions;
 using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Duplicates;
+using CDSI.Agent.Core.Fingerprints;
 using CDSI.Agent.Core.Scanning;
 using Microsoft.Data.Sqlite;
 
@@ -316,6 +317,104 @@ public sealed class SqliteAssetRepository : IAssetRepository
             expectedModifiedAt.ToString("O"));
 
         return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+    }
+
+    public async Task<FingerprintWorkSummary> GetFingerprintWorkSummaryAsync(
+        FingerprintMode mode,
+        CancellationToken cancellationToken = default)
+    {
+        var modeFilter = GetFingerprintModeFilter(mode);
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            $"""
+            SELECT COUNT(*), COALESCE(SUM(a.size), 0)
+            FROM assets a
+            WHERE a.sha256 IS NULL
+              AND EXISTS (
+                  SELECT 1
+                  FROM asset_locations l
+                  WHERE l.asset_id = a.id
+                    AND l.location_type = 'Local'
+                    AND l.status = 'Available'
+              )
+              {modeFilter};
+            """;
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return new FingerprintWorkSummary(0, 0);
+        }
+
+        return new FingerprintWorkSummary(reader.GetInt32(0), reader.GetInt64(1));
+    }
+
+    public async Task<IReadOnlyList<FingerprintCandidate>> ListFingerprintCandidatesAsync(
+        FingerprintMode mode,
+        Guid? afterAssetId,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        if (limit is < 1 or > 10_000)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit));
+        }
+
+        var modeFilter = GetFingerprintModeFilter(mode);
+        var candidates = new List<FingerprintCandidate>();
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            $"""
+            SELECT
+                a.id,
+                a.original_filename,
+                a.extension,
+                a.mime_type,
+                a.size,
+                a.created_at,
+                a.modified_at,
+                MIN(l.path)
+            FROM assets a
+            INNER JOIN asset_locations l ON l.asset_id = a.id
+            WHERE a.sha256 IS NULL
+              AND l.location_type = 'Local'
+              AND l.status = 'Available'
+              AND ($after_asset_id IS NULL OR a.id > $after_asset_id)
+              {modeFilter}
+            GROUP BY
+                a.id,
+                a.original_filename,
+                a.extension,
+                a.mime_type,
+                a.size,
+                a.created_at,
+                a.modified_at
+            ORDER BY a.id
+            LIMIT $limit;
+            """;
+        command.Parameters.AddWithValue(
+            "$after_asset_id",
+            afterAssetId is null ? DBNull.Value : afterAssetId.Value.ToString("D"));
+        command.Parameters.AddWithValue("$limit", limit);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            candidates.Add(new FingerprintCandidate(
+                Guid.Parse(reader.GetString(0)),
+                new DiscoveredFile(
+                    reader.GetString(7),
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.IsDBNull(3) ? null : reader.GetString(3),
+                    reader.GetInt64(4),
+                    ParseTimestamp(reader.GetString(5)),
+                    ParseTimestamp(reader.GetString(6)))));
+        }
+
+        return candidates;
     }
 
     public async Task<IReadOnlyList<AssetListItem>> ListAssetsAsync(
@@ -636,6 +735,31 @@ public sealed class SqliteAssetRepository : IAssetRepository
     private static string CreatePathKey(string path)
     {
         return path.ToUpperInvariant();
+    }
+
+    private static string GetFingerprintModeFilter(FingerprintMode mode)
+    {
+        return mode switch
+        {
+            FingerprintMode.Complete => string.Empty,
+            FingerprintMode.DuplicateCandidates =>
+                """
+                AND a.size IN (
+                    SELECT a2.size
+                    FROM assets a2
+                    WHERE EXISTS (
+                        SELECT 1
+                        FROM asset_locations l2
+                        WHERE l2.asset_id = a2.id
+                          AND l2.location_type = 'Local'
+                          AND l2.status = 'Available'
+                    )
+                    GROUP BY a2.size
+                    HAVING COUNT(*) > 1
+                )
+                """,
+            _ => throw new ArgumentOutOfRangeException(nameof(mode))
+        };
     }
 
     private static DateTimeOffset ParseTimestamp(string value)
