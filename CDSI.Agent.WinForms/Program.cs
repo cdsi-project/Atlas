@@ -1,7 +1,9 @@
 using CDSI.Agent.Application.Fingerprints;
+using CDSI.Agent.Application.Metadata;
 using CDSI.Agent.Application.Scanning;
 using CDSI.Agent.Infrastructure.FileSystem;
 using CDSI.Agent.Infrastructure.Fingerprints;
+using CDSI.Agent.Infrastructure.Metadata;
 using CDSI.Agent.Infrastructure.Persistence;
 
 namespace CDSI.Agent.WinForms;
@@ -27,9 +29,16 @@ static class Program
         var fingerprintService = new FingerprintApplicationService(
             fingerprintEngine,
             repository);
+        var metadataService = new MetadataExtractionApplicationService(
+            [
+                new TagLibMetadataExtractor(),
+                new GenericMetadataExtractor()
+            ],
+            repository);
         System.Windows.Forms.Application.Run(new MainForm(
             scanService,
             fingerprintService,
+            metadataService,
             dataDirectory));
     }
 }

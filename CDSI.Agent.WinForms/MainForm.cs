@@ -1,7 +1,9 @@
+using CDSI.Agent.Application.Metadata;
 using CDSI.Agent.Application.Fingerprints;
 using CDSI.Agent.Application.Scanning;
 using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Fingerprints;
+using CDSI.Agent.Core.Metadata;
 using CDSI.Agent.Core.Scanning;
 
 namespace CDSI.Agent.WinForms;
@@ -11,6 +13,7 @@ public sealed class MainForm : Form
     private readonly ScanApplicationService _scanService;
     private readonly TextBox _rootPathTextBox = new();
     private readonly FingerprintApplicationService _fingerprintService;
+    private readonly MetadataExtractionApplicationService _metadataService;
     private readonly CheckBox _fullVerificationCheckBox = new();
     private readonly Button _browseButton = new();
     private readonly Button _scanButton = new();
@@ -29,10 +32,12 @@ public sealed class MainForm : Form
     public MainForm(
         ScanApplicationService scanService,
         FingerprintApplicationService fingerprintService,
+        MetadataExtractionApplicationService metadataService,
         string dataDirectory)
     {
         _scanService = scanService;
         _fingerprintService = fingerprintService;
+        _metadataService = metadataService;
         InitializeLayout(dataDirectory);
 
         Shown += MainForm_Shown;
@@ -234,6 +239,7 @@ public sealed class MainForm : Form
         _assetGrid.Columns.Add(CreateColumn("大小", 90));
         _assetGrid.Columns.Add(CreateColumn("修改时间", 145));
         _assetGrid.Columns.Add(CreateColumn("位置", 320, DataGridViewAutoSizeColumnMode.Fill, 46));
+        _assetGrid.Columns.Add(CreateColumn("媒体信息", 220));
         _assetGrid.Columns.Add(CreateColumn("状态", 80));
     }
 
@@ -347,6 +353,7 @@ public sealed class MainForm : Form
         _scanCancellation = new CancellationTokenSource();
         var scanProgress = new Progress<ScanProgress>(UpdateScanProgress);
         var fingerprintProgress = new Progress<FingerprintProgress>(UpdateFingerprintProgress);
+        var metadataProgress = new Progress<MetadataProgress>(UpdateMetadataProgress);
 
         SetBusy(true);
         _progressBar.Style = ProgressBarStyle.Marquee;
@@ -366,6 +373,27 @@ public sealed class MainForm : Form
             if (scanSummary.Status == ScanJobStatus.Cancelled)
             {
                 _statusLabel.Text = "扫描已取消";
+                return;
+            }
+
+            _progressBar.MarqueeAnimationSpeed = 0;
+            _progressBar.Style = ProgressBarStyle.Continuous;
+            _progressBar.Minimum = 0;
+            _progressBar.Maximum = 1_000;
+            _progressBar.Value = 0;
+            _statusLabel.Text = "正在提取元数据";
+
+            var metadataSummary = await Task.Run(
+                () => _metadataService.ProcessPendingAsync(
+                    metadataProgress,
+                    _scanCancellation.Token),
+                _scanCancellation.Token);
+
+            await RefreshAssetsAsync();
+            if (metadataSummary.Cancelled)
+            {
+                _statusLabel.Text =
+                    $"元数据提取已取消，已完成 {metadataSummary.ExtractedFiles:N0} 个文件";
                 return;
             }
 
@@ -391,7 +419,7 @@ public sealed class MainForm : Form
             await RefreshAssetsAsync();
             _statusLabel.Text = fingerprintSummary.Cancelled
                 ? $"哈希已取消，已完成 {fingerprintSummary.FingerprintedFiles:N0} 个文件"
-                : $"扫描完成，已索引 {scanSummary.FilesIndexed:N0} 个文件，已哈希 {fingerprintSummary.FingerprintedFiles:N0} 个文件";
+                : $"扫描完成，已索引 {scanSummary.FilesIndexed:N0} 个文件，已提取 {metadataSummary.ExtractedFiles:N0} 个文件，已哈希 {fingerprintSummary.FingerprintedFiles:N0} 个文件";
         }
         catch (OperationCanceledException)
         {
@@ -420,6 +448,20 @@ public sealed class MainForm : Form
         {
             _currentPathLabel.Text = progress.Message ?? "扫描失败";
         }
+    }
+
+    private void UpdateMetadataProgress(MetadataProgress progress)
+    {
+        _progressLabel.Text =
+            $"元数据 {progress.CompletedFiles:N0}/{progress.TotalFiles:N0}  ·  已提取 {progress.ExtractedFiles:N0}  ·  不支持 {progress.UnsupportedFiles:N0}  ·  错误 {progress.Errors:N0}";
+        _currentPathLabel.Text = progress.Message ?? progress.CurrentPath ?? string.Empty;
+
+        _progressBar.Value = progress.TotalFiles == 0
+            ? 0
+            : (int)Math.Clamp(
+                progress.CompletedFiles * 1_000d / progress.TotalFiles,
+                0d,
+                1_000d);
     }
 
     private void UpdateFingerprintProgress(FingerprintProgress progress)
@@ -458,6 +500,7 @@ public sealed class MainForm : Form
                 FormatFileSize(asset.Size),
                 asset.ModifiedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
                 asset.Path,
+                FormatMetadata(asset.Metadata),
                 FormatStatus(asset));
         }
 
@@ -512,6 +555,68 @@ public sealed class MainForm : Form
     private static string FormatLocationStatus(AssetLocationStatus status)
     {
         return status == AssetLocationStatus.Missing ? "位置缺失" : "可用";
+    }
+
+    private static string FormatMetadata(AssetMetadata? metadata)
+    {
+        if (metadata is null)
+        {
+            return "待提取";
+        }
+
+        if (metadata.Status == MetadataExtractionStatus.Unsupported)
+        {
+            return "无专用元数据";
+        }
+
+        if (metadata.Status == MetadataExtractionStatus.Error)
+        {
+            return "提取失败";
+        }
+
+        var content = metadata.Content;
+        if (content is null)
+        {
+            return "已提取";
+        }
+
+        var parts = new List<string>();
+        if (content.Width is not null && content.Height is not null)
+        {
+            parts.Add($"{content.Width}×{content.Height}");
+        }
+
+        if (content.DurationMilliseconds is not null)
+        {
+            parts.Add(FormatDuration(content.DurationMilliseconds.Value));
+        }
+
+        if (!string.IsNullOrWhiteSpace(content.VideoCodec))
+        {
+            parts.Add(content.VideoCodec);
+        }
+        else if (!string.IsNullOrWhiteSpace(content.AudioCodec))
+        {
+            parts.Add(content.AudioCodec);
+        }
+
+        return parts.Count == 0
+            ? content.Kind switch
+            {
+                AssetMediaKind.Image => "图片",
+                AssetMediaKind.Audio => "音频",
+                AssetMediaKind.Video => "视频",
+                _ => "已提取"
+            }
+            : string.Join(" · ", parts);
+    }
+
+    private static string FormatDuration(long milliseconds)
+    {
+        var duration = TimeSpan.FromMilliseconds(milliseconds);
+        return duration.TotalHours >= 1
+            ? $"{(int)duration.TotalHours}:{duration.Minutes:00}:{duration.Seconds:00}"
+            : $"{duration.Minutes}:{duration.Seconds:00}";
     }
 
     private static string FormatFileSize(long bytes)

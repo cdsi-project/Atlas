@@ -767,6 +767,20 @@ After Milestone 0.1 is stable:
 
 ---
 
+# 15.1 Milestone 0.3
+
+After exact duplicate detection is stable:
+
+- [x] add an extractor registry
+- [x] extract common image, audio, and video metadata locally
+- [x] persist versioned metadata independently from assets
+- [x] invalidate metadata when the source file changes
+- [x] isolate malformed or unsupported files
+- [x] display media summaries in the desktop UI
+- [x] keep source files read-only
+
+---
+
 # 16. Do Not Implement Yet
 
 Do NOT implement during initial project setup:

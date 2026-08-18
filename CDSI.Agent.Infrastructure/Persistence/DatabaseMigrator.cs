@@ -26,16 +26,13 @@ internal static class DatabaseMigrator
         var currentVersion = Convert.ToInt32(
             await versionCommand.ExecuteScalarAsync(cancellationToken));
 
-        if (currentVersion >= 1)
+        if (currentVersion < 1)
         {
-            return;
-        }
-
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        await using var migrationCommand = connection.CreateCommand();
-        migrationCommand.Transaction = (SqliteTransaction)transaction;
-        migrationCommand.CommandText =
-            """
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await using var migrationCommand = connection.CreateCommand();
+            migrationCommand.Transaction = (SqliteTransaction)transaction;
+            migrationCommand.CommandText =
+                """
             CREATE TABLE devices (
                 id TEXT NOT NULL PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -101,11 +98,45 @@ internal static class DatabaseMigrator
             INSERT INTO schema_migrations(version, applied_at)
             VALUES (1, $applied_at);
             """;
-        migrationCommand.Parameters.AddWithValue(
-            "$applied_at",
-            DateTimeOffset.UtcNow.ToString("O"));
-        await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+            migrationCommand.Parameters.AddWithValue(
+                "$applied_at",
+                DateTimeOffset.UtcNow.ToString("O"));
+            await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        if (currentVersion < 2)
+        {
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await using var migrationCommand = connection.CreateCommand();
+            migrationCommand.Transaction = (SqliteTransaction)transaction;
+            migrationCommand.CommandText =
+                """
+                CREATE TABLE asset_metadata (
+                    asset_id TEXT NOT NULL PRIMARY KEY,
+                    extractor_name TEXT NOT NULL,
+                    pipeline_version INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    source_size INTEGER NOT NULL,
+                    source_modified_at TEXT NOT NULL,
+                    metadata_json TEXT NULL,
+                    error_message TEXT NULL,
+                    extracted_at TEXT NOT NULL,
+                    FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX ix_asset_metadata_status
+                ON asset_metadata(status);
+
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (2, $applied_at);
+                """;
+            migrationCommand.Parameters.AddWithValue(
+                "$applied_at",
+                DateTimeOffset.UtcNow.ToString("O"));
+            await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     private static async Task ExecuteAsync(

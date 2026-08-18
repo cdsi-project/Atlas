@@ -1,8 +1,10 @@
 using System.Globalization;
+using System.Text.Json;
 using CDSI.Agent.Core.Abstractions;
 using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Duplicates;
 using CDSI.Agent.Core.Fingerprints;
+using CDSI.Agent.Core.Metadata;
 using CDSI.Agent.Core.Scanning;
 using Microsoft.Data.Sqlite;
 
@@ -417,6 +419,189 @@ public sealed class SqliteAssetRepository : IAssetRepository
         return candidates;
     }
 
+    public async Task<MetadataWorkSummary> GetMetadataWorkSummaryAsync(
+        int pipelineVersion,
+        CancellationToken cancellationToken = default)
+    {
+        if (pipelineVersion < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pipelineVersion));
+        }
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT COUNT(*)
+            FROM assets a
+            WHERE EXISTS (
+                SELECT 1
+                FROM asset_locations l
+                WHERE l.asset_id = a.id
+                  AND l.location_type = 'Local'
+                  AND l.status = 'Available'
+            )
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM asset_metadata m
+                  WHERE m.asset_id = a.id
+                    AND m.pipeline_version = $pipeline_version
+                    AND m.source_size = a.size
+                    AND m.source_modified_at = a.modified_at
+              );
+            """;
+        command.Parameters.AddWithValue("$pipeline_version", pipelineVersion);
+
+        var count = Convert.ToInt32(
+            await command.ExecuteScalarAsync(cancellationToken),
+            CultureInfo.InvariantCulture);
+        return new MetadataWorkSummary(count);
+    }
+
+    public async Task<IReadOnlyList<MetadataCandidate>> ListMetadataCandidatesAsync(
+        int pipelineVersion,
+        Guid? afterAssetId,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        if (pipelineVersion < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pipelineVersion));
+        }
+
+        if (limit is < 1 or > 10_000)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit));
+        }
+
+        var candidates = new List<MetadataCandidate>();
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT
+                a.id,
+                a.original_filename,
+                a.extension,
+                a.mime_type,
+                a.size,
+                a.created_at,
+                a.modified_at,
+                MIN(l.path)
+            FROM assets a
+            INNER JOIN asset_locations l ON l.asset_id = a.id
+            WHERE l.location_type = 'Local'
+              AND l.status = 'Available'
+              AND ($after_asset_id IS NULL OR a.id > $after_asset_id)
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM asset_metadata m
+                  WHERE m.asset_id = a.id
+                    AND m.pipeline_version = $pipeline_version
+                    AND m.source_size = a.size
+                    AND m.source_modified_at = a.modified_at
+              )
+            GROUP BY
+                a.id,
+                a.original_filename,
+                a.extension,
+                a.mime_type,
+                a.size,
+                a.created_at,
+                a.modified_at
+            ORDER BY a.id
+            LIMIT $limit;
+            """;
+        command.Parameters.AddWithValue("$pipeline_version", pipelineVersion);
+        command.Parameters.AddWithValue(
+            "$after_asset_id",
+            afterAssetId is null ? DBNull.Value : afterAssetId.Value.ToString("D"));
+        command.Parameters.AddWithValue("$limit", limit);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            candidates.Add(new MetadataCandidate(
+                Guid.Parse(reader.GetString(0)),
+                new DiscoveredFile(
+                    reader.GetString(7),
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.IsDBNull(3) ? null : reader.GetString(3),
+                    reader.GetInt64(4),
+                    ParseTimestamp(reader.GetString(5)),
+                    ParseTimestamp(reader.GetString(6)))));
+        }
+
+        return candidates;
+    }
+
+    public async Task<bool> SaveMetadataAsync(
+        AssetMetadata metadata,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(metadata);
+        if (metadata.PipelineVersion < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(metadata));
+        }
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            INSERT INTO asset_metadata(
+                asset_id, extractor_name, pipeline_version, status,
+                source_size, source_modified_at, metadata_json,
+                error_message, extracted_at)
+            SELECT
+                $asset_id, $extractor_name, $pipeline_version, $status,
+                $source_size, $source_modified_at, $metadata_json,
+                $error_message, $extracted_at
+            WHERE EXISTS (
+                SELECT 1
+                FROM assets
+                WHERE id = $asset_id
+                  AND size = $source_size
+                  AND modified_at = $source_modified_at
+            )
+            ON CONFLICT(asset_id) DO UPDATE SET
+                extractor_name = excluded.extractor_name,
+                pipeline_version = excluded.pipeline_version,
+                status = excluded.status,
+                source_size = excluded.source_size,
+                source_modified_at = excluded.source_modified_at,
+                metadata_json = excluded.metadata_json,
+                error_message = excluded.error_message,
+                extracted_at = excluded.extracted_at;
+            """;
+        AddMetadataParameters(command, metadata);
+        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+    }
+
+    public async Task<AssetMetadata?> GetMetadataAsync(
+        Guid assetId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT
+                asset_id, extractor_name, pipeline_version, status,
+                source_size, source_modified_at, metadata_json,
+                error_message, extracted_at
+            FROM asset_metadata
+            WHERE asset_id = $asset_id;
+            """;
+        command.Parameters.AddWithValue("$asset_id", assetId.ToString("D"));
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken)
+            ? ReadMetadata(reader, Guid.Parse(reader.GetString(0)), 1)
+            : null;
+    }
+
     public async Task<IReadOnlyList<AssetListItem>> ListAssetsAsync(
         int limit,
         CancellationToken cancellationToken = default)
@@ -435,14 +620,28 @@ public sealed class SqliteAssetRepository : IAssetRepository
                 a.modified_at,
                 l.path,
                 l.status,
-                a.status
+                a.status,
+                m.extractor_name,
+                m.pipeline_version,
+                m.status,
+                m.source_size,
+                m.source_modified_at,
+                m.metadata_json,
+                m.error_message,
+                m.extracted_at
             FROM assets a
             INNER JOIN asset_locations l ON l.asset_id = a.id
+            LEFT JOIN asset_metadata m
+                ON m.asset_id = a.id
+               AND m.pipeline_version = $pipeline_version
+               AND m.source_size = a.size
+               AND m.source_modified_at = a.modified_at
             WHERE l.location_type = 'Local'
             ORDER BY a.discovered_at DESC, a.original_filename
             LIMIT $limit;
             """;
         command.Parameters.AddWithValue("$limit", limit);
+        command.Parameters.AddWithValue("$pipeline_version", MetadataPipeline.CurrentVersion);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -456,7 +655,8 @@ public sealed class SqliteAssetRepository : IAssetRepository
                 ParseTimestamp(reader.GetString(5)),
                 reader.GetString(6),
                 Enum.Parse<AssetLocationStatus>(reader.GetString(7)),
-                Enum.Parse<AssetStatus>(reader.GetString(8))));
+                Enum.Parse<AssetStatus>(reader.GetString(8)),
+                ReadMetadata(reader, Guid.Parse(reader.GetString(0)), 9)));
         }
 
         return assets;
@@ -704,6 +904,55 @@ public sealed class SqliteAssetRepository : IAssetRepository
         command.Parameters.AddWithValue("$modified_at", file.ModifiedAt.ToString("O"));
         command.Parameters.AddWithValue("$discovered_at", discoveredAt.ToString("O"));
         command.Parameters.AddWithValue("$status", AssetStatus.Indexed.ToString());
+    }
+
+    private static void AddMetadataParameters(
+        SqliteCommand command,
+        AssetMetadata metadata)
+    {
+        command.Parameters.AddWithValue("$asset_id", metadata.AssetId.ToString("D"));
+        command.Parameters.AddWithValue("$extractor_name", metadata.ExtractorName);
+        command.Parameters.AddWithValue("$pipeline_version", metadata.PipelineVersion);
+        command.Parameters.AddWithValue("$status", metadata.Status.ToString());
+        command.Parameters.AddWithValue("$source_size", metadata.SourceSize);
+        command.Parameters.AddWithValue(
+            "$source_modified_at",
+            metadata.SourceModifiedAt.ToString("O"));
+        command.Parameters.AddWithValue(
+            "$metadata_json",
+            metadata.Content is null
+                ? DBNull.Value
+                : JsonSerializer.Serialize(metadata.Content));
+        command.Parameters.AddWithValue(
+            "$error_message",
+            (object?)metadata.ErrorMessage ?? DBNull.Value);
+        command.Parameters.AddWithValue("$extracted_at", metadata.ExtractedAt.ToString("O"));
+    }
+
+    private static AssetMetadata? ReadMetadata(
+        SqliteDataReader reader,
+        Guid assetId,
+        int offset)
+    {
+        if (reader.IsDBNull(offset))
+        {
+            return null;
+        }
+
+        var content = reader.IsDBNull(offset + 5)
+            ? null
+            : JsonSerializer.Deserialize<AssetMetadataContent>(reader.GetString(offset + 5));
+
+        return new AssetMetadata(
+            assetId,
+            reader.GetString(offset),
+            reader.GetInt32(offset + 1),
+            Enum.Parse<MetadataExtractionStatus>(reader.GetString(offset + 2)),
+            reader.GetInt64(offset + 3),
+            ParseTimestamp(reader.GetString(offset + 4)),
+            content,
+            ParseTimestamp(reader.GetString(offset + 7)),
+            reader.IsDBNull(offset + 6) ? null : reader.GetString(offset + 6));
     }
 
     private static void AddScanJobParameters(SqliteCommand command, ScanJob job)

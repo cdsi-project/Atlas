@@ -1,10 +1,14 @@
 using CDSI.Agent.Application.Fingerprints;
+using CDSI.Agent.Application.Metadata;
 using CDSI.Agent.Application.Scanning;
+using CDSI.Agent.Core.Abstractions;
 using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Fingerprints;
+using CDSI.Agent.Core.Metadata;
 using CDSI.Agent.Core.Scanning;
 using CDSI.Agent.Infrastructure.FileSystem;
 using CDSI.Agent.Infrastructure.Fingerprints;
+using CDSI.Agent.Infrastructure.Metadata;
 using CDSI.Agent.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 
@@ -126,6 +130,48 @@ public sealed class ScanApplicationServiceTests
     }
 
     [Fact]
+    public async Task MetadataExtraction_WhenOneExtractorFails_RecordsErrorAndContinues()
+    {
+        using var directory = new TestDirectory();
+        var scanRoot = Directory.CreateDirectory(Path.Combine(directory.Path, "Assets"));
+        var badPath = Path.Combine(scanRoot.FullName, "broken.bad");
+        var notesPath = Path.Combine(scanRoot.FullName, "notes.txt");
+        await File.WriteAllBytesAsync(badPath, [1, 2, 3]);
+        await File.WriteAllTextAsync(notesPath, "notes");
+
+        var repository = new SqliteAssetRepository(
+            Path.Combine(directory.Path, "State", "cdsi.db"));
+        var scanService = new ScanApplicationService(new FileSystemScanner(), repository);
+        var metadataService = new MetadataExtractionApplicationService(
+            [
+                new FailingMetadataExtractor(),
+                new GenericMetadataExtractor()
+            ],
+            repository);
+        await scanService.InitializeAsync();
+        await scanService.ScanDirectoryAsync(scanRoot.FullName);
+
+        var summary = await metadataService.ProcessPendingAsync();
+        var cached = await metadataService.ProcessPendingAsync();
+        var assets = await scanService.ListAssetsAsync();
+        var failed = assets.Single(asset => asset.Path == badPath).Metadata;
+        var unsupported = assets.Single(asset => asset.Path == notesPath).Metadata;
+
+        Assert.Equal(2, summary.TotalFiles);
+        Assert.Equal(0, summary.ExtractedFiles);
+        Assert.Equal(1, summary.UnsupportedFiles);
+        Assert.Equal(1, summary.Errors);
+        Assert.False(summary.Cancelled);
+        Assert.Equal(0, cached.TotalFiles);
+        Assert.Equal(MetadataExtractionStatus.Error, failed?.Status);
+        Assert.Contains("Expected test failure", failed?.ErrorMessage);
+        Assert.Equal(MetadataExtractionStatus.Unsupported, unsupported?.Status);
+        Assert.Equal("notes", await File.ReadAllTextAsync(notesPath));
+
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
     public async Task ScanDirectoryAsync_WhenAFileDisappears_MarksItsLocationMissing()
     {
         using var directory = new TestDirectory();
@@ -155,6 +201,24 @@ public sealed class ScanApplicationServiceTests
         Assert.Equal("retained", await File.ReadAllTextAsync(retainedPath));
 
         SqliteConnection.ClearAllPools();
+    }
+
+    private sealed class FailingMetadataExtractor : IAssetMetadataExtractor
+    {
+        public string Name => "failing-test";
+
+        public bool Supports(DiscoveredFile file)
+        {
+            return file.Extension.Equals(".bad", StringComparison.OrdinalIgnoreCase);
+        }
+
+        public Task<MetadataExtractionResult> ExtractAsync(
+            DiscoveredFile file,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new InvalidDataException("Expected test failure.");
+        }
     }
 
     private sealed class InlineProgress<T>(Action<T> report) : IProgress<T>

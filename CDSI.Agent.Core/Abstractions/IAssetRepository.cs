@@ -1,6 +1,7 @@
 using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Duplicates;
 using CDSI.Agent.Core.Fingerprints;
+using CDSI.Agent.Core.Metadata;
 using CDSI.Agent.Core.Scanning;
 
 namespace CDSI.Agent.Core.Abstractions;
@@ -52,6 +53,24 @@ public interface IAssetRepository
         FingerprintMode mode,
         Guid? afterAssetId,
         int limit,
+        CancellationToken cancellationToken = default);
+
+    Task<MetadataWorkSummary> GetMetadataWorkSummaryAsync(
+        int pipelineVersion,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<MetadataCandidate>> ListMetadataCandidatesAsync(
+        int pipelineVersion,
+        Guid? afterAssetId,
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> SaveMetadataAsync(
+        AssetMetadata metadata,
+        CancellationToken cancellationToken = default);
+
+    Task<AssetMetadata?> GetMetadataAsync(
+        Guid assetId,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<AssetListItem>> ListAssetsAsync(
