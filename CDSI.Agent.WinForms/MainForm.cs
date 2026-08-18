@@ -1,3 +1,4 @@
+using System.Reflection;
 using CDSI.Agent.Application.Metadata;
 using CDSI.Agent.Application.Fingerprints;
 using CDSI.Agent.Application.Scanning;
@@ -48,7 +49,8 @@ public sealed class MainForm : Form
     {
         SuspendLayout();
 
-        Text = "CDSI Atlas";
+        var applicationVersion = GetApplicationVersion();
+        Text = $"CDSI Atlas v{applicationVersion}";
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(920, 600);
         Size = new Size(1180, 760);
@@ -90,6 +92,18 @@ public sealed class MainForm : Form
             Font = new Font("Segoe UI", 9F),
             ForeColor = Color.FromArgb(179, 190, 199),
             Location = new Point(28, 45)
+        });
+        header.Controls.Add(new Label
+        {
+            AutoSize = false,
+            Dock = DockStyle.Right,
+            Width = 96,
+            Text = $"v{applicationVersion}",
+            TextAlign = ContentAlignment.TopRight,
+            Padding = new Padding(0, 6, 0, 0),
+            Font = new Font("Segoe UI Semibold", 9F),
+            ForeColor = Color.FromArgb(179, 190, 199),
+            AccessibleName = "应用版本"
         });
         mainLayout.Controls.Add(header, 0, 0);
 
@@ -617,6 +631,16 @@ public sealed class MainForm : Form
         return duration.TotalHours >= 1
             ? $"{(int)duration.TotalHours}:{duration.Minutes:00}:{duration.Seconds:00}"
             : $"{duration.Minutes}:{duration.Seconds:00}";
+    }
+
+    private static string GetApplicationVersion()
+    {
+        var informationalVersion = typeof(MainForm).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion;
+        return string.IsNullOrWhiteSpace(informationalVersion)
+            ? System.Windows.Forms.Application.ProductVersion
+            : informationalVersion.Split('+', 2)[0];
     }
 
     private static string FormatFileSize(long bytes)

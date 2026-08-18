@@ -3,5 +3,12 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
+    <CdsiVersionFile>$(MSBuildThisFileDirectory)VERSION</CdsiVersionFile>
+    <CdsiVersion>$([System.IO.File]::ReadAllText('$(CdsiVersionFile)').Trim())</CdsiVersion>
+    <Version>$(CdsiVersion).0</Version>
+    <AssemblyVersion>$(CdsiVersion).0.0</AssemblyVersion>
+    <FileVersion>$(CdsiVersion).0.0</FileVersion>
+    <InformationalVersion>$(CdsiVersion)</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 </Project>

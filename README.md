@@ -26,6 +26,7 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 - 同一设备和路径重复扫描时保持幂等
 - 文件消失时仅将本地位置标记为 <code>Missing</code>，保留逻辑资产
 - 在 WinForms 中显示扫描进度、错误计数和资产列表
+- 在 Windows 标题栏和应用页眉显示当前构建版本
 - 哈希阶段显示文件数、读取字节数与吞吐率
 - 支持取消扫描或哈希；已完成哈希会保留，下次从未完成文件继续
 - 支持取消元数据提取；不支持或损坏的单个文件不会阻断任务
@@ -74,6 +75,12 @@ dotnet run --project CDSI.Agent.WinForms/CDSI.Agent.WinForms.csproj
 ~~~
 
 如果系统同时安装了 x86 和 x64 <code>dotnet</code>，请确保 <code>C:\Program Files\dotnet</code> 在 PATH 中优先于 <code>C:\Program Files (x86)\dotnet</code>。
+
+## 版本管理
+
+仓库根目录的 <code>VERSION</code> 是唯一版本来源。构建时，所有程序集和桌面界面都会读取该文件。
+
+每次提交将版本递增 <code>0.001</code>，并创建同名 Git 标签，例如 <code>VERSION=0.102</code> 对应 <code>v0.102</code>。
 
 ## 本地数据
 
