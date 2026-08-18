@@ -1,0 +1,27 @@
+# Build output
+**/bin/
+**/obj/
+
+# Visual Studio user state
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Test output
+TestResults/
+coverage/
+
+# Local CDSI state
+*.db
+*.db-shm
+*.db-wal
+logs/
+cache/
+thumbnails/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini

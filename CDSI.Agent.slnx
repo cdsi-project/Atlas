@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="CDSI.Agent.Application/CDSI.Agent.Application.csproj" />
+    <Project Path="CDSI.Agent.Core/CDSI.Agent.Core.csproj" />
+    <Project Path="CDSI.Agent.Infrastructure/CDSI.Agent.Infrastructure.csproj" />
+    <Project Path="CDSI.Agent.WinForms/CDSI.Agent.WinForms.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CDSI.Agent.Core.Tests/CDSI.Agent.Core.Tests.csproj" />
+    <Project Path="tests/CDSI.Agent.Infrastructure.Tests/CDSI.Agent.Infrastructure.Tests.csproj" />
+    <Project Path="tests/CDSI.Agent.IntegrationTests/CDSI.Agent.IntegrationTests.csproj" />
+  </Folder>
+</Solution>

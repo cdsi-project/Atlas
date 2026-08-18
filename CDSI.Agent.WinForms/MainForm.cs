@@ -1,0 +1,412 @@
+using CDSI.Agent.Application.Scanning;
+using CDSI.Agent.Core.Assets;
+using CDSI.Agent.Core.Scanning;
+
+namespace CDSI.Agent.WinForms;
+
+public sealed class MainForm : Form
+{
+    private readonly ScanApplicationService _scanService;
+    private readonly TextBox _rootPathTextBox = new();
+    private readonly Button _browseButton = new();
+    private readonly Button _scanButton = new();
+    private readonly Button _cancelButton = new();
+    private readonly ProgressBar _progressBar = new();
+    private readonly Label _progressLabel = new();
+    private readonly Label _currentPathLabel = new();
+    private readonly DataGridView _assetGrid = new();
+    private readonly ToolStripStatusLabel _statusLabel = new();
+    private readonly ToolStripStatusLabel _databaseStatusLabel = new();
+    private CancellationTokenSource? _scanCancellation;
+
+    public MainForm(ScanApplicationService scanService, string dataDirectory)
+    {
+        _scanService = scanService;
+        InitializeLayout(dataDirectory);
+
+        Shown += MainForm_Shown;
+        FormClosing += (_, _) => _scanCancellation?.Cancel();
+    }
+
+    private void InitializeLayout(string dataDirectory)
+    {
+        SuspendLayout();
+
+        Text = "CDSI Atlas";
+        StartPosition = FormStartPosition.CenterScreen;
+        MinimumSize = new Size(920, 600);
+        Size = new Size(1180, 760);
+        BackColor = Color.FromArgb(247, 248, 250);
+        Font = new Font("Segoe UI", 9F);
+        AutoScaleMode = AutoScaleMode.Dpi;
+
+        var mainLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 4,
+            Padding = new Padding(0),
+            BackColor = BackColor
+        };
+        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
+        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var header = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.FromArgb(31, 37, 43),
+            Padding = new Padding(28, 13, 28, 10)
+        };
+        header.Controls.Add(new Label
+        {
+            AutoSize = true,
+            Text = "CDSI Atlas",
+            Font = new Font("Segoe UI Semibold", 18F),
+            ForeColor = Color.White,
+            Location = new Point(25, 11)
+        });
+        header.Controls.Add(new Label
+        {
+            AutoSize = true,
+            Text = "本地资产索引",
+            Font = new Font("Segoe UI", 9F),
+            ForeColor = Color.FromArgb(179, 190, 199),
+            Location = new Point(28, 45)
+        });
+        mainLayout.Controls.Add(header, 0, 0);
+
+        var commandPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 4,
+            Padding = new Padding(28, 14, 28, 10),
+            BackColor = Color.White
+        };
+        commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
+        commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
+        commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
+
+        _rootPathTextBox.Dock = DockStyle.Fill;
+        _rootPathTextBox.Margin = new Padding(0, 0, 10, 0);
+        _rootPathTextBox.PlaceholderText = "选择需要建立索引的目录";
+        _rootPathTextBox.BorderStyle = BorderStyle.FixedSingle;
+
+        ConfigureCommandButton(_browseButton, "选择目录", Color.FromArgb(236, 239, 242), Color.FromArgb(31, 37, 43));
+        ConfigureCommandButton(_scanButton, "开始扫描", Color.FromArgb(24, 121, 78), Color.White);
+        ConfigureCommandButton(_cancelButton, "取消", Color.FromArgb(236, 239, 242), Color.FromArgb(137, 49, 49));
+        _cancelButton.Enabled = false;
+
+        _browseButton.Click += BrowseButton_Click;
+        _scanButton.Click += ScanButton_Click;
+        _cancelButton.Click += (_, _) => _scanCancellation?.Cancel();
+
+        commandPanel.Controls.Add(_rootPathTextBox, 0, 0);
+        commandPanel.Controls.Add(_browseButton, 1, 0);
+        commandPanel.Controls.Add(_scanButton, 2, 0);
+        commandPanel.Controls.Add(_cancelButton, 3, 0);
+        mainLayout.Controls.Add(commandPanel, 0, 1);
+
+        var progressPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 2,
+            Padding = new Padding(28, 7, 28, 7),
+            BackColor = Color.FromArgb(247, 248, 250)
+        };
+        progressPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 250));
+        progressPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        progressPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+        progressPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
+
+        _progressLabel.AutoSize = true;
+        _progressLabel.Text = "就绪";
+        _progressLabel.Font = new Font("Segoe UI Semibold", 9F);
+        _progressLabel.ForeColor = Color.FromArgb(52, 61, 69);
+
+        _currentPathLabel.Dock = DockStyle.Fill;
+        _currentPathLabel.Text = "尚未扫描";
+        _currentPathLabel.TextAlign = ContentAlignment.MiddleLeft;
+        _currentPathLabel.AutoEllipsis = true;
+        _currentPathLabel.ForeColor = Color.FromArgb(101, 111, 120);
+
+        _progressBar.Dock = DockStyle.Fill;
+        _progressBar.Height = 5;
+        _progressBar.Style = ProgressBarStyle.Blocks;
+
+        progressPanel.Controls.Add(_progressLabel, 0, 0);
+        progressPanel.SetColumnSpan(_progressLabel, 2);
+        progressPanel.Controls.Add(_progressBar, 0, 1);
+        progressPanel.Controls.Add(_currentPathLabel, 1, 1);
+        mainLayout.Controls.Add(progressPanel, 0, 2);
+
+        ConfigureAssetGrid();
+        var gridHost = new Panel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(28, 8, 28, 18),
+            BackColor = BackColor
+        };
+        gridHost.Controls.Add(_assetGrid);
+        mainLayout.Controls.Add(gridHost, 0, 3);
+
+        var statusStrip = new StatusStrip
+        {
+            SizingGrip = false,
+            BackColor = Color.White,
+            Padding = new Padding(20, 0, 20, 0)
+        };
+        _statusLabel.Text = "正在初始化";
+        _statusLabel.ForeColor = Color.FromArgb(72, 81, 89);
+        _databaseStatusLabel.Text = $"数据目录: {dataDirectory}";
+        _databaseStatusLabel.Spring = true;
+        _databaseStatusLabel.TextAlign = ContentAlignment.MiddleRight;
+        _databaseStatusLabel.ForeColor = Color.FromArgb(112, 121, 129);
+        statusStrip.Items.Add(_statusLabel);
+        statusStrip.Items.Add(_databaseStatusLabel);
+
+        Controls.Add(mainLayout);
+        Controls.Add(statusStrip);
+        ResumeLayout();
+    }
+
+    private static void ConfigureCommandButton(
+        Button button,
+        string text,
+        Color background,
+        Color foreground)
+    {
+        button.Dock = DockStyle.Fill;
+        button.Margin = new Padding(4, 0, 4, 0);
+        button.Text = text;
+        button.BackColor = background;
+        button.ForeColor = foreground;
+        button.FlatStyle = FlatStyle.Flat;
+        button.FlatAppearance.BorderSize = 0;
+        button.Cursor = Cursors.Hand;
+    }
+
+    private void ConfigureAssetGrid()
+    {
+        _assetGrid.Dock = DockStyle.Fill;
+        _assetGrid.BackgroundColor = Color.White;
+        _assetGrid.BorderStyle = BorderStyle.FixedSingle;
+        _assetGrid.ReadOnly = true;
+        _assetGrid.AllowUserToAddRows = false;
+        _assetGrid.AllowUserToDeleteRows = false;
+        _assetGrid.AllowUserToResizeRows = false;
+        _assetGrid.AutoGenerateColumns = false;
+        _assetGrid.MultiSelect = false;
+        _assetGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        _assetGrid.RowHeadersVisible = false;
+        _assetGrid.RowTemplate.Height = 30;
+        _assetGrid.ColumnHeadersHeight = 36;
+        _assetGrid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+        _assetGrid.EnableHeadersVisualStyles = false;
+        _assetGrid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(239, 242, 244);
+        _assetGrid.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(52, 61, 69);
+        _assetGrid.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI Semibold", 9F);
+        _assetGrid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(220, 235, 227);
+        _assetGrid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(31, 37, 43);
+        _assetGrid.DefaultCellStyle.Padding = new Padding(4, 0, 4, 0);
+        _assetGrid.GridColor = Color.FromArgb(229, 232, 235);
+
+        _assetGrid.Columns.Add(CreateColumn("文件", 220, DataGridViewAutoSizeColumnMode.Fill, 24));
+        _assetGrid.Columns.Add(CreateColumn("类型", 125));
+        _assetGrid.Columns.Add(CreateColumn("大小", 90));
+        _assetGrid.Columns.Add(CreateColumn("修改时间", 145));
+        _assetGrid.Columns.Add(CreateColumn("位置", 320, DataGridViewAutoSizeColumnMode.Fill, 46));
+        _assetGrid.Columns.Add(CreateColumn("状态", 80));
+    }
+
+    private static DataGridViewColumn CreateColumn(
+        string title,
+        int width,
+        DataGridViewAutoSizeColumnMode sizeMode = DataGridViewAutoSizeColumnMode.None,
+        float fillWeight = 100)
+    {
+        return new DataGridViewTextBoxColumn
+        {
+            HeaderText = title,
+            Width = width,
+            MinimumWidth = Math.Min(width, 80),
+            AutoSizeMode = sizeMode,
+            FillWeight = fillWeight,
+            SortMode = DataGridViewColumnSortMode.Automatic
+        };
+    }
+
+    private async void MainForm_Shown(object? sender, EventArgs e)
+    {
+        SetBusy(true, allowCancel: false);
+        try
+        {
+            await _scanService.InitializeAsync();
+            await RefreshAssetsAsync();
+            _statusLabel.Text = "就绪";
+        }
+        catch (Exception exception)
+        {
+            _statusLabel.Text = "初始化失败";
+            ShowError("无法初始化本地数据库", exception);
+        }
+        finally
+        {
+            SetBusy(false);
+        }
+    }
+
+    private void BrowseButton_Click(object? sender, EventArgs e)
+    {
+        using var dialog = new FolderBrowserDialog
+        {
+            Description = "选择要建立索引的目录",
+            UseDescriptionForTitle = true,
+            ShowNewFolderButton = false,
+            InitialDirectory = Directory.Exists(_rootPathTextBox.Text)
+                ? _rootPathTextBox.Text
+                : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
+        };
+
+        if (dialog.ShowDialog(this) == DialogResult.OK)
+        {
+            _rootPathTextBox.Text = dialog.SelectedPath;
+        }
+    }
+
+    private async void ScanButton_Click(object? sender, EventArgs e)
+    {
+        var scanRoot = _rootPathTextBox.Text.Trim();
+        if (!Directory.Exists(scanRoot))
+        {
+            MessageBox.Show(
+                this,
+                "请选择一个存在的目录。",
+                "CDSI Atlas",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
+        _scanCancellation?.Dispose();
+        _scanCancellation = new CancellationTokenSource();
+        var progress = new Progress<ScanProgress>(UpdateProgress);
+
+        SetBusy(true);
+        _progressBar.Style = ProgressBarStyle.Marquee;
+        _progressBar.MarqueeAnimationSpeed = 24;
+        _statusLabel.Text = "正在扫描";
+
+        try
+        {
+            var summary = await Task.Run(
+                () => _scanService.ScanDirectoryAsync(
+                    scanRoot,
+                    progress,
+                    _scanCancellation.Token),
+                _scanCancellation.Token);
+
+            await RefreshAssetsAsync();
+            _statusLabel.Text = summary.Status == ScanJobStatus.Cancelled
+                ? "扫描已取消"
+                : $"扫描完成，已索引 {summary.FilesIndexed:N0} 个文件";
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _statusLabel.Text = "扫描失败";
+            ShowError("扫描未能完成", exception);
+        }
+        finally
+        {
+            _progressBar.MarqueeAnimationSpeed = 0;
+            _progressBar.Style = ProgressBarStyle.Blocks;
+            SetBusy(false);
+        }
+    }
+
+    private void UpdateProgress(ScanProgress progress)
+    {
+        _progressLabel.Text =
+            $"发现 {progress.FilesDiscovered:N0}  ·  已索引 {progress.FilesIndexed:N0}  ·  错误 {progress.Errors:N0}";
+        _currentPathLabel.Text = progress.CurrentPath ?? progress.Message ?? string.Empty;
+
+        if (progress.Stage == ScanStage.Failed)
+        {
+            _currentPathLabel.Text = progress.Message ?? "扫描失败";
+        }
+    }
+
+    private async Task RefreshAssetsAsync()
+    {
+        var assets = await _scanService.ListAssetsAsync();
+        _assetGrid.Rows.Clear();
+
+        foreach (var asset in assets)
+        {
+            _assetGrid.Rows.Add(
+                asset.OriginalFilename,
+                asset.MimeType ?? "未知",
+                FormatFileSize(asset.Size),
+                asset.ModifiedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+                asset.Path,
+                FormatStatus(asset));
+        }
+
+        _statusLabel.Text = $"本地资产 {assets.Count:N0}";
+    }
+
+    private void SetBusy(bool busy, bool allowCancel = true)
+    {
+        _rootPathTextBox.Enabled = !busy;
+        _browseButton.Enabled = !busy;
+        _scanButton.Enabled = !busy;
+        _cancelButton.Enabled = busy && allowCancel;
+        UseWaitCursor = busy && !allowCancel;
+    }
+
+    private static string FormatStatus(AssetListItem asset)
+    {
+        if (asset.LocationStatus == AssetLocationStatus.Missing)
+        {
+            return "位置缺失";
+        }
+
+        return asset.Status switch
+        {
+            AssetStatus.Indexed => "已索引",
+            AssetStatus.Discovered => "已发现",
+            AssetStatus.Error => "错误",
+            _ => asset.Status.ToString()
+        };
+    }
+
+    private static string FormatFileSize(long bytes)
+    {
+        string[] units = ["B", "KB", "MB", "GB", "TB"];
+        var value = (double)bytes;
+        var unit = 0;
+
+        while (value >= 1024 && unit < units.Length - 1)
+        {
+            value /= 1024;
+            unit++;
+        }
+
+        return unit == 0
+            ? $"{bytes:N0} {units[unit]}"
+            : $"{value:N1} {units[unit]}";
+    }
+
+    private void ShowError(string title, Exception exception)
+    {
+        MessageBox.Show(
+            this,
+            exception.Message,
+            title,
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Error);
+    }
+}
