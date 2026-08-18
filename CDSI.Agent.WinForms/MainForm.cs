@@ -22,6 +22,10 @@ public sealed class MainForm : Form
     private readonly ProgressBar _progressBar = new();
     private readonly Label _progressLabel = new();
     private readonly Label _currentPathLabel = new();
+    private readonly Label _fileCountValueLabel = new();
+    private readonly Label _totalSizeValueLabel = new();
+    private readonly Label _videoCountValueLabel = new();
+    private readonly Label _videoDurationValueLabel = new();
     private readonly DataGridView _assetGrid = new();
     private readonly DataGridView _duplicateGrid = new();
     private readonly TabPage _assetsTabPage = new("资产");
@@ -187,7 +191,19 @@ public sealed class MainForm : Form
 
         _assetsTabPage.Padding = new Padding(0);
         _assetsTabPage.BackColor = Color.White;
-        _assetsTabPage.Controls.Add(_assetGrid);
+        var assetTabLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
+        };
+        assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        assetTabLayout.Controls.Add(CreateStatisticsPanel(), 0, 0);
+        assetTabLayout.Controls.Add(_assetGrid, 0, 1);
+        _assetsTabPage.Controls.Add(assetTabLayout);
         _duplicatesTabPage.Padding = new Padding(0);
         _duplicatesTabPage.BackColor = Color.White;
         _duplicatesTabPage.Controls.Add(_duplicateGrid);
@@ -243,6 +259,66 @@ public sealed class MainForm : Form
         button.FlatStyle = FlatStyle.Flat;
         button.FlatAppearance.BorderSize = 0;
         button.Cursor = Cursors.Hand;
+    }
+
+    private Control CreateStatisticsPanel()
+    {
+        var panel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 4,
+            RowCount = 1,
+            Margin = Padding.Empty,
+            Padding = new Padding(8, 4, 8, 4),
+            BackColor = Color.White
+        };
+
+        for (var column = 0; column < panel.ColumnCount; column++)
+        {
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+        }
+
+        panel.Controls.Add(CreateStatisticItem("文件总数", _fileCountValueLabel), 0, 0);
+        panel.Controls.Add(CreateStatisticItem("占用空间", _totalSizeValueLabel), 1, 0);
+        panel.Controls.Add(CreateStatisticItem("视频文件", _videoCountValueLabel), 2, 0);
+        panel.Controls.Add(CreateStatisticItem("视频总时长", _videoDurationValueLabel), 3, 0);
+        return panel;
+    }
+
+    private static Control CreateStatisticItem(string title, Label valueLabel)
+    {
+        var item = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = new Padding(4, 0, 4, 0),
+            Padding = new Padding(8, 1, 8, 1),
+            BackColor = Color.White
+        };
+        item.RowStyles.Add(new RowStyle(SizeType.Absolute, 18));
+        item.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        var titleLabel = new Label
+        {
+            Dock = DockStyle.Fill,
+            Text = title,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font("Segoe UI", 8.5F),
+            ForeColor = Color.FromArgb(112, 121, 129)
+        };
+
+        valueLabel.Dock = DockStyle.Fill;
+        valueLabel.Text = "0";
+        valueLabel.TextAlign = ContentAlignment.MiddleLeft;
+        valueLabel.AutoEllipsis = true;
+        valueLabel.Font = new Font("Segoe UI Semibold", 10.5F);
+        valueLabel.ForeColor = Color.FromArgb(31, 37, 43);
+        valueLabel.AccessibleName = title;
+
+        item.Controls.Add(titleLabel, 0, 0);
+        item.Controls.Add(valueLabel, 0, 1);
+        return item;
     }
 
     private void ConfigureAssetGrid()
@@ -506,10 +582,12 @@ public sealed class MainForm : Form
     {
         var assetsTask = _scanService.ListAssetsAsync();
         var duplicateGroupsTask = _scanService.ListExactDuplicateGroupsAsync();
-        await Task.WhenAll(assetsTask, duplicateGroupsTask);
+        var statisticsTask = _scanService.GetLocalAssetStatisticsAsync();
+        await Task.WhenAll(assetsTask, duplicateGroupsTask, statisticsTask);
 
         var assets = await assetsTask;
         var duplicateGroups = await duplicateGroupsTask;
+        var statistics = await statisticsTask;
         _assetGrid.Rows.Clear();
         _duplicateGrid.Rows.Clear();
 
@@ -541,10 +619,19 @@ public sealed class MainForm : Form
             }
         }
 
-        _assetsTabPage.Text = $"资产 ({assets.Count:N0})";
+        _fileCountValueLabel.Text = statistics.FileCount.ToString("N0");
+        _totalSizeValueLabel.Text = FormatFileSize(statistics.TotalSizeBytes);
+        _videoCountValueLabel.Text = statistics.VideoFileCount.ToString("N0");
+        _videoDurationValueLabel.Text =
+            FormatTotalDuration(statistics.VideoDurationMilliseconds);
+
+        var visibleItemsSuffix = assets.Count < statistics.FileCount
+            ? $"  ·  当前显示 {assets.Count:N0}"
+            : string.Empty;
+        _assetsTabPage.Text = $"资产 ({statistics.FileCount:N0})";
         _duplicatesTabPage.Text = $"精确重复 ({duplicateGroups.Count:N0})";
         _statusLabel.Text =
-            $"本地资产 {assets.Count:N0}  ·  重复组 {duplicateGroups.Count:N0}";
+            $"本地文件 {statistics.FileCount:N0}{visibleItemsSuffix}  ·  重复组 {duplicateGroups.Count:N0}";
     }
 
     private void SetBusy(bool busy, bool allowCancel = true)
@@ -638,6 +725,22 @@ public sealed class MainForm : Form
         return duration.TotalHours >= 1
             ? $"{(int)duration.TotalHours}:{duration.Minutes:00}:{duration.Seconds:00}"
             : $"{duration.Minutes}:{duration.Seconds:00}";
+    }
+
+    private static string FormatTotalDuration(long milliseconds)
+    {
+        if (milliseconds <= 0)
+        {
+            return "0:00";
+        }
+
+        var totalSeconds = milliseconds / 1_000;
+        var totalHours = totalSeconds / 3_600;
+        var minutes = totalSeconds % 3_600 / 60;
+        var seconds = totalSeconds % 60;
+        return totalHours > 0
+            ? $"{totalHours:N0}:{minutes:00}:{seconds:00}"
+            : $"{minutes}:{seconds:00}";
     }
 
     private static string GetApplicationVersion()

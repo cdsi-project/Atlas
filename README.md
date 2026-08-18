@@ -22,6 +22,7 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 - 提取标题、艺术家和专辑等常用媒体标签
 - 以文件大小、修改时间和管线版本缓存元数据结果
 - 在资产列表中展示分辨率、时长和编码摘要
+- 在资产页汇总可用本地文件总数、实际占用空间、视频数量和视频总时长
 - 将资产、位置、扫描根和扫描任务持久化到 SQLite
 - 同一设备和路径重复扫描时保持幂等
 - 文件消失时仅将本地位置标记为 <code>Missing</code>，保留逻辑资产
@@ -80,7 +81,7 @@ dotnet run --project CDSI.Agent.WinForms/CDSI.Agent.WinForms.csproj
 
 仓库根目录的 <code>VERSION</code> 是唯一版本来源。构建时，所有程序集和桌面界面都会读取该文件。
 
-每次提交将版本递增 <code>0.001</code>，并创建同名 Git 标签，例如 <code>VERSION=0.102</code> 对应 <code>v0.102</code>。
+每次提交将版本递增 <code>0.001</code>，并创建同名 Git 标签，例如 <code>VERSION=0.104</code> 对应 <code>v0.104</code>。
 
 ## 本地数据
 

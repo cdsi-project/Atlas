@@ -602,6 +602,100 @@ public sealed class SqliteAssetRepository : IAssetRepository
             : null;
     }
 
+    public async Task<AssetStatistics> GetLocalAssetStatisticsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        long fileCount;
+        long totalSizeBytes;
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using (var summaryCommand = connection.CreateCommand())
+        {
+            summaryCommand.CommandText =
+                """
+                SELECT COUNT(*), COALESCE(SUM(a.size), 0)
+                FROM asset_locations l
+                INNER JOIN assets a ON a.id = l.asset_id
+                WHERE l.location_type = 'Local'
+                  AND l.status = 'Available';
+                """;
+
+            await using var reader = await summaryCommand.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken))
+            {
+                throw new InvalidOperationException("Unable to calculate local asset statistics.");
+            }
+
+            fileCount = reader.GetInt64(0);
+            totalSizeBytes = reader.GetInt64(1);
+        }
+
+        long videoFileCount = 0;
+        long videoDurationMilliseconds = 0;
+        await using var metadataCommand = connection.CreateCommand();
+        metadataCommand.CommandText =
+            """
+            SELECT
+                a.id,
+                m.extractor_name,
+                m.pipeline_version,
+                m.status,
+                m.source_size,
+                m.source_modified_at,
+                m.metadata_json,
+                m.error_message,
+                m.extracted_at
+            FROM asset_locations l
+            INNER JOIN assets a ON a.id = l.asset_id
+            INNER JOIN asset_metadata m
+                ON m.asset_id = a.id
+               AND m.pipeline_version = $pipeline_version
+               AND m.source_size = a.size
+               AND m.source_modified_at = a.modified_at
+            WHERE l.location_type = 'Local'
+              AND l.status = 'Available'
+              AND m.status = $metadata_status;
+            """;
+        metadataCommand.Parameters.AddWithValue(
+            "$pipeline_version",
+            MetadataPipeline.CurrentVersion);
+        metadataCommand.Parameters.AddWithValue(
+            "$metadata_status",
+            MetadataExtractionStatus.Extracted.ToString());
+
+        await using var metadataReader =
+            await metadataCommand.ExecuteReaderAsync(cancellationToken);
+        while (await metadataReader.ReadAsync(cancellationToken))
+        {
+            var metadata = ReadMetadata(
+                metadataReader,
+                Guid.Parse(metadataReader.GetString(0)),
+                1);
+            if (metadata?.Content?.Kind != AssetMediaKind.Video)
+            {
+                continue;
+            }
+
+            videoFileCount++;
+            var duration = metadata.Content.DurationMilliseconds;
+            if (duration is not > 0)
+            {
+                continue;
+            }
+
+            videoDurationMilliseconds =
+                long.MaxValue - videoDurationMilliseconds < duration.Value
+                    ? long.MaxValue
+                    : videoDurationMilliseconds + duration.Value;
+        }
+
+        return new AssetStatistics(
+            fileCount,
+            totalSizeBytes,
+            videoFileCount,
+            videoDurationMilliseconds);
+    }
+
     public async Task<IReadOnlyList<AssetListItem>> ListAssetsAsync(
         int limit,
         CancellationToken cancellationToken = default)

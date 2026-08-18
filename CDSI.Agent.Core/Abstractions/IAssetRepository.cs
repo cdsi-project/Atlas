@@ -73,6 +73,9 @@ public interface IAssetRepository
         Guid assetId,
         CancellationToken cancellationToken = default);
 
+    Task<AssetStatistics> GetLocalAssetStatisticsAsync(
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<AssetListItem>> ListAssetsAsync(
         int limit,
         CancellationToken cancellationToken = default);

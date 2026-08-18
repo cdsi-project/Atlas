@@ -277,6 +277,98 @@ public sealed class SqliteAssetRepositoryTests
         SqliteConnection.ClearAllPools();
     }
 
+    [Fact]
+    public async Task GetLocalAssetStatisticsAsync_UsesAvailableFilesAndCurrentVideoMetadata()
+    {
+        using var directory = new TestDirectory();
+        var repository = new SqliteAssetRepository(Path.Combine(directory.Path, "cdsi.db"));
+        await repository.InitializeAsync();
+        var deviceId = await repository.GetOrCreateDeviceIdAsync();
+        var root = Path.Combine(directory.Path, "Assets");
+        Directory.CreateDirectory(root);
+
+        var scanStartedAt = DateTimeOffset.UtcNow;
+        var video = CreateFile(Path.Combine(root, "video.mp4"), "video.mp4") with
+        {
+            MimeType = "video/mp4",
+            Size = 100
+        };
+        var document = CreateFile(Path.Combine(root, "notes.txt"), "notes.txt") with
+        {
+            Size = 40
+        };
+        var missingVideo = CreateFile(
+            Path.Combine(root, "missing.mp4"),
+            "missing.mp4") with
+        {
+            MimeType = "video/mp4",
+            Size = 25
+        };
+
+        var missingRegistration = await repository.RegisterLocalFilesAsync(
+            deviceId,
+            [missingVideo],
+            scanStartedAt.AddSeconds(-1));
+        var currentRegistrations = await repository.RegisterLocalFilesAsync(
+            deviceId,
+            [video, document],
+            scanStartedAt.AddSeconds(1));
+
+        await repository.SaveMetadataAsync(new AssetMetadata(
+            currentRegistrations[0].AssetId,
+            "test",
+            MetadataPipeline.CurrentVersion,
+            MetadataExtractionStatus.Extracted,
+            video.Size,
+            video.ModifiedAt,
+            new AssetMetadataContent(
+                AssetMediaKind.Video,
+                DurationMilliseconds: 3_723_000),
+            DateTimeOffset.UtcNow,
+            null));
+        await repository.SaveMetadataAsync(new AssetMetadata(
+            missingRegistration[0].AssetId,
+            "test",
+            MetadataPipeline.CurrentVersion,
+            MetadataExtractionStatus.Extracted,
+            missingVideo.Size,
+            missingVideo.ModifiedAt,
+            new AssetMetadataContent(
+                AssetMediaKind.Video,
+                DurationMilliseconds: 60_000),
+            DateTimeOffset.UtcNow,
+            null));
+
+        await repository.MarkMissingLocalLocationsAsync(
+            deviceId,
+            root,
+            scanStartedAt);
+        var statistics = await repository.GetLocalAssetStatisticsAsync();
+
+        Assert.Equal(2, statistics.FileCount);
+        Assert.Equal(140, statistics.TotalSizeBytes);
+        Assert.Equal(1, statistics.VideoFileCount);
+        Assert.Equal(3_723_000, statistics.VideoDurationMilliseconds);
+
+        var changedVideo = video with
+        {
+            Size = 101,
+            ModifiedAt = video.ModifiedAt.AddSeconds(1)
+        };
+        await repository.RegisterLocalFilesAsync(
+            deviceId,
+            [changedVideo],
+            scanStartedAt.AddSeconds(2));
+        var statisticsAfterChange = await repository.GetLocalAssetStatisticsAsync();
+
+        Assert.Equal(2, statisticsAfterChange.FileCount);
+        Assert.Equal(141, statisticsAfterChange.TotalSizeBytes);
+        Assert.Equal(0, statisticsAfterChange.VideoFileCount);
+        Assert.Equal(0, statisticsAfterChange.VideoDurationMilliseconds);
+
+        SqliteConnection.ClearAllPools();
+    }
+
     private static DiscoveredFile CreateFile(string path, string filename)
     {
         return new DiscoveredFile(
