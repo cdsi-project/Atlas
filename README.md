@@ -81,7 +81,7 @@ dotnet run --project CDSI.Agent.WinForms/CDSI.Agent.WinForms.csproj
 
 仓库根目录的 <code>VERSION</code> 是唯一版本来源。构建时，所有程序集和桌面界面都会读取该文件。
 
-每次提交将版本递增 <code>0.001</code>，并创建同名 Git 标签，例如 <code>VERSION=0.104</code> 对应 <code>v0.104</code>。
+每次提交将版本递增 <code>0.001</code>，并创建同名 Git 标签，例如 <code>VERSION=0.105</code> 对应 <code>v0.105</code>。
 
 ## 本地数据
 

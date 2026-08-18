@@ -9,5 +9,6 @@
     <Project Path="tests/CDSI.Agent.Core.Tests/CDSI.Agent.Core.Tests.csproj" />
     <Project Path="tests/CDSI.Agent.Infrastructure.Tests/CDSI.Agent.Infrastructure.Tests.csproj" />
     <Project Path="tests/CDSI.Agent.IntegrationTests/CDSI.Agent.IntegrationTests.csproj" />
+    <Project Path="tests/CDSI.Agent.WinForms.Tests/CDSI.Agent.WinForms.Tests.csproj" />
   </Folder>
 </Solution>

@@ -201,7 +201,14 @@ public sealed class MainForm : Form
         };
         assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
         assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        assetTabLayout.Controls.Add(CreateStatisticsPanel(), 0, 0);
+        assetTabLayout.Controls.Add(
+            CreateStatisticsPanel(
+                _fileCountValueLabel,
+                _totalSizeValueLabel,
+                _videoCountValueLabel,
+                _videoDurationValueLabel),
+            0,
+            0);
         assetTabLayout.Controls.Add(_assetGrid, 0, 1);
         _assetsTabPage.Controls.Add(assetTabLayout);
         _duplicatesTabPage.Padding = new Padding(0);
@@ -261,47 +268,56 @@ public sealed class MainForm : Form
         button.Cursor = Cursors.Hand;
     }
 
-    private Control CreateStatisticsPanel()
+    internal static TableLayoutPanel CreateStatisticsPanel(
+        Label fileCountValueLabel,
+        Label totalSizeValueLabel,
+        Label videoCountValueLabel,
+        Label videoDurationValueLabel)
     {
         var panel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 4,
             RowCount = 1,
+            GrowStyle = TableLayoutPanelGrowStyle.FixedSize,
             Margin = Padding.Empty,
             Padding = new Padding(8, 4, 8, 4),
             BackColor = Color.White
         };
+        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         for (var column = 0; column < panel.ColumnCount; column++)
         {
             panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
         }
 
-        panel.Controls.Add(CreateStatisticItem("文件总数", _fileCountValueLabel), 0, 0);
-        panel.Controls.Add(CreateStatisticItem("占用空间", _totalSizeValueLabel), 1, 0);
-        panel.Controls.Add(CreateStatisticItem("视频文件", _videoCountValueLabel), 2, 0);
-        panel.Controls.Add(CreateStatisticItem("视频总时长", _videoDurationValueLabel), 3, 0);
+        panel.Controls.Add(CreateStatisticItem("文件总数", fileCountValueLabel), 0, 0);
+        panel.Controls.Add(CreateStatisticItem("占用空间", totalSizeValueLabel), 1, 0);
+        panel.Controls.Add(CreateStatisticItem("视频文件", videoCountValueLabel), 2, 0);
+        panel.Controls.Add(CreateStatisticItem("视频总时长", videoDurationValueLabel), 3, 0);
         return panel;
     }
 
-    private static Control CreateStatisticItem(string title, Label valueLabel)
+    private static TableLayoutPanel CreateStatisticItem(string title, Label valueLabel)
     {
         var item = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 2,
+            GrowStyle = TableLayoutPanelGrowStyle.FixedSize,
             Margin = new Padding(4, 0, 4, 0),
             Padding = new Padding(8, 1, 8, 1),
             BackColor = Color.White
         };
+        item.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         item.RowStyles.Add(new RowStyle(SizeType.Absolute, 18));
         item.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         var titleLabel = new Label
         {
             Dock = DockStyle.Fill,
+            Margin = Padding.Empty,
             Text = title,
             TextAlign = ContentAlignment.MiddleLeft,
             Font = new Font("Segoe UI", 8.5F),
@@ -309,6 +325,7 @@ public sealed class MainForm : Form
         };
 
         valueLabel.Dock = DockStyle.Fill;
+        valueLabel.Margin = Padding.Empty;
         valueLabel.Text = "0";
         valueLabel.TextAlign = ContentAlignment.MiddleLeft;
         valueLabel.AutoEllipsis = true;
