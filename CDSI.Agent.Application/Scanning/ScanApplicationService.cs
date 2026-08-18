@@ -1,5 +1,6 @@
 using CDSI.Agent.Core.Abstractions;
 using CDSI.Agent.Core.Assets;
+using CDSI.Agent.Core.Duplicates;
 using CDSI.Agent.Core.Scanning;
 
 namespace CDSI.Agent.Application.Scanning;
@@ -9,11 +10,16 @@ public sealed class ScanApplicationService
     private const int BatchSize = 200;
 
     private readonly IFileScanner _scanner;
+    private readonly IFileFingerprintService _fingerprintService;
     private readonly IAssetRepository _repository;
 
-    public ScanApplicationService(IFileScanner scanner, IAssetRepository repository)
+    public ScanApplicationService(
+        IFileScanner scanner,
+        IFileFingerprintService fingerprintService,
+        IAssetRepository repository)
     {
         _scanner = scanner;
+        _fingerprintService = fingerprintService;
         _repository = repository;
     }
 
@@ -32,6 +38,18 @@ public sealed class ScanApplicationService
         }
 
         return _repository.ListAssetsAsync(limit, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<ExactDuplicateGroup>> ListExactDuplicateGroupsAsync(
+        int limit = 500,
+        CancellationToken cancellationToken = default)
+    {
+        if (limit is < 1 or > 10_000)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit));
+        }
+
+        return _repository.ListExactDuplicateGroupsAsync(limit, cancellationToken);
     }
 
     public async Task<ScanSummary> ScanDirectoryAsync(
@@ -71,7 +89,82 @@ public sealed class ScanApplicationService
         var buffer = new List<DiscoveredFile>(BatchSize);
         var discovered = 0;
         var indexed = 0;
+        var fingerprinted = 0;
         var errors = 0;
+
+        void Report(ScanStage stage, string? path, string? message = null)
+        {
+            progress?.Report(new ScanProgress(
+                stage,
+                discovered,
+                indexed,
+                errors,
+                path,
+                message,
+                fingerprinted));
+        }
+
+        async Task FingerprintAsync(
+            IReadOnlyList<RegisteredLocalAsset> registeredAssets,
+            CancellationToken token)
+        {
+            foreach (var registeredAsset in registeredAssets)
+            {
+                if (!registeredAsset.RequiresFingerprint)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    Report(ScanStage.Fingerprinting, registeredAsset.File.FullPath);
+                    var fingerprint = await _fingerprintService.CalculateAsync(
+                        registeredAsset.File,
+                        token);
+                    var saved = await _repository.SaveSha256Async(
+                        registeredAsset.AssetId,
+                        fingerprint.Size,
+                        fingerprint.ModifiedAt,
+                        fingerprint.Sha256,
+                        token);
+
+                    if (saved)
+                    {
+                        fingerprinted++;
+                        Report(ScanStage.Fingerprinting, registeredAsset.File.FullPath);
+                    }
+                    else
+                    {
+                        errors++;
+                        Report(
+                            ScanStage.Fingerprinting,
+                            registeredAsset.File.FullPath,
+                            "File metadata changed before its fingerprint could be saved.");
+                    }
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    errors++;
+                    Report(
+                        ScanStage.Fingerprinting,
+                        registeredAsset.File.FullPath,
+                        exception.Message);
+                }
+            }
+        }
+
+        async Task RegisterAndFingerprintAsync(
+            IReadOnlyCollection<DiscoveredFile> files,
+            CancellationToken token)
+        {
+            var registered = await _repository.RegisterLocalFilesAsync(
+                deviceId,
+                files,
+                DateTimeOffset.UtcNow,
+                token);
+            indexed += registered.Count;
+            await FingerprintAsync(registered, token);
+        }
 
         async Task FlushAsync(CancellationToken token)
         {
@@ -85,49 +178,28 @@ public sealed class ScanApplicationService
 
             try
             {
-                var registered = await _repository.RegisterLocalFilesAsync(
-                    deviceId,
-                    currentBatch,
-                    DateTimeOffset.UtcNow,
-                    token);
-                indexed += registered.Count;
+                await RegisterAndFingerprintAsync(currentBatch, token);
             }
-            catch when (currentBatch.Length > 1)
+            catch (Exception batchException)
+                when (currentBatch.Length > 1 && batchException is not OperationCanceledException)
             {
                 foreach (var file in currentBatch)
                 {
                     try
                     {
-                        var registered = await _repository.RegisterLocalFilesAsync(
-                            deviceId,
-                            [file],
-                            DateTimeOffset.UtcNow,
-                            token);
-                        indexed += registered.Count;
+                        await RegisterAndFingerprintAsync([file], token);
                     }
                     catch (Exception exception) when (exception is not OperationCanceledException)
                     {
                         errors++;
-                        progress?.Report(new ScanProgress(
-                            ScanStage.Indexing,
-                            discovered,
-                            indexed,
-                            errors,
-                            file.FullPath,
-                            exception.Message));
+                        Report(ScanStage.Indexing, file.FullPath, exception.Message);
                     }
                 }
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
                 errors++;
-                progress?.Report(new ScanProgress(
-                    ScanStage.Indexing,
-                    discovered,
-                    indexed,
-                    errors,
-                    currentBatch[0].FullPath,
-                    exception.Message));
+                Report(ScanStage.Indexing, currentBatch[0].FullPath, exception.Message);
             }
         }
 
@@ -142,34 +214,18 @@ public sealed class ScanApplicationService
 
                     if (buffer.Count >= BatchSize)
                     {
-                        progress?.Report(new ScanProgress(
-                            ScanStage.Indexing,
-                            discovered,
-                            indexed,
-                            errors,
-                            file.FullPath));
+                        Report(ScanStage.Indexing, file.FullPath);
                         await FlushAsync(token);
                     }
                     else if (discovered % 25 == 0)
                     {
-                        progress?.Report(new ScanProgress(
-                            ScanStage.Discovering,
-                            discovered,
-                            indexed,
-                            errors,
-                            file.FullPath));
+                        Report(ScanStage.Discovering, file.FullPath);
                     }
                 },
                 (error, _) =>
                 {
                     errors++;
-                    progress?.Report(new ScanProgress(
-                        ScanStage.Discovering,
-                        discovered,
-                        indexed,
-                        errors,
-                        error.Path,
-                        error.Message));
+                    Report(ScanStage.Discovering, error.Path, error.Message);
                     return ValueTask.CompletedTask;
                 },
                 cancellationToken);
@@ -193,14 +249,15 @@ public sealed class ScanApplicationService
 
             await _repository.UpdateScanJobAsync(job, cancellationToken);
             await _repository.MarkScanRootCompletedAsync(scanRoot.Id, completedAt, cancellationToken);
-            progress?.Report(new ScanProgress(
-                ScanStage.Completed,
+            Report(ScanStage.Completed, normalizedRoot);
+
+            return new ScanSummary(
+                job.Id,
+                job.Status,
                 discovered,
                 indexed,
                 errors,
-                normalizedRoot));
-
-            return new ScanSummary(job.Id, job.Status, discovered, indexed, errors);
+                fingerprinted);
         }
         catch (OperationCanceledException)
         {
@@ -213,14 +270,15 @@ public sealed class ScanApplicationService
                 Errors = errors
             };
             await _repository.UpdateScanJobAsync(job, CancellationToken.None);
-            progress?.Report(new ScanProgress(
-                ScanStage.Cancelled,
+            Report(ScanStage.Cancelled, normalizedRoot);
+
+            return new ScanSummary(
+                job.Id,
+                job.Status,
                 discovered,
                 indexed,
                 errors,
-                normalizedRoot));
-
-            return new ScanSummary(job.Id, job.Status, discovered, indexed, errors);
+                fingerprinted);
         }
         catch (Exception exception)
         {
@@ -234,13 +292,8 @@ public sealed class ScanApplicationService
                 ErrorMessage = exception.Message
             };
             await _repository.UpdateScanJobAsync(job, CancellationToken.None);
-            progress?.Report(new ScanProgress(
-                ScanStage.Failed,
-                discovered,
-                indexed,
-                errors + 1,
-                normalizedRoot,
-                exception.Message));
+            errors++;
+            Report(ScanStage.Failed, normalizedRoot, exception.Message);
             throw;
         }
     }

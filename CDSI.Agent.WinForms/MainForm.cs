@@ -15,6 +15,9 @@ public sealed class MainForm : Form
     private readonly Label _progressLabel = new();
     private readonly Label _currentPathLabel = new();
     private readonly DataGridView _assetGrid = new();
+    private readonly DataGridView _duplicateGrid = new();
+    private readonly TabPage _assetsTabPage = new("资产");
+    private readonly TabPage _duplicatesTabPage = new("精确重复");
     private readonly ToolStripStatusLabel _statusLabel = new();
     private readonly ToolStripStatusLabel _databaseStatusLabel = new();
     private CancellationTokenSource? _scanCancellation;
@@ -144,13 +147,30 @@ public sealed class MainForm : Form
         mainLayout.Controls.Add(progressPanel, 0, 2);
 
         ConfigureAssetGrid();
+        ConfigureDuplicateGrid();
+
+        _assetsTabPage.Padding = new Padding(0);
+        _assetsTabPage.BackColor = Color.White;
+        _assetsTabPage.Controls.Add(_assetGrid);
+        _duplicatesTabPage.Padding = new Padding(0);
+        _duplicatesTabPage.BackColor = Color.White;
+        _duplicatesTabPage.Controls.Add(_duplicateGrid);
+
+        var tabs = new TabControl
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Point(12, 5)
+        };
+        tabs.TabPages.Add(_assetsTabPage);
+        tabs.TabPages.Add(_duplicatesTabPage);
+
         var gridHost = new Panel
         {
             Dock = DockStyle.Fill,
             Padding = new Padding(28, 8, 28, 18),
             BackColor = BackColor
         };
-        gridHost.Controls.Add(_assetGrid);
+        gridHost.Controls.Add(tabs);
         mainLayout.Controls.Add(gridHost, 0, 3);
 
         var statusStrip = new StatusStrip
@@ -191,35 +211,50 @@ public sealed class MainForm : Form
 
     private void ConfigureAssetGrid()
     {
-        _assetGrid.Dock = DockStyle.Fill;
-        _assetGrid.BackgroundColor = Color.White;
-        _assetGrid.BorderStyle = BorderStyle.FixedSingle;
-        _assetGrid.ReadOnly = true;
-        _assetGrid.AllowUserToAddRows = false;
-        _assetGrid.AllowUserToDeleteRows = false;
-        _assetGrid.AllowUserToResizeRows = false;
-        _assetGrid.AutoGenerateColumns = false;
-        _assetGrid.MultiSelect = false;
-        _assetGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _assetGrid.RowHeadersVisible = false;
-        _assetGrid.RowTemplate.Height = 30;
-        _assetGrid.ColumnHeadersHeight = 36;
-        _assetGrid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-        _assetGrid.EnableHeadersVisualStyles = false;
-        _assetGrid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(239, 242, 244);
-        _assetGrid.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(52, 61, 69);
-        _assetGrid.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI Semibold", 9F);
-        _assetGrid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(220, 235, 227);
-        _assetGrid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(31, 37, 43);
-        _assetGrid.DefaultCellStyle.Padding = new Padding(4, 0, 4, 0);
-        _assetGrid.GridColor = Color.FromArgb(229, 232, 235);
-
+        ConfigureGrid(_assetGrid);
         _assetGrid.Columns.Add(CreateColumn("文件", 220, DataGridViewAutoSizeColumnMode.Fill, 24));
         _assetGrid.Columns.Add(CreateColumn("类型", 125));
         _assetGrid.Columns.Add(CreateColumn("大小", 90));
         _assetGrid.Columns.Add(CreateColumn("修改时间", 145));
         _assetGrid.Columns.Add(CreateColumn("位置", 320, DataGridViewAutoSizeColumnMode.Fill, 46));
         _assetGrid.Columns.Add(CreateColumn("状态", 80));
+    }
+
+    private void ConfigureDuplicateGrid()
+    {
+        ConfigureGrid(_duplicateGrid);
+        _duplicateGrid.Columns.Add(CreateColumn("组", 60));
+        _duplicateGrid.Columns.Add(CreateColumn("SHA-256", 125));
+        _duplicateGrid.Columns.Add(CreateColumn("文件", 220, DataGridViewAutoSizeColumnMode.Fill, 24));
+        _duplicateGrid.Columns.Add(CreateColumn("大小", 90));
+        _duplicateGrid.Columns.Add(CreateColumn("位置", 360, DataGridViewAutoSizeColumnMode.Fill, 48));
+        _duplicateGrid.Columns.Add(CreateColumn("状态", 80));
+    }
+
+    private static void ConfigureGrid(DataGridView grid)
+    {
+        grid.Dock = DockStyle.Fill;
+        grid.BackgroundColor = Color.White;
+        grid.BorderStyle = BorderStyle.FixedSingle;
+        grid.ReadOnly = true;
+        grid.AllowUserToAddRows = false;
+        grid.AllowUserToDeleteRows = false;
+        grid.AllowUserToResizeRows = false;
+        grid.AutoGenerateColumns = false;
+        grid.MultiSelect = false;
+        grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        grid.RowHeadersVisible = false;
+        grid.RowTemplate.Height = 30;
+        grid.ColumnHeadersHeight = 36;
+        grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+        grid.EnableHeadersVisualStyles = false;
+        grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(239, 242, 244);
+        grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(52, 61, 69);
+        grid.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI Semibold", 9F);
+        grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(220, 235, 227);
+        grid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(31, 37, 43);
+        grid.DefaultCellStyle.Padding = new Padding(4, 0, 4, 0);
+        grid.GridColor = Color.FromArgb(229, 232, 235);
     }
 
     private static DataGridViewColumn CreateColumn(
@@ -330,7 +365,7 @@ public sealed class MainForm : Form
     private void UpdateProgress(ScanProgress progress)
     {
         _progressLabel.Text =
-            $"发现 {progress.FilesDiscovered:N0}  ·  已索引 {progress.FilesIndexed:N0}  ·  错误 {progress.Errors:N0}";
+            $"发现 {progress.FilesDiscovered:N0}  ·  已索引 {progress.FilesIndexed:N0}  ·  已哈希 {progress.FilesFingerprinted:N0}  ·  错误 {progress.Errors:N0}";
         _currentPathLabel.Text = progress.CurrentPath ?? progress.Message ?? string.Empty;
 
         if (progress.Stage == ScanStage.Failed)
@@ -341,8 +376,14 @@ public sealed class MainForm : Form
 
     private async Task RefreshAssetsAsync()
     {
-        var assets = await _scanService.ListAssetsAsync();
+        var assetsTask = _scanService.ListAssetsAsync();
+        var duplicateGroupsTask = _scanService.ListExactDuplicateGroupsAsync();
+        await Task.WhenAll(assetsTask, duplicateGroupsTask);
+
+        var assets = await assetsTask;
+        var duplicateGroups = await duplicateGroupsTask;
         _assetGrid.Rows.Clear();
+        _duplicateGrid.Rows.Clear();
 
         foreach (var asset in assets)
         {
@@ -355,7 +396,26 @@ public sealed class MainForm : Form
                 FormatStatus(asset));
         }
 
-        _statusLabel.Text = $"本地资产 {assets.Count:N0}";
+        var groupNumber = 0;
+        foreach (var group in duplicateGroups)
+        {
+            groupNumber++;
+            foreach (var asset in group.Assets)
+            {
+                _duplicateGrid.Rows.Add(
+                    groupNumber,
+                    group.Sha256[..12],
+                    asset.OriginalFilename,
+                    FormatFileSize(group.Size),
+                    asset.Path,
+                    FormatLocationStatus(asset.LocationStatus));
+            }
+        }
+
+        _assetsTabPage.Text = $"资产 ({assets.Count:N0})";
+        _duplicatesTabPage.Text = $"精确重复 ({duplicateGroups.Count:N0})";
+        _statusLabel.Text =
+            $"本地资产 {assets.Count:N0}  ·  重复组 {duplicateGroups.Count:N0}";
     }
 
     private void SetBusy(bool busy, bool allowCancel = true)
@@ -381,6 +441,11 @@ public sealed class MainForm : Form
             AssetStatus.Error => "错误",
             _ => asset.Status.ToString()
         };
+    }
+
+    private static string FormatLocationStatus(AssetLocationStatus status)
+    {
+        return status == AssetLocationStatus.Missing ? "位置缺失" : "可用";
     }
 
     private static string FormatFileSize(long bytes)

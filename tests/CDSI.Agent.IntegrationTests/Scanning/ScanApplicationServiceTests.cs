@@ -2,6 +2,7 @@ using CDSI.Agent.Application.Scanning;
 using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Scanning;
 using CDSI.Agent.Infrastructure.FileSystem;
+using CDSI.Agent.Infrastructure.Fingerprints;
 using CDSI.Agent.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 
@@ -17,33 +18,45 @@ public sealed class ScanApplicationServiceTests
         var nested = Directory.CreateDirectory(Path.Combine(scanRoot.FullName, "Nested"));
         var ignored = Directory.CreateDirectory(Path.Combine(scanRoot.FullName, ".git"));
         var articlePath = Path.Combine(scanRoot.FullName, "article.md");
+        var articleCopyPath = Path.Combine(nested.FullName, "article-copy.md");
         var imagePath = Path.Combine(nested.FullName, "cover.jpg");
         const string originalArticle = "# Private draft";
 
         await File.WriteAllTextAsync(articlePath, originalArticle);
+        await File.WriteAllTextAsync(articleCopyPath, originalArticle);
         await File.WriteAllBytesAsync(imagePath, [1, 2, 3, 4]);
         await File.WriteAllTextAsync(Path.Combine(ignored.FullName, "config"), "ignored");
 
         var repository = new SqliteAssetRepository(
             Path.Combine(directory.Path, "State", "cdsi.db"));
-        var service = new ScanApplicationService(new FileSystemScanner(), repository);
+        var service = new ScanApplicationService(
+            new FileSystemScanner(),
+            new Sha256FileFingerprintService(),
+            repository);
         await service.InitializeAsync();
 
         var firstScan = await service.ScanDirectoryAsync(scanRoot.FullName);
         var firstAssets = await service.ListAssetsAsync();
         var secondScan = await service.ScanDirectoryAsync(scanRoot.FullName);
         var secondAssets = await service.ListAssetsAsync();
+        var duplicateGroups = await service.ListExactDuplicateGroupsAsync();
 
         Assert.Equal(ScanJobStatus.Completed, firstScan.Status);
-        Assert.Equal(2, firstScan.FilesIndexed);
+        Assert.Equal(3, firstScan.FilesIndexed);
+        Assert.Equal(3, firstScan.FilesFingerprinted);
         Assert.Equal(ScanJobStatus.Completed, secondScan.Status);
-        Assert.Equal(2, secondScan.FilesIndexed);
-        Assert.Equal(2, firstAssets.Count);
-        Assert.Equal(2, secondAssets.Count);
+        Assert.Equal(3, secondScan.FilesIndexed);
+        Assert.Equal(0, secondScan.FilesFingerprinted);
+        Assert.Equal(3, firstAssets.Count);
+        Assert.Equal(3, secondAssets.Count);
         Assert.Equal(
             firstAssets.OrderBy(asset => asset.Path).Select(asset => asset.AssetId),
             secondAssets.OrderBy(asset => asset.Path).Select(asset => asset.AssetId));
         Assert.Equal(originalArticle, await File.ReadAllTextAsync(articlePath));
+        var duplicateGroup = Assert.Single(duplicateGroups);
+        Assert.Equal(2, duplicateGroup.Assets.Count);
+        Assert.Contains(duplicateGroup.Assets, asset => asset.Path == articlePath);
+        Assert.Contains(duplicateGroup.Assets, asset => asset.Path == articleCopyPath);
 
         SqliteConnection.ClearAllPools();
     }
@@ -60,7 +73,10 @@ public sealed class ScanApplicationServiceTests
 
         var repository = new SqliteAssetRepository(
             Path.Combine(directory.Path, "State", "cdsi.db"));
-        var service = new ScanApplicationService(new FileSystemScanner(), repository);
+        var service = new ScanApplicationService(
+            new FileSystemScanner(),
+            new Sha256FileFingerprintService(),
+            repository);
         await service.InitializeAsync();
         await service.ScanDirectoryAsync(scanRoot.FullName);
 

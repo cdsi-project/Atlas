@@ -2,7 +2,7 @@
 
 CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己的 Windows 设备上扫描所选目录，建立独立于文件路径的资产与位置记录，不移动、不重命名，也不删除源文件。
 
-当前仓库实现 Milestone 0.1：可靠的本地资产索引闭环。
+当前仓库实现 Milestone 0.2：带精确重复检测的本地资产索引闭环。
 
 ## 当前能力
 
@@ -10,6 +10,9 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 - 默认忽略 <code>.git</code>、<code>.vs</code>、<code>node_modules</code>、<code>vendor</code>、<code>bin</code>、<code>obj</code> 等目录
 - 默认不跟随符号链接和 junction
 - 识别常见文件扩展名与 MIME 类型，未知格式仍可索引
+- 以异步流式读取计算 SHA-256，不把大文件载入内存
+- 基于文件大小和修改时间复用缓存，避免重复哈希
+- 按 SHA-256 生成精确重复组并在独立标签页展示
 - 将资产、位置、扫描根和扫描任务持久化到 SQLite
 - 同一设备和路径重复扫描时保持幂等
 - 文件消失时仅将本地位置标记为 <code>Missing</code>，保留逻辑资产
@@ -72,12 +75,12 @@ dotnet run --project CDSI.Agent.WinForms/CDSI.Agent.WinForms.csproj
 
 ## 下一阶段
 
-Milestone 0.2 将加入：
+下一阶段将加入基础资产理解能力：
 
-- 流式 SHA-256
-- 基于 <code>size + mtime</code> 的哈希缓存
-- 精确重复文件分组
-- 重复文件视图
-- 更完整的重扫与位置核验
+- TXT 与 Markdown 文本提取
+- 图片尺寸和基础元数据
+- 可扩展的提取器注册表
+- Inbox 与批量复核入口
+- 更完整的位置核验
 
 AI 分类、云存储、CDSI Server API 和自动文件整理不在当前阶段。

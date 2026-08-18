@@ -1400,21 +1400,21 @@ Build a useful local asset discovery tool.
 
 Features:
 
-- [ ] WinForms shell
-- [ ] SQLite database
-- [ ] scan root management
-- [ ] manual directory scan
-- [ ] file index
-- [ ] MIME detection
-- [ ] size / timestamps
-- [ ] SHA-256
-- [ ] exact duplicate detection
-- [ ] asset list
-- [ ] duplicate list
-- [ ] scan progress
-- [ ] background job handling
-- [ ] safe error handling
-- [ ] no filesystem modification
+- [x] WinForms shell
+- [x] SQLite database
+- [x] scan root management
+- [x] manual directory scan
+- [x] file index
+- [x] MIME detection
+- [x] size / timestamps
+- [x] SHA-256
+- [x] exact duplicate detection
+- [x] asset list
+- [x] duplicate list
+- [x] scan progress
+- [x] background job handling
+- [x] safe error handling
+- [x] no filesystem modification
 
 Success condition:
 

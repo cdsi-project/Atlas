@@ -756,14 +756,14 @@ Codex should implement only the following:
 
 After Milestone 0.1 is stable:
 
-- [ ] calculate SHA-256
-- [ ] cache hashes
-- [ ] avoid rehashing unchanged files
-- [ ] detect exact duplicates
-- [ ] create duplicate groups
-- [ ] display duplicate groups in UI
-- [ ] support rescans
-- [ ] ensure rescans are idempotent
+- [x] calculate SHA-256
+- [x] cache hashes
+- [x] avoid rehashing unchanged files
+- [x] detect exact duplicates
+- [x] create duplicate groups
+- [x] display duplicate groups in UI
+- [x] support rescans
+- [x] ensure rescans are idempotent
 
 ---
 

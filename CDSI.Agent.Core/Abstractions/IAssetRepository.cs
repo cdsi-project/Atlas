@@ -1,4 +1,5 @@
 using CDSI.Agent.Core.Assets;
+using CDSI.Agent.Core.Duplicates;
 using CDSI.Agent.Core.Scanning;
 
 namespace CDSI.Agent.Core.Abstractions;
@@ -29,13 +30,24 @@ public interface IAssetRepository
         DateTimeOffset scanStartedAt,
         CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<AssetListItem>> RegisterLocalFilesAsync(
+    Task<IReadOnlyList<RegisteredLocalAsset>> RegisterLocalFilesAsync(
         string deviceId,
         IReadOnlyCollection<DiscoveredFile> files,
         DateTimeOffset discoveredAt,
         CancellationToken cancellationToken = default);
 
+    Task<bool> SaveSha256Async(
+        Guid assetId,
+        long expectedSize,
+        DateTimeOffset expectedModifiedAt,
+        string sha256,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<AssetListItem>> ListAssetsAsync(
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ExactDuplicateGroup>> ListExactDuplicateGroupsAsync(
         int limit,
         CancellationToken cancellationToken = default);
 }

@@ -1,6 +1,7 @@
 using System.Globalization;
 using CDSI.Agent.Core.Abstractions;
 using CDSI.Agent.Core.Assets;
+using CDSI.Agent.Core.Duplicates;
 using CDSI.Agent.Core.Scanning;
 using Microsoft.Data.Sqlite;
 
@@ -201,7 +202,7 @@ public sealed class SqliteAssetRepository : IAssetRepository
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<AssetListItem>> RegisterLocalFilesAsync(
+    public async Task<IReadOnlyList<RegisteredLocalAsset>> RegisterLocalFilesAsync(
         string deviceId,
         IReadOnlyCollection<DiscoveredFile> files,
         DateTimeOffset discoveredAt,
@@ -212,7 +213,7 @@ public sealed class SqliteAssetRepository : IAssetRepository
             return [];
         }
 
-        var registered = new List<AssetListItem>(files.Count);
+        var registered = new List<RegisteredLocalAsset>(files.Count);
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
@@ -222,12 +223,17 @@ public sealed class SqliteAssetRepository : IAssetRepository
 
             var normalizedPath = NormalizePath(file.FullPath);
             var pathKey = CreatePathKey(normalizedPath);
-            var assetId = await FindAssetIdAsync(
+            var existingAsset = await FindAssetAsync(
                 connection,
                 (SqliteTransaction)transaction,
                 deviceId,
                 pathKey,
                 cancellationToken);
+            var assetId = existingAsset?.Id;
+            var requiresFingerprint = existingAsset is null ||
+                existingAsset.Size != file.Size ||
+                existingAsset.ModifiedAt != file.ModifiedAt ||
+                string.IsNullOrWhiteSpace(existingAsset.Sha256);
 
             if (assetId is null)
             {
@@ -269,20 +275,47 @@ public sealed class SqliteAssetRepository : IAssetRepository
                     cancellationToken);
             }
 
-            registered.Add(new AssetListItem(
+            registered.Add(new RegisteredLocalAsset(
                 assetId.Value,
-                file.OriginalFilename,
-                file.Extension,
-                file.MimeType,
-                file.Size,
-                file.ModifiedAt,
-                normalizedPath,
-                AssetLocationStatus.Available,
-                AssetStatus.Indexed));
+                file with { FullPath = normalizedPath },
+                requiresFingerprint));
         }
 
         await transaction.CommitAsync(cancellationToken);
         return registered;
+    }
+
+    public async Task<bool> SaveSha256Async(
+        Guid assetId,
+        long expectedSize,
+        DateTimeOffset expectedModifiedAt,
+        string sha256,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sha256);
+        if (sha256.Length != 64)
+        {
+            throw new ArgumentException("A SHA-256 value must contain 64 hexadecimal characters.", nameof(sha256));
+        }
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            UPDATE assets
+            SET sha256 = $sha256
+            WHERE id = $id
+              AND size = $expected_size
+              AND modified_at = $expected_modified_at;
+            """;
+        command.Parameters.AddWithValue("$sha256", sha256.ToLowerInvariant());
+        command.Parameters.AddWithValue("$id", assetId.ToString("D"));
+        command.Parameters.AddWithValue("$expected_size", expectedSize);
+        command.Parameters.AddWithValue(
+            "$expected_modified_at",
+            expectedModifiedAt.ToString("O"));
+
+        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
     }
 
     public async Task<IReadOnlyList<AssetListItem>> ListAssetsAsync(
@@ -330,6 +363,81 @@ public sealed class SqliteAssetRepository : IAssetRepository
         return assets;
     }
 
+    public async Task<IReadOnlyList<ExactDuplicateGroup>> ListExactDuplicateGroupsAsync(
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        if (limit is < 1 or > 10_000)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit));
+        }
+
+        var groups = new List<ExactDuplicateGroup>();
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var groupCommand = connection.CreateCommand();
+        groupCommand.CommandText =
+            """
+            SELECT sha256, size
+            FROM assets
+            WHERE sha256 IS NOT NULL
+            GROUP BY sha256, size
+            HAVING COUNT(*) > 1
+            ORDER BY COUNT(*) DESC, size DESC
+            LIMIT $limit;
+            """;
+        groupCommand.Parameters.AddWithValue("$limit", limit);
+
+        var candidates = new List<(string Sha256, long Size)>();
+        await using (var reader = await groupCommand.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                candidates.Add((reader.GetString(0), reader.GetInt64(1)));
+            }
+        }
+
+        foreach (var candidate in candidates)
+        {
+            await using var itemCommand = connection.CreateCommand();
+            itemCommand.CommandText =
+                """
+                SELECT
+                    a.id,
+                    a.original_filename,
+                    l.path,
+                    a.modified_at,
+                    l.status
+                FROM assets a
+                INNER JOIN asset_locations l ON l.asset_id = a.id
+                WHERE a.sha256 = $sha256
+                  AND a.size = $size
+                  AND l.location_type = 'Local'
+                ORDER BY l.path;
+                """;
+            itemCommand.Parameters.AddWithValue("$sha256", candidate.Sha256);
+            itemCommand.Parameters.AddWithValue("$size", candidate.Size);
+
+            var items = new List<DuplicateAssetItem>();
+            await using var itemReader = await itemCommand.ExecuteReaderAsync(cancellationToken);
+            while (await itemReader.ReadAsync(cancellationToken))
+            {
+                items.Add(new DuplicateAssetItem(
+                    Guid.Parse(itemReader.GetString(0)),
+                    itemReader.GetString(1),
+                    itemReader.GetString(2),
+                    ParseTimestamp(itemReader.GetString(3)),
+                    Enum.Parse<AssetLocationStatus>(itemReader.GetString(4))));
+            }
+
+            if (items.Count > 1)
+            {
+                groups.Add(new ExactDuplicateGroup(candidate.Sha256, candidate.Size, items));
+            }
+        }
+
+        return groups;
+    }
+
     private async Task<SqliteConnection> OpenConnectionAsync(
         CancellationToken cancellationToken)
     {
@@ -338,7 +446,7 @@ public sealed class SqliteAssetRepository : IAssetRepository
         return connection;
     }
 
-    private static async Task<Guid?> FindAssetIdAsync(
+    private static async Task<ExistingAsset?> FindAssetAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
         string deviceId,
@@ -349,16 +457,26 @@ public sealed class SqliteAssetRepository : IAssetRepository
         command.Transaction = transaction;
         command.CommandText =
             """
-            SELECT asset_id
-            FROM asset_locations
-            WHERE device_id = $device_id AND path_key = $path_key
+            SELECT a.id, a.size, a.modified_at, a.sha256
+            FROM asset_locations l
+            INNER JOIN assets a ON a.id = l.asset_id
+            WHERE l.device_id = $device_id AND l.path_key = $path_key
             LIMIT 1;
             """;
         command.Parameters.AddWithValue("$device_id", deviceId);
         command.Parameters.AddWithValue("$path_key", pathKey);
 
-        var value = await command.ExecuteScalarAsync(cancellationToken) as string;
-        return string.IsNullOrWhiteSpace(value) ? null : Guid.Parse(value);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return new ExistingAsset(
+            Guid.Parse(reader.GetString(0)),
+            reader.GetInt64(1),
+            ParseTimestamp(reader.GetString(2)),
+            reader.IsDBNull(3) ? null : reader.GetString(3));
     }
 
     private static async Task InsertAssetAsync(
@@ -527,4 +645,10 @@ public sealed class SqliteAssetRepository : IAssetRepository
             CultureInfo.InvariantCulture,
             DateTimeStyles.RoundtripKind);
     }
+
+    private sealed record ExistingAsset(
+        Guid Id,
+        long Size,
+        DateTimeOffset ModifiedAt,
+        string? Sha256);
 }
