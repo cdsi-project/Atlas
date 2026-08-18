@@ -2,10 +2,12 @@ using System.Reflection;
 using CDSI.Agent.Application.Metadata;
 using CDSI.Agent.Application.Fingerprints;
 using CDSI.Agent.Application.Scanning;
+using CDSI.Agent.Application.Text;
 using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Fingerprints;
 using CDSI.Agent.Core.Metadata;
 using CDSI.Agent.Core.Scanning;
+using CDSI.Agent.Core.Text;
 
 namespace CDSI.Agent.WinForms;
 
@@ -15,6 +17,7 @@ public sealed class MainForm : Form
     private readonly TextBox _rootPathTextBox = new();
     private readonly FingerprintApplicationService _fingerprintService;
     private readonly MetadataExtractionApplicationService _metadataService;
+    private readonly TextExtractionApplicationService _textService;
     private readonly CheckBox _fullVerificationCheckBox = new();
     private readonly Button _browseButton = new();
     private readonly Button _scanButton = new();
@@ -26,6 +29,9 @@ public sealed class MainForm : Form
     private readonly Label _totalSizeValueLabel = new();
     private readonly Label _videoCountValueLabel = new();
     private readonly Label _videoDurationValueLabel = new();
+    private readonly Label _assetDetailTitleLabel = new();
+    private readonly Label _assetDetailSummaryLabel = new();
+    private readonly TextBox _assetTextPreviewBox = new();
     private readonly DataGridView _assetGrid = new();
     private readonly DataGridView _duplicateGrid = new();
     private readonly TabPage _assetsTabPage = new("资产");
@@ -38,11 +44,13 @@ public sealed class MainForm : Form
         ScanApplicationService scanService,
         FingerprintApplicationService fingerprintService,
         MetadataExtractionApplicationService metadataService,
+        TextExtractionApplicationService textService,
         string dataDirectory)
     {
         _scanService = scanService;
         _fingerprintService = fingerprintService;
         _metadataService = metadataService;
+        _textService = textService;
         InitializeLayout(dataDirectory);
 
         Shown += MainForm_Shown;
@@ -188,6 +196,7 @@ public sealed class MainForm : Form
 
         ConfigureAssetGrid();
         ConfigureDuplicateGrid();
+        _assetGrid.SelectionChanged += AssetGrid_SelectionChanged;
 
         _assetsTabPage.Padding = new Padding(0);
         _assetsTabPage.BackColor = Color.White;
@@ -195,12 +204,13 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 2,
+            RowCount = 3,
             Margin = Padding.Empty,
             Padding = Padding.Empty
         };
         assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
         assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
         assetTabLayout.Controls.Add(
             CreateStatisticsPanel(
                 _fileCountValueLabel,
@@ -210,6 +220,13 @@ public sealed class MainForm : Form
             0,
             0);
         assetTabLayout.Controls.Add(_assetGrid, 0, 1);
+        assetTabLayout.Controls.Add(
+            CreateAssetDetailsPanel(
+                _assetDetailTitleLabel,
+                _assetDetailSummaryLabel,
+                _assetTextPreviewBox),
+            0,
+            2);
         _assetsTabPage.Controls.Add(assetTabLayout);
         _duplicatesTabPage.Padding = new Padding(0);
         _duplicatesTabPage.BackColor = Color.White;
@@ -298,6 +315,87 @@ public sealed class MainForm : Form
         return panel;
     }
 
+    internal static TableLayoutPanel CreateAssetDetailsPanel(
+        Label titleLabel,
+        Label summaryLabel,
+        TextBox previewTextBox)
+    {
+        var panel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 2,
+            GrowStyle = TableLayoutPanelGrowStyle.FixedSize,
+            Margin = Padding.Empty,
+            Padding = new Padding(8, 6, 8, 8),
+            BackColor = Color.White
+        };
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 330));
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        panel.Controls.Add(CreateDetailHeader("资产详情"), 0, 0);
+        panel.Controls.Add(CreateDetailHeader("文本预览"), 1, 0);
+
+        var summaryPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = new Padding(0, 0, 12, 0),
+            Padding = Padding.Empty
+        };
+        summaryPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        summaryPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+        summaryPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        titleLabel.Dock = DockStyle.Fill;
+        titleLabel.Margin = Padding.Empty;
+        titleLabel.Text = "未选择资产";
+        titleLabel.AutoEllipsis = true;
+        titleLabel.Font = new Font("Segoe UI Semibold", 10F);
+        titleLabel.ForeColor = Color.FromArgb(31, 37, 43);
+        titleLabel.AccessibleName = "资产标题";
+
+        summaryLabel.Dock = DockStyle.Fill;
+        summaryLabel.Margin = Padding.Empty;
+        summaryLabel.Text = string.Empty;
+        summaryLabel.AutoEllipsis = true;
+        summaryLabel.ForeColor = Color.FromArgb(88, 98, 106);
+        summaryLabel.AccessibleName = "资产摘要";
+
+        previewTextBox.Dock = DockStyle.Fill;
+        previewTextBox.Margin = Padding.Empty;
+        previewTextBox.Multiline = true;
+        previewTextBox.MaxLength = TextExtractionOptions.DefaultMaximumOutputCharacters;
+        previewTextBox.ReadOnly = true;
+        previewTextBox.ScrollBars = ScrollBars.Vertical;
+        previewTextBox.WordWrap = true;
+        previewTextBox.BorderStyle = BorderStyle.FixedSingle;
+        previewTextBox.BackColor = Color.White;
+        previewTextBox.ForeColor = Color.FromArgb(52, 61, 69);
+        previewTextBox.AccessibleName = "提取文本预览";
+
+        summaryPanel.Controls.Add(titleLabel, 0, 0);
+        summaryPanel.Controls.Add(summaryLabel, 0, 1);
+        panel.Controls.Add(summaryPanel, 0, 1);
+        panel.Controls.Add(previewTextBox, 1, 1);
+        return panel;
+    }
+
+    private static Label CreateDetailHeader(string text)
+    {
+        return new Label
+        {
+            Dock = DockStyle.Fill,
+            Margin = Padding.Empty,
+            Text = text,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Font = new Font("Segoe UI Semibold", 8.5F),
+            ForeColor = Color.FromArgb(112, 121, 129)
+        };
+    }
     private static TableLayoutPanel CreateStatisticItem(string title, Label valueLabel)
     {
         var item = new TableLayoutPanel
@@ -352,6 +450,7 @@ public sealed class MainForm : Form
             DataGridViewAutoSizeColumnMode.Fill,
             34,
             minimumWidth: 220));
+        _assetGrid.Columns.Add(CreateColumn("文本", 100));
         _assetGrid.Columns.Add(CreateColumn("状态", 80));
     }
 
@@ -468,6 +567,7 @@ public sealed class MainForm : Form
         var scanProgress = new Progress<ScanProgress>(UpdateScanProgress);
         var fingerprintProgress = new Progress<FingerprintProgress>(UpdateFingerprintProgress);
         var metadataProgress = new Progress<MetadataProgress>(UpdateMetadataProgress);
+        var textProgress = new Progress<TextProgress>(UpdateTextProgress);
 
         SetBusy(true);
         _progressBar.Style = ProgressBarStyle.Marquee;
@@ -511,6 +611,23 @@ public sealed class MainForm : Form
                 return;
             }
 
+            _progressBar.Value = 0;
+            _statusLabel.Text = "正在提取文本";
+
+            var textSummary = await Task.Run(
+                () => _textService.ProcessPendingAsync(
+                    textProgress,
+                    _scanCancellation.Token),
+                _scanCancellation.Token);
+
+            await RefreshAssetsAsync();
+            if (textSummary.Cancelled)
+            {
+                _statusLabel.Text =
+                    $"文本提取已取消，已完成 {textSummary.ExtractedFiles:N0} 个文件";
+                return;
+            }
+
             var mode = _fullVerificationCheckBox.Checked
                 ? FingerprintMode.Complete
                 : FingerprintMode.DuplicateCandidates;
@@ -533,7 +650,7 @@ public sealed class MainForm : Form
             await RefreshAssetsAsync();
             _statusLabel.Text = fingerprintSummary.Cancelled
                 ? $"哈希已取消，已完成 {fingerprintSummary.FingerprintedFiles:N0} 个文件"
-                : $"扫描完成，已索引 {scanSummary.FilesIndexed:N0} 个文件，已提取 {metadataSummary.ExtractedFiles:N0} 个文件，已哈希 {fingerprintSummary.FingerprintedFiles:N0} 个文件";
+                : $"扫描完成，已索引 {scanSummary.FilesIndexed:N0} 个文件，元数据 {metadataSummary.ExtractedFiles:N0}，文本 {textSummary.ExtractedFiles:N0}，哈希 {fingerprintSummary.FingerprintedFiles:N0}";
         }
         catch (OperationCanceledException)
         {
@@ -578,6 +695,20 @@ public sealed class MainForm : Form
                 1_000d);
     }
 
+    private void UpdateTextProgress(TextProgress progress)
+    {
+        _progressLabel.Text =
+            $"文本 {progress.CompletedFiles:N0}/{progress.TotalFiles:N0}  ·  已提取 {progress.ExtractedFiles:N0}  ·  非文本 {progress.UnsupportedFiles:N0}  ·  错误 {progress.Errors:N0}";
+        _currentPathLabel.Text = progress.Message ?? progress.CurrentPath ?? string.Empty;
+
+        _progressBar.Value = progress.TotalFiles == 0
+            ? 0
+            : (int)Math.Clamp(
+                progress.CompletedFiles * 1_000d / progress.TotalFiles,
+                0d,
+                1_000d);
+    }
+
     private void UpdateFingerprintProgress(FingerprintProgress progress)
     {
         var modeText = progress.Mode == FingerprintMode.Complete
@@ -610,14 +741,27 @@ public sealed class MainForm : Form
 
         foreach (var asset in assets)
         {
-            _assetGrid.Rows.Add(
+            var rowIndex = _assetGrid.Rows.Add(
                 asset.OriginalFilename,
                 asset.MimeType ?? "未知",
                 FormatFileSize(asset.Size),
                 asset.ModifiedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
                 asset.Path,
                 FormatMetadata(asset.Metadata),
+                FormatTextStatus(asset.Text),
                 FormatStatus(asset));
+            _assetGrid.Rows[rowIndex].Tag = asset;
+        }
+
+        if (_assetGrid.Rows.Count > 0)
+        {
+            _assetGrid.CurrentCell = _assetGrid.Rows[0].Cells[0];
+            _assetGrid.Rows[0].Selected = true;
+            UpdateAssetDetails(_assetGrid.Rows[0].Tag as AssetListItem);
+        }
+        else
+        {
+            UpdateAssetDetails(null);
         }
 
         var groupNumber = 0;
@@ -651,6 +795,70 @@ public sealed class MainForm : Form
             $"本地文件 {statistics.FileCount:N0}{visibleItemsSuffix}  ·  重复组 {duplicateGroups.Count:N0}";
     }
 
+    private void AssetGrid_SelectionChanged(object? sender, EventArgs e)
+    {
+        UpdateAssetDetails(_assetGrid.CurrentRow?.Tag as AssetListItem);
+    }
+
+    private void UpdateAssetDetails(AssetListItem? asset)
+    {
+        if (asset is null)
+        {
+            _assetDetailTitleLabel.Text = "未选择资产";
+            _assetDetailSummaryLabel.Text = string.Empty;
+            _assetTextPreviewBox.Text = string.Empty;
+            return;
+        }
+
+        _assetDetailTitleLabel.Text =
+            asset.Text?.Content?.Title ?? asset.OriginalFilename;
+        _assetDetailSummaryLabel.Text = string.Join(
+            Environment.NewLine,
+            $"{asset.MimeType ?? "未知类型"} · {FormatFileSize(asset.Size)} · {asset.ModifiedAt.ToLocalTime():yyyy-MM-dd HH:mm}",
+            asset.Path,
+            FormatTextDetails(asset.Text));
+        _assetTextPreviewBox.Text = asset.Text?.Content?.PlainText ?? string.Empty;
+        _assetTextPreviewBox.SelectionStart = 0;
+        _assetTextPreviewBox.SelectionLength = 0;
+    }
+
+    private static string FormatTextStatus(AssetText? text)
+    {
+        if (text is null)
+        {
+            return "待提取";
+        }
+
+        return text.Status switch
+        {
+            TextExtractionStatus.Extracted when text.Content?.IsTruncated == true =>
+                "已提取（节选）",
+            TextExtractionStatus.Extracted => "已提取",
+            TextExtractionStatus.Unsupported => "非文本",
+            TextExtractionStatus.Error => "提取失败",
+            _ => text.Status.ToString()
+        };
+    }
+
+    private static string FormatTextDetails(AssetText? text)
+    {
+        if (text?.Content is not { } content)
+        {
+            return FormatTextStatus(text);
+        }
+
+        var parts = new List<string>
+        {
+            FormatTextStatus(text),
+            content.EncodingName
+        };
+        if (content.Headings.Length > 0)
+        {
+            parts.Add($"{content.Headings.Length:N0} 个标题");
+        }
+
+        return string.Join(" · ", parts);
+    }
     private void SetBusy(bool busy, bool allowCancel = true)
     {
         _rootPathTextBox.Enabled = !busy;

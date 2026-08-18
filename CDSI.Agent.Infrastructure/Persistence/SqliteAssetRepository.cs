@@ -6,11 +6,12 @@ using CDSI.Agent.Core.Duplicates;
 using CDSI.Agent.Core.Fingerprints;
 using CDSI.Agent.Core.Metadata;
 using CDSI.Agent.Core.Scanning;
+using CDSI.Agent.Core.Text;
 using Microsoft.Data.Sqlite;
 
 namespace CDSI.Agent.Infrastructure.Persistence;
 
-public sealed class SqliteAssetRepository : IAssetRepository
+public sealed partial class SqliteAssetRepository : IAssetRepository
 {
     private readonly string _databasePath;
     private readonly string _connectionString;
@@ -722,20 +723,40 @@ public sealed class SqliteAssetRepository : IAssetRepository
                 m.source_modified_at,
                 m.metadata_json,
                 m.error_message,
-                m.extracted_at
+                m.extracted_at,
+                t.extractor_name,
+                t.pipeline_version,
+                t.status,
+                t.source_size,
+                t.source_modified_at,
+                t.title,
+                t.plain_text,
+                t.headings_json,
+                t.encoding_name,
+                t.is_truncated,
+                t.error_message,
+                t.extracted_at
             FROM assets a
             INNER JOIN asset_locations l ON l.asset_id = a.id
             LEFT JOIN asset_metadata m
                 ON m.asset_id = a.id
-               AND m.pipeline_version = $pipeline_version
+               AND m.pipeline_version = $metadata_pipeline_version
                AND m.source_size = a.size
                AND m.source_modified_at = a.modified_at
+            LEFT JOIN asset_text t
+                ON t.asset_id = a.id
+               AND t.pipeline_version = $text_pipeline_version
+               AND t.source_size = a.size
+               AND t.source_modified_at = a.modified_at
             WHERE l.location_type = 'Local'
             ORDER BY a.discovered_at DESC, a.original_filename
             LIMIT $limit;
             """;
         command.Parameters.AddWithValue("$limit", limit);
-        command.Parameters.AddWithValue("$pipeline_version", MetadataPipeline.CurrentVersion);
+        command.Parameters.AddWithValue(
+            "$metadata_pipeline_version",
+            MetadataPipeline.CurrentVersion);
+        command.Parameters.AddWithValue("$text_pipeline_version", TextPipeline.CurrentVersion);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -750,7 +771,8 @@ public sealed class SqliteAssetRepository : IAssetRepository
                 reader.GetString(6),
                 Enum.Parse<AssetLocationStatus>(reader.GetString(7)),
                 Enum.Parse<AssetStatus>(reader.GetString(8)),
-                ReadMetadata(reader, Guid.Parse(reader.GetString(0)), 9)));
+                ReadMetadata(reader, Guid.Parse(reader.GetString(0)), 9),
+                ReadText(reader, Guid.Parse(reader.GetString(0)), 17)));
         }
 
         return assets;

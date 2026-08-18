@@ -3,6 +3,7 @@ using CDSI.Agent.Core.Duplicates;
 using CDSI.Agent.Core.Fingerprints;
 using CDSI.Agent.Core.Metadata;
 using CDSI.Agent.Core.Scanning;
+using CDSI.Agent.Core.Text;
 
 namespace CDSI.Agent.Core.Abstractions;
 
@@ -70,6 +71,24 @@ public interface IAssetRepository
         CancellationToken cancellationToken = default);
 
     Task<AssetMetadata?> GetMetadataAsync(
+        Guid assetId,
+        CancellationToken cancellationToken = default);
+
+    Task<TextWorkSummary> GetTextWorkSummaryAsync(
+        int pipelineVersion,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<TextCandidate>> ListTextCandidatesAsync(
+        int pipelineVersion,
+        Guid? afterAssetId,
+        int limit,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> SaveTextAsync(
+        AssetText text,
+        CancellationToken cancellationToken = default);
+
+    Task<AssetText?> GetTextAsync(
         Guid assetId,
         CancellationToken cancellationToken = default);
 

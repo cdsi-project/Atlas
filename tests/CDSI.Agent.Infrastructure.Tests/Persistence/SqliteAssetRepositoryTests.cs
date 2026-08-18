@@ -202,12 +202,12 @@ public sealed class SqliteAssetRepositoryTests
                 """
                 SELECT COUNT(*)
                 FROM sqlite_master
-                WHERE type = 'table' AND name = 'asset_metadata';
+                WHERE type = 'table' AND name IN ('asset_metadata', 'asset_text');
                 """;
             var tableCount = Convert.ToInt32(await tableCommand.ExecuteScalarAsync());
 
-            Assert.Equal(2, version);
-            Assert.Equal(1, tableCount);
+            Assert.Equal(3, version);
+            Assert.Equal(2, tableCount);
         }
 
         SqliteConnection.ClearAllPools();

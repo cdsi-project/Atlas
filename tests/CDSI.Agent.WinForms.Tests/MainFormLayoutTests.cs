@@ -34,4 +34,28 @@ public sealed class MainFormLayoutTests
             Assert.True(label.Height >= 20);
         });
     }
+
+    [Fact]
+    public void CreateAssetDetailsPanel_ReservesReadablePreviewArea()
+    {
+        using var titleLabel = new Label();
+        using var summaryLabel = new Label();
+        using var previewTextBox = new TextBox();
+        using var panel = MainForm.CreateAssetDetailsPanel(
+            titleLabel,
+            summaryLabel,
+            previewTextBox);
+        panel.Size = new Size(900, 150);
+        panel.CreateControl();
+        panel.PerformLayout();
+
+        Assert.Equal(2, panel.ColumnStyles.Count);
+        Assert.Equal(SizeType.Absolute, panel.ColumnStyles[0].SizeType);
+        Assert.Equal(330, panel.ColumnStyles[0].Width);
+        Assert.Equal(SizeType.Percent, panel.ColumnStyles[1].SizeType);
+        Assert.True(previewTextBox.Width > 400);
+        Assert.True(previewTextBox.Height >= 100);
+        Assert.True(previewTextBox.Multiline);
+        Assert.True(previewTextBox.ReadOnly);
+    }
 }

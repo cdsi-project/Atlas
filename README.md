@@ -2,7 +2,7 @@
 
 CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己的 Windows 设备上扫描所选目录，建立独立于文件路径的资产与位置记录，不移动、不重命名，也不删除源文件。
 
-当前仓库实现 Milestone 0.3：带精确重复检测和基础媒体理解的本地资产索引闭环。
+当前仓库实现 Milestone 0.4：带精确重复检测、基础媒体理解和本地文本理解的资产索引闭环。
 
 ## 当前能力
 
@@ -21,6 +21,12 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 - 提取图片/视频尺寸、媒体时长、编码、比特率、采样率和声道数
 - 提取标题、艺术家和专辑等常用媒体标签
 - 以文件大小、修改时间和管线版本缓存元数据结果
+- 通过独立提取器注册表只读处理 TXT 与 Markdown 文本
+- 识别 UTF-8、带 BOM 的 UTF-16/UTF-32、GB18030 和 Windows-1252 文本编码
+- 从 Markdown 提取标题、各级标题和规范化纯文本
+- 单文件最多读取 4 MiB、最多缓存 200,000 个字符，超限内容明确标记为节选
+- 以文件大小、修改时间和文本管线版本缓存结果，重复扫描不重复提取
+- 在资产详情中显示文本状态、编码、标题数量和只读预览
 - 在资产列表中展示分辨率、时长和编码摘要
 - 在资产页汇总可用本地文件总数、实际占用空间、视频数量和视频总时长
 - 将资产、位置、扫描根和扫描任务持久化到 SQLite
@@ -30,7 +36,7 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 - 在 Windows 标题栏和应用页眉显示当前构建版本
 - 哈希阶段显示文件数、读取字节数与吞吐率
 - 支持取消扫描或哈希；已完成哈希会保留，下次从未完成文件继续
-- 支持取消元数据提取；不支持或损坏的单个文件不会阻断任务
+- 支持取消元数据和文本提取；已完成结果会保留，下次从未完成文件继续
 - 单文件错误不会中断整个任务
 
 ## 架构
@@ -49,8 +55,8 @@ CDSI.Agent.Infrastructure
 ~~~
 
 - <code>CDSI.Agent.Core</code>：领域模型与抽象，不依赖 WinForms、SQLite 或云 SDK。
-- <code>CDSI.Agent.Application</code>：扫描、元数据和哈希工作流编排。
-- <code>CDSI.Agent.Infrastructure</code>：文件系统扫描、媒体元数据提取和 SQLite 实现。
+- <code>CDSI.Agent.Application</code>：扫描、元数据、文本和哈希工作流编排。
+- <code>CDSI.Agent.Infrastructure</code>：文件系统扫描、媒体/文本提取和 SQLite 实现。
 - <code>CDSI.Agent.WinForms</code>：桌面界面与依赖组合根。
 - <code>tests</code>：领域、基础设施和端到端临时目录测试。
 
@@ -81,7 +87,7 @@ dotnet run --project CDSI.Agent.WinForms/CDSI.Agent.WinForms.csproj
 
 仓库根目录的 <code>VERSION</code> 是唯一版本来源。构建时，所有程序集和桌面界面都会读取该文件。
 
-每次提交将版本递增 <code>0.001</code>，并创建同名 Git 标签，例如 <code>VERSION=0.105</code> 对应 <code>v0.105</code>。
+每次提交将版本递增 <code>0.001</code>，并创建同名 Git 标签，例如 <code>VERSION=0.106</code> 对应 <code>v0.106</code>。
 
 ## 本地数据
 
@@ -91,13 +97,12 @@ dotnet run --project CDSI.Agent.WinForms/CDSI.Agent.WinForms.csproj
 %LOCALAPPDATA%\CDSI\cdsi.db
 ~~~
 
-扫描目标只进行读取。测试只使用 <code>%TEMP%\cdsi-agent-tests\&lt;随机目录&gt;</code>，不会扫描或清理真实用户目录。
+扫描目标只进行读取。提取文本保存在本机 SQLite 中，不会自动上传。测试只使用 <code>%TEMP%\cdsi-agent-tests\&lt;随机目录&gt;</code>，不会扫描或清理真实用户目录。
 
 ## 下一阶段
 
 下一阶段将扩展文本资产理解与复核能力：
 
-- TXT 与 Markdown 文本提取
 - PDF 与 Office 文本提取
 - Inbox 与批量复核入口
 - 更完整的位置核验

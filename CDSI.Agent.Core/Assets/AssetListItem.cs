@@ -1,4 +1,5 @@
 using CDSI.Agent.Core.Metadata;
+using CDSI.Agent.Core.Text;
 
 namespace CDSI.Agent.Core.Assets;
 
@@ -12,4 +13,5 @@ public sealed record AssetListItem(
     string Path,
     AssetLocationStatus LocationStatus,
     AssetStatus Status,
-    AssetMetadata? Metadata = null);
+    AssetMetadata? Metadata = null,
+    AssetText? Text = null);
