@@ -252,8 +252,13 @@ public sealed class MainForm : Form
         _assetGrid.Columns.Add(CreateColumn("类型", 125));
         _assetGrid.Columns.Add(CreateColumn("大小", 90));
         _assetGrid.Columns.Add(CreateColumn("修改时间", 145));
-        _assetGrid.Columns.Add(CreateColumn("位置", 320, DataGridViewAutoSizeColumnMode.Fill, 46));
-        _assetGrid.Columns.Add(CreateColumn("媒体信息", 220));
+        _assetGrid.Columns.Add(CreateColumn("位置", 320, DataGridViewAutoSizeColumnMode.Fill, 42));
+        _assetGrid.Columns.Add(CreateColumn(
+            "媒体信息",
+            220,
+            DataGridViewAutoSizeColumnMode.Fill,
+            34,
+            minimumWidth: 220));
         _assetGrid.Columns.Add(CreateColumn("状态", 80));
     }
 
@@ -280,6 +285,7 @@ public sealed class MainForm : Form
         grid.AutoGenerateColumns = false;
         grid.MultiSelect = false;
         grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        grid.ShowCellToolTips = true;
         grid.RowHeadersVisible = false;
         grid.RowTemplate.Height = 30;
         grid.ColumnHeadersHeight = 36;
@@ -298,13 +304,14 @@ public sealed class MainForm : Form
         string title,
         int width,
         DataGridViewAutoSizeColumnMode sizeMode = DataGridViewAutoSizeColumnMode.None,
-        float fillWeight = 100)
+        float fillWeight = 100,
+        int? minimumWidth = null)
     {
         return new DataGridViewTextBoxColumn
         {
             HeaderText = title,
             Width = width,
-            MinimumWidth = Math.Min(width, 80),
+            MinimumWidth = minimumWidth ?? Math.Min(width, 80),
             AutoSizeMode = sizeMode,
             FillWeight = fillWeight,
             SortMode = DataGridViewColumnSortMode.Automatic
