@@ -2,7 +2,7 @@
 
 CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己的 Windows 设备上扫描所选目录，建立独立于文件路径的资产与位置记录，不移动、不重命名，也不删除源文件。
 
-当前仓库实现 Milestone 0.5：带受管工作目录、多扫描目录、精确重复检测、基础媒体理解和本地文本理解的资产索引闭环。
+当前仓库实现 Milestone 0.6：带受管工作目录、多扫描目录、OSS 安全配置、精确重复检测、基础媒体理解和本地文本理解的资产索引闭环。
 
 ## 当前能力
 
@@ -13,6 +13,12 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 - 外部扫描目录固定为只读策略；扫描、索引、哈希和提取不会修改源文件
 - 一次扫描全部已启用目录；离线磁盘或 NAS 标记为不可用后继续处理其他目录
 - 检测嵌套或重叠扫描目录并提示，位置身份仍按设备和规范化路径保持幂等
+- 在设置页添加、编辑和删除多个阿里云 OSS 配置
+- 按阿里云规则校验 Bucket，并规范化 Endpoint、地域和 HTTPS 设置
+- SQLite 只保存非敏感存储配置；AccessKey Secret 保存到 Windows 凭据管理器
+- 编辑配置时不读取或回显已有 Secret，留空会保留原凭据
+- 删除 OSS 配置只删除本机记录和凭据，不删除 Bucket 或云端对象
+- 配置 OSS 不会触发连接、上传或同步
 - 默认忽略 <code>.git</code>、<code>.vs</code>、<code>node_modules</code>、<code>vendor</code>、<code>bin</code>、<code>obj</code> 等目录
 - 默认不跟随符号链接和 junction
 - 识别常见文件扩展名与 MIME 类型，未知格式仍可索引
@@ -63,7 +69,7 @@ CDSI.Agent.Infrastructure
 
 - <code>CDSI.Agent.Core</code>：领域模型与抽象，不依赖 WinForms、SQLite 或云 SDK。
 - <code>CDSI.Agent.Application</code>：扫描、元数据、文本和哈希工作流编排。
-- <code>CDSI.Agent.Infrastructure</code>：文件系统扫描、媒体/文本提取和 SQLite 实现。
+- <code>CDSI.Agent.Infrastructure</code>：文件系统扫描、媒体/文本提取、SQLite 和 Windows 凭据管理器适配器。
 - <code>CDSI.Agent.WinForms</code>：桌面界面与依赖组合根。
 - <code>tests</code>：领域、基础设施和端到端临时目录测试。
 
@@ -94,7 +100,7 @@ dotnet run --project CDSI.Agent.WinForms/CDSI.Agent.WinForms.csproj
 
 仓库根目录的 <code>VERSION</code> 是唯一版本来源。构建时，所有程序集和桌面界面都会读取该文件。
 
-每次提交将版本递增 <code>0.001</code>，并创建同名 Git 标签，例如 <code>VERSION=0.106</code> 对应 <code>v0.106</code>。
+每次提交将版本递增 <code>0.001</code>，并创建同名 Git 标签，例如 <code>VERSION=0.108</code> 对应 <code>v0.108</code>。
 
 ## 本地数据
 
@@ -104,15 +110,18 @@ dotnet run --project CDSI.Agent.WinForms/CDSI.Agent.WinForms.csproj
 %LOCALAPPDATA%\CDSI\cdsi.db
 ~~~
 
-扫描目标只进行读取。提取文本保存在本机 SQLite 中，不会自动上传。测试只使用 <code>%TEMP%\cdsi-agent-tests\&lt;随机目录&gt;</code>，不会扫描或清理真实用户目录。
+工作目录由用户首次启动时选择，推荐路径为 <code>D:\cdsi_workspace</code>；如果 D 盘不可用，则使用用户目录下的 <code>cdsi_workspace</code>。切换工作目录不会搬移或删除旧内容。
+
+扫描目标只进行读取。提取文本和非敏感 OSS 配置保存在本机 SQLite 中；AccessKey Secret 保存在当前 Windows 用户的凭据管理器中。配置 OSS 不会自动上传。测试只使用 <code>%TEMP%\cdsi-agent-tests\&lt;随机目录&gt;</code>，不会扫描或清理真实用户目录。
 
 ## 下一阶段
 
-下一阶段将实现 OSS 配置管理：
+下一阶段将实现对象存储适配器与验证闭环：
 
-- 独立的存储配置档案，不把 OSS SDK 耦合进扫描模块
-- 使用 Windows 安全存储保存 AccessKey 等凭据，禁止明文落库和日志输出
-- 连接测试、Bucket/Endpoint 配置和最小权限校验
-- 默认不上传外部扫描目录中的资产；上传保持显式授权
+- OSS 连接测试和最小权限检查
+- 优先接入 CDSI Server 下发的 STS 临时凭证
+- 显式上传任务、分片重试和断点续传
+- 上传完成后的对象存在性、大小和校验和验证
+- 外部扫描资产默认不具备自动上传资格
 
-后续再扩展 PDF/Office 文本提取、Inbox 复核、直接分片上传和远端完整性验证。AI 分类、CDSI Server API 和自动文件整理仍不在当前阶段。
+后续再扩展 PDF/Office 文本提取和 Inbox 复核。AI 分类、自动文件整理和任何静默上传仍不在当前阶段。

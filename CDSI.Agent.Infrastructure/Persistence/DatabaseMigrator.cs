@@ -214,6 +214,36 @@ internal static class DatabaseMigrator
             await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
+
+        if (currentVersion < 5)
+        {
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await using var migrationCommand = connection.CreateCommand();
+            migrationCommand.Transaction = (SqliteTransaction)transaction;
+            migrationCommand.CommandText =
+                """
+                CREATE TABLE storage_profiles (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    display_name TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    endpoint TEXT NOT NULL,
+                    bucket_name TEXT NOT NULL,
+                    region TEXT NULL,
+                    use_https INTEGER NOT NULL,
+                    access_key_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (5, $applied_at);
+                """;
+            migrationCommand.Parameters.AddWithValue(
+                "$applied_at",
+                DateTimeOffset.UtcNow.ToString("O"));
+            await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     private static async Task ExecuteAsync(

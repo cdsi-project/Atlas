@@ -2,6 +2,7 @@ using System.Reflection;
 using CDSI.Agent.Application.Metadata;
 using CDSI.Agent.Application.Fingerprints;
 using CDSI.Agent.Application.Scanning;
+using CDSI.Agent.Application.Storage;
 using CDSI.Agent.Application.Text;
 using CDSI.Agent.Application.Workspaces;
 using CDSI.Agent.Core.Assets;
@@ -17,6 +18,7 @@ public sealed class MainForm : Form
     private readonly ScanApplicationService _scanService;
     private readonly WorkspaceApplicationService _workspaceService;
     private readonly ScanRootManagementService _scanRootService;
+    private readonly ObjectStorageProfileService _storageService;
     private readonly Label _scopeLabel = new();
     private readonly FingerprintApplicationService _fingerprintService;
     private readonly MetadataExtractionApplicationService _metadataService;
@@ -50,6 +52,7 @@ public sealed class MainForm : Form
         TextExtractionApplicationService textService,
         WorkspaceApplicationService workspaceService,
         ScanRootManagementService scanRootService,
+        ObjectStorageProfileService storageService,
         string dataDirectory)
     {
         _scanService = scanService;
@@ -58,6 +61,7 @@ public sealed class MainForm : Form
         _textService = textService;
         _workspaceService = workspaceService;
         _scanRootService = scanRootService;
+        _storageService = storageService;
         InitializeLayout(dataDirectory);
 
         Shown += MainForm_Shown;
@@ -558,7 +562,8 @@ public sealed class MainForm : Form
     {
         using var settingsForm = new SettingsForm(
             _workspaceService,
-            _scanRootService);
+            _scanRootService,
+            _storageService);
         settingsForm.ShowDialog(this);
         await RefreshScanScopeAsync();
     }

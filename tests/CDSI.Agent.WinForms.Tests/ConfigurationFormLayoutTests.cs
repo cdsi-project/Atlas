@@ -1,8 +1,11 @@
 using CDSI.Agent.Application.Scanning;
+using CDSI.Agent.Application.Storage;
 using CDSI.Agent.Application.Workspaces;
 using CDSI.Agent.Infrastructure.FileSystem;
 using CDSI.Agent.Infrastructure.Persistence;
+using CDSI.Agent.Infrastructure.Security;
 using CDSI.Agent.WinForms;
+using CDSI.Agent.Core.Storage;
 
 namespace CDSI.Agent.WinForms.Tests;
 
@@ -32,7 +35,10 @@ public sealed class ConfigurationFormLayoutTests
             new WorkspaceApplicationService(
                 repository,
                 new WorkspaceProvisioner()),
-            new ScanRootManagementService(repository));
+            new ScanRootManagementService(repository),
+            new ObjectStorageProfileService(
+                repository,
+                new WindowsCredentialSecretStore()));
         form.CreateControl();
 
         var tabs = Assert.Single(Descendants(form).OfType<TabControl>());
@@ -40,12 +46,45 @@ public sealed class ConfigurationFormLayoutTests
             .OfType<DataGridView>()
             .Single(grid => grid.AccessibleName == "外部扫描目录列表");
 
-        Assert.Equal(2, tabs.TabPages.Count);
+        var storageGrid = Descendants(form)
+            .OfType<DataGridView>()
+            .Single(grid => grid.AccessibleName == "OSS 配置列表");
+
+        Assert.Equal(3, tabs.TabPages.Count);
         Assert.Equal("工作目录", tabs.TabPages[0].Text);
         Assert.Equal("扫描目录", tabs.TabPages[1].Text);
+        Assert.Equal("OSS 配置", tabs.TabPages[2].Text);
         Assert.Equal(3, rootsGrid.Columns.Count);
         Assert.Equal(DataGridViewAutoSizeColumnMode.Fill, rootsGrid.Columns[0].AutoSizeMode);
         Assert.True(rootsGrid.Columns[0].MinimumWidth >= 320);
+        Assert.Equal(5, storageGrid.Columns.Count);
+    }
+
+    [Fact]
+    public void OssProfileDialog_NeverPrefillsOrRevealsTheStoredSecret()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var profile = new ObjectStorageProfile(
+            Guid.NewGuid(),
+            "主 OSS",
+            ObjectStorageProvider.AliyunOss,
+            "oss-cn-hangzhou.aliyuncs.com",
+            "cdsi-assets",
+            "cn-hangzhou",
+            true,
+            "access-key-id",
+            now,
+            now);
+        using var form = new OssProfileDialog(profile);
+        form.CreateControl();
+
+        var secretTextBox = Descendants(form)
+            .OfType<TextBox>()
+            .Single(control => control.AccessibleName == "AccessKey Secret");
+
+        Assert.True(secretTextBox.UseSystemPasswordChar);
+        Assert.Empty(secretTextBox.Text);
+        Assert.Null(form.CreateRequest().AccessKeySecret);
     }
 
     private static IEnumerable<Control> Descendants(Control parent)

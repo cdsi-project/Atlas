@@ -1,12 +1,14 @@
 using CDSI.Agent.Application.Fingerprints;
 using CDSI.Agent.Application.Metadata;
 using CDSI.Agent.Application.Scanning;
+using CDSI.Agent.Application.Storage;
 using CDSI.Agent.Application.Text;
 using CDSI.Agent.Application.Workspaces;
 using CDSI.Agent.Infrastructure.FileSystem;
 using CDSI.Agent.Infrastructure.Fingerprints;
 using CDSI.Agent.Infrastructure.Metadata;
 using CDSI.Agent.Infrastructure.Persistence;
+using CDSI.Agent.Infrastructure.Security;
 using CDSI.Agent.Infrastructure.Text;
 
 namespace CDSI.Agent.WinForms;
@@ -33,6 +35,9 @@ static class Program
             repository,
             new WorkspaceProvisioner());
         var scanRootService = new ScanRootManagementService(repository);
+        var storageService = new ObjectStorageProfileService(
+            repository,
+            new WindowsCredentialSecretStore());
         var fingerprintService = new FingerprintApplicationService(
             fingerprintEngine,
             repository);
@@ -56,6 +61,7 @@ static class Program
             textService,
             workspaceService,
             scanRootService,
+            storageService,
             dataDirectory));
     }
 }

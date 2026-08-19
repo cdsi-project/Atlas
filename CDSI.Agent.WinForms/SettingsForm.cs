@@ -1,4 +1,5 @@
 using CDSI.Agent.Application.Scanning;
+using CDSI.Agent.Application.Storage;
 using CDSI.Agent.Application.Workspaces;
 using CDSI.Agent.Core.Scanning;
 
@@ -8,18 +9,24 @@ public sealed class SettingsForm : Form
 {
     private readonly WorkspaceApplicationService _workspaceService;
     private readonly ScanRootManagementService _scanRootService;
+    private readonly ObjectStorageProfileService _storageService;
     private readonly TextBox _workspacePathTextBox = new();
     private readonly DataGridView _rootsGrid = new();
     private readonly Button _toggleRootButton = new();
     private readonly Button _removeRootButton = new();
     private readonly Label _workspaceStatusLabel = new();
+    private readonly DataGridView _storageGrid = new();
+    private readonly Button _editStorageButton = new();
+    private readonly Button _deleteStorageButton = new();
 
     public SettingsForm(
         WorkspaceApplicationService workspaceService,
-        ScanRootManagementService scanRootService)
+        ScanRootManagementService scanRootService,
+        ObjectStorageProfileService storageService)
     {
         _workspaceService = workspaceService;
         _scanRootService = scanRootService;
+        _storageService = storageService;
 
         Text = "CDSI Atlas 设置";
         StartPosition = FormStartPosition.CenterParent;
@@ -36,6 +43,7 @@ public sealed class SettingsForm : Form
         };
         tabs.TabPages.Add(CreateWorkspacePage());
         tabs.TabPages.Add(CreateScanRootsPage());
+        tabs.TabPages.Add(CreateStoragePage());
 
         var closeButton = CreateButton(
             "关闭",
@@ -165,6 +173,94 @@ public sealed class SettingsForm : Form
         return page;
     }
 
+    private TabPage CreateStoragePage()
+    {
+        var page = new TabPage("OSS 配置")
+        {
+            BackColor = Color.White,
+            Padding = new Padding(16)
+        };
+        ConfigureStorageGrid();
+
+        var addButton = CreateButton(
+            "添加配置",
+            Color.FromArgb(24, 121, 78),
+            Color.White);
+        addButton.Click += AddStorageButton_Click;
+        addButton.Size = new Size(104, 32);
+
+        _editStorageButton.Text = "编辑";
+        _editStorageButton.Size = new Size(88, 32);
+        _editStorageButton.FlatStyle = FlatStyle.Flat;
+        _editStorageButton.Click += EditStorageButton_Click;
+
+        _deleteStorageButton.Text = "删除";
+        _deleteStorageButton.Size = new Size(88, 32);
+        _deleteStorageButton.FlatStyle = FlatStyle.Flat;
+        _deleteStorageButton.ForeColor = Color.FromArgb(137, 49, 49);
+        _deleteStorageButton.Click += DeleteStorageButton_Click;
+
+        var commands = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 46,
+            FlowDirection = FlowDirection.LeftToRight,
+            Padding = new Padding(0, 4, 0, 8)
+        };
+        commands.Controls.Add(addButton);
+        commands.Controls.Add(_editStorageButton);
+        commands.Controls.Add(_deleteStorageButton);
+
+        page.Controls.Add(_storageGrid);
+        page.Controls.Add(commands);
+        return page;
+    }
+
+    private void ConfigureStorageGrid()
+    {
+        _storageGrid.Dock = DockStyle.Fill;
+        _storageGrid.BackgroundColor = Color.White;
+        _storageGrid.BorderStyle = BorderStyle.FixedSingle;
+        _storageGrid.ReadOnly = true;
+        _storageGrid.AllowUserToAddRows = false;
+        _storageGrid.AllowUserToDeleteRows = false;
+        _storageGrid.AllowUserToResizeRows = false;
+        _storageGrid.AutoGenerateColumns = false;
+        _storageGrid.MultiSelect = false;
+        _storageGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        _storageGrid.RowHeadersVisible = false;
+        _storageGrid.RowTemplate.Height = 30;
+        _storageGrid.ColumnHeadersHeight = 36;
+        _storageGrid.AccessibleName = "OSS 配置列表";
+        _storageGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "名称",
+            Width = 130
+        });
+        _storageGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "Endpoint",
+            AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
+            MinimumWidth = 220,
+            FillWeight = 100
+        });
+        _storageGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "Bucket",
+            Width = 170
+        });
+        _storageGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "地域",
+            Width = 120
+        });
+        _storageGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "凭据",
+            Width = 90
+        });
+        _storageGrid.SelectionChanged += (_, _) => UpdateStorageCommands();
+    }
     private void ConfigureRootsGrid()
     {
         _rootsGrid.Dock = DockStyle.Fill;
@@ -203,8 +299,16 @@ public sealed class SettingsForm : Form
 
     private async void SettingsForm_Shown(object? sender, EventArgs e)
     {
-        await RefreshWorkspaceAsync();
-        await RefreshRootsAsync();
+        try
+        {
+            await RefreshWorkspaceAsync();
+            await RefreshRootsAsync();
+            await RefreshStorageAsync();
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法读取设置", exception);
+        }
     }
 
     private async Task RefreshWorkspaceAsync()
@@ -380,6 +484,88 @@ public sealed class SettingsForm : Form
         };
     }
 
+    private async Task RefreshStorageAsync()
+    {
+        var profiles = await _storageService.ListAsync();
+        _storageGrid.Rows.Clear();
+        foreach (var configured in profiles)
+        {
+            var profile = configured.Profile;
+            var index = _storageGrid.Rows.Add(
+                profile.DisplayName,
+                $"{(profile.UseHttps ? "https" : "http")}://{profile.Endpoint}",
+                profile.BucketName,
+                profile.Region ?? string.Empty,
+                configured.HasStoredSecret ? "已保存" : "缺失");
+            _storageGrid.Rows[index].Tag = configured;
+        }
+
+        UpdateStorageCommands();
+    }
+
+    private async void AddStorageButton_Click(object? sender, EventArgs e)
+    {
+        await ShowStorageDialogAsync(null);
+    }
+
+    private async void EditStorageButton_Click(object? sender, EventArgs e)
+    {
+        if (_storageGrid.CurrentRow?.Tag is ConfiguredObjectStorageProfile configured)
+        {
+            await ShowStorageDialogAsync(configured.Profile);
+        }
+    }
+
+    private async Task ShowStorageDialogAsync(
+        CDSI.Agent.Core.Storage.ObjectStorageProfile? profile)
+    {
+        using var dialog = new OssProfileDialog(profile);
+        while (dialog.ShowDialog(this) == DialogResult.OK)
+        {
+            try
+            {
+                await _storageService.SaveAsync(dialog.CreateRequest());
+                await RefreshStorageAsync();
+                return;
+            }
+            catch (Exception exception)
+            {
+                ShowError("无法保存 OSS 配置", exception);
+                dialog.DialogResult = DialogResult.None;
+            }
+        }
+    }
+
+    private async void DeleteStorageButton_Click(object? sender, EventArgs e)
+    {
+        if (_storageGrid.CurrentRow?.Tag is not ConfiguredObjectStorageProfile configured ||
+            MessageBox.Show(
+                this,
+                "将删除本机配置和 Windows 凭据，不会删除 Bucket 或其中的对象。",
+                "删除 OSS 配置",
+                MessageBoxButtons.OKCancel,
+                MessageBoxIcon.Warning) != DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            await _storageService.DeleteAsync(configured.Profile.Id);
+            await RefreshStorageAsync();
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法删除 OSS 配置", exception);
+        }
+    }
+
+    private void UpdateStorageCommands()
+    {
+        var selected = _storageGrid.CurrentRow?.Tag is ConfiguredObjectStorageProfile;
+        _editStorageButton.Enabled = selected;
+        _deleteStorageButton.Enabled = selected;
+    }
     private static Button CreateButton(string text, Color background, Color foreground)
     {
         return new Button
