@@ -91,7 +91,7 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
                 },
                 cancellationToken: cancellationToken);
         }
-        catch (ServiceException exception) when (IsMissingUpload(exception))
+        catch (Exception exception) when (IsMissingUpload(exception))
         {
             // The remote upload session has already expired or been removed.
         }
@@ -169,7 +169,7 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
                     session.UploadId,
                     cancellationToken);
             }
-            catch (ServiceException exception) when (IsMissingUpload(exception))
+            catch (Exception exception) when (IsMissingUpload(exception))
             {
                 session = await InitiateMultipartUploadAsync(
                     client,
@@ -409,7 +409,7 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
                 result.ETag,
                 lastModified);
         }
-        catch (ServiceException exception) when (IsMissingObject(exception))
+        catch (Exception exception) when (IsMissingObject(exception))
         {
             return null;
         }
@@ -583,22 +583,47 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
             });
     }
 
-    private static bool IsMissingObject(ServiceException exception)
+    internal static bool IsMissingObject(Exception exception)
     {
-        return exception.StatusCode == 404 ||
-            string.Equals(
-                exception.ErrorCode,
-                "NoSuchKey",
-                StringComparison.OrdinalIgnoreCase);
+        ArgumentNullException.ThrowIfNull(exception);
+        return ContainsServiceException(
+            exception,
+            serviceException => serviceException.StatusCode == 404 ||
+                string.Equals(
+                    serviceException.ErrorCode,
+                    "NoSuchKey",
+                    StringComparison.OrdinalIgnoreCase));
     }
 
-    private static bool IsMissingUpload(ServiceException exception)
+    internal static bool IsMissingUpload(Exception exception)
     {
-        return exception.StatusCode == 404 ||
-            string.Equals(
-                exception.ErrorCode,
-                "NoSuchUpload",
-                StringComparison.OrdinalIgnoreCase);
+        ArgumentNullException.ThrowIfNull(exception);
+        return ContainsServiceException(
+            exception,
+            serviceException => serviceException.StatusCode == 404 ||
+                string.Equals(
+                    serviceException.ErrorCode,
+                    "NoSuchUpload",
+                    StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool ContainsServiceException(
+        Exception exception,
+        Func<ServiceException, bool> predicate)
+    {
+        if (exception is ServiceException serviceException)
+        {
+            return predicate(serviceException);
+        }
+
+        if (exception is AggregateException aggregateException)
+        {
+            return aggregateException.Flatten().InnerExceptions.Any(
+                innerException => ContainsServiceException(innerException, predicate));
+        }
+
+        return exception.InnerException is not null &&
+            ContainsServiceException(exception.InnerException, predicate);
     }
 
     private static bool PathsEqual(string left, string right)
