@@ -74,4 +74,41 @@ public sealed class MainFormLayoutTests
             DataGridViewSelectionMode.FullRowSelect,
             grid.SelectionMode);
     }
+
+    [Fact]
+    public void FileSizeColumn_SortsByRawBytesAcrossDisplayUnits()
+    {
+        using var grid = new DataGridView
+        {
+            AllowUserToAddRows = false
+        };
+        var column = MainForm.CreateFileSizeColumn();
+        grid.Columns.Add(column);
+        long[] sizes =
+        [
+            2L * 1024 * 1024 * 1024,
+            950L * 1024 * 1024,
+            10L * 1024,
+            12L * 1024 * 1024 * 1024
+        ];
+        foreach (var size in sizes)
+        {
+            grid.Rows.Add(size);
+        }
+
+        grid.Sort(column, System.ComponentModel.ListSortDirection.Ascending);
+        var ascending = grid.Rows
+            .Cast<DataGridViewRow>()
+            .Select(row => Assert.IsType<long>(row.Cells[0].Value))
+            .ToArray();
+        grid.Sort(column, System.ComponentModel.ListSortDirection.Descending);
+        var descending = grid.Rows
+            .Cast<DataGridViewRow>()
+            .Select(row => Assert.IsType<long>(row.Cells[0].Value))
+            .ToArray();
+
+        Assert.Equal(typeof(long), column.ValueType);
+        Assert.Equal(sizes.Order().ToArray(), ascending);
+        Assert.Equal(sizes.OrderDescending().ToArray(), descending);
+    }
 }

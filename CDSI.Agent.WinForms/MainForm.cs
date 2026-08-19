@@ -468,7 +468,7 @@ public sealed partial class MainForm : Form
         EnableAssetMultiSelection(_assetGrid);
         _assetGrid.Columns.Add(CreateColumn("文件", 220, DataGridViewAutoSizeColumnMode.Fill, 24));
         _assetGrid.Columns.Add(CreateColumn("类型", 125));
-        _assetGrid.Columns.Add(CreateColumn("大小", 90));
+        _assetGrid.Columns.Add(CreateFileSizeColumn());
         _assetGrid.Columns.Add(CreateColumn("修改时间", 145));
         _assetGrid.Columns.Add(CreateColumn("位置", 320, DataGridViewAutoSizeColumnMode.Fill, 42));
         _assetGrid.Columns.Add(CreateColumn(
@@ -496,7 +496,7 @@ public sealed partial class MainForm : Form
         _duplicateGrid.Columns.Add(CreateColumn("组", 60));
         _duplicateGrid.Columns.Add(CreateColumn("SHA-256", 125));
         _duplicateGrid.Columns.Add(CreateColumn("文件", 220, DataGridViewAutoSizeColumnMode.Fill, 24));
-        _duplicateGrid.Columns.Add(CreateColumn("大小", 90));
+        _duplicateGrid.Columns.Add(CreateFileSizeColumn());
         _duplicateGrid.Columns.Add(CreateColumn("位置", 360, DataGridViewAutoSizeColumnMode.Fill, 48));
         _duplicateGrid.Columns.Add(CreateColumn("状态", 80));
     }
@@ -526,6 +526,7 @@ public sealed partial class MainForm : Form
         grid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(31, 37, 43);
         grid.DefaultCellStyle.Padding = new Padding(4, 0, 4, 0);
         grid.GridColor = Color.FromArgb(229, 232, 235);
+        grid.CellFormatting += Grid_CellFormatting;
     }
 
     private static DataGridViewColumn CreateColumn(
@@ -544,6 +545,35 @@ public sealed partial class MainForm : Form
             FillWeight = fillWeight,
             SortMode = DataGridViewColumnSortMode.Automatic
         };
+    }
+
+    internal static DataGridViewColumn CreateFileSizeColumn()
+    {
+        var column = CreateColumn("大小", 90);
+        column.Name = "FileSizeBytes";
+        column.ValueType = typeof(long);
+        column.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+        return column;
+    }
+
+    private static void Grid_CellFormatting(
+        object? sender,
+        DataGridViewCellFormattingEventArgs e)
+    {
+        if (sender is not DataGridView grid ||
+            e.ColumnIndex < 0 ||
+            e.ColumnIndex >= grid.Columns.Count ||
+            !string.Equals(
+                grid.Columns[e.ColumnIndex].Name,
+                "FileSizeBytes",
+                StringComparison.Ordinal) ||
+            e.Value is not long bytes)
+        {
+            return;
+        }
+
+        e.Value = FormatFileSize(bytes);
+        e.FormattingApplied = true;
     }
 
     private async void MainForm_Shown(object? sender, EventArgs e)
@@ -801,7 +831,7 @@ public sealed partial class MainForm : Form
             var rowIndex = _assetGrid.Rows.Add(
                 asset.OriginalFilename,
                 asset.MimeType ?? "未知",
-                FormatFileSize(asset.Size),
+                asset.Size,
                 asset.ModifiedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
                 asset.Path,
                 FormatMetadata(asset.Metadata),
@@ -832,7 +862,7 @@ public sealed partial class MainForm : Form
                     groupNumber,
                     group.Sha256[..12],
                     asset.OriginalFilename,
-                    FormatFileSize(group.Size),
+                    group.Size,
                     asset.Path,
                     FormatLocationStatus(asset.LocationStatus));
             }
