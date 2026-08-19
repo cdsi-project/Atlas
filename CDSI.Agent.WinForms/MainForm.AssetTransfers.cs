@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Transfers;
 
@@ -5,12 +6,16 @@ namespace CDSI.Agent.WinForms;
 
 public sealed partial class MainForm
 {
+    private readonly ToolStripMenuItem _openFileLocationMenuItem = new();
+
     private void ConfigureAssetContextMenu()
     {
+        _openFileLocationMenuItem.Text = "打开文件位置";
         _addToCollectionMenuItem.Text = "加入资产清单";
         _copyToWorkspaceMenuItem.Text = "复制到 CDSI 工作目录";
         _moveToWorkspaceMenuItem.Text = "移动到 CDSI 工作目录";
         _backupToOssMenuItem.Text = "备份到 OSS";
+        _openFileLocationMenuItem.Click += (_, _) => OpenCurrentAssetFileLocation();
         _copyToWorkspaceMenuItem.Click += async (_, _) =>
             await TransferSelectedAssetsAsync(ManagedAssetTransferAction.Copy);
         _moveToWorkspaceMenuItem.Click += async (_, _) =>
@@ -22,6 +27,8 @@ public sealed partial class MainForm
 
         _assetContextMenu.Items.AddRange(
             [
+                _openFileLocationMenuItem,
+                new ToolStripSeparator(),
                 _addToCollectionMenuItem,
                 new ToolStripSeparator(),
                 _copyToWorkspaceMenuItem,
@@ -36,6 +43,7 @@ public sealed partial class MainForm
                 selected.All(asset =>
                     asset.LocationStatus == AssetLocationStatus.Available);
             args.Cancel = selected.Count == 0;
+            _openFileLocationMenuItem.Enabled = _assetGrid.CurrentRow?.Tag is AssetListItem;
             _addToCollectionMenuItem.Enabled = selected.Count > 0;
             _copyToWorkspaceMenuItem.Enabled = canOperate;
             _moveToWorkspaceMenuItem.Enabled = canOperate;
@@ -136,6 +144,47 @@ public sealed partial class MainForm
         {
             grid.Rows[selectedRowIndex].Selected = true;
         }
+    }
+
+    private void OpenCurrentAssetFileLocation()
+    {
+        if (_assetGrid.CurrentRow?.Tag is not AssetListItem asset)
+        {
+            return;
+        }
+
+        if (!File.Exists(asset.Path))
+        {
+            MessageBox.Show(
+                this,
+                $"文件当前位置不存在：{Environment.NewLine}{asset.Path}",
+                "CDSI Atlas",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
+        try
+        {
+            using var process = Process.Start(CreateOpenFileLocationStartInfo(asset.Path));
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法打开文件位置", exception);
+        }
+    }
+
+    internal static ProcessStartInfo CreateOpenFileLocationStartInfo(string filePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "explorer.exe",
+            UseShellExecute = true
+        };
+        startInfo.ArgumentList.Add("/select,");
+        startInfo.ArgumentList.Add(Path.GetFullPath(filePath));
+        return startInfo;
     }
 
     private IReadOnlyList<AssetListItem> GetSelectedAssets()

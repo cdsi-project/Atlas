@@ -76,6 +76,20 @@ public sealed class MainFormLayoutTests
     }
 
     [Fact]
+    public void OpenFileLocationStartInfo_UsesExplorerWithStructuredArguments()
+    {
+        var filePath = Path.Combine(Path.GetTempPath(), "Creator Assets", "clip.mp4");
+
+        var startInfo = MainForm.CreateOpenFileLocationStartInfo(filePath);
+
+        Assert.Equal("explorer.exe", startInfo.FileName);
+        Assert.True(startInfo.UseShellExecute);
+        Assert.Equal(
+            ["/select,", Path.GetFullPath(filePath)],
+            startInfo.ArgumentList.ToArray());
+    }
+
+    [Fact]
     public void RightClickSelection_WithShift_SelectsTheAnchorRange()
     {
         using var grid = CreateSelectionGrid();
