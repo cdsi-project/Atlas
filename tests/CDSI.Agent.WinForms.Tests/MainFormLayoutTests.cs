@@ -251,4 +251,24 @@ public sealed class MainFormLayoutTests
         Assert.Equal(sizes.Order().ToArray(), ascending);
         Assert.Equal(sizes.OrderDescending().ToArray(), descending);
     }
+
+    [Fact]
+    public void AssetIdColumn_DisplaysTheStableAssetIdentifier()
+    {
+        var assetId = Guid.Parse("6a85382d-fdfd-4533-ad6f-14333ad6f14a");
+        using var grid = new DataGridView
+        {
+            AllowUserToAddRows = false
+        };
+        var column = MainForm.CreateAssetIdColumn();
+        grid.Columns.Add(column);
+        grid.Rows.Add(assetId.ToString("D"));
+
+        Assert.Equal("AssetId", column.Name);
+        Assert.Equal("资产 ID", column.HeaderText);
+        Assert.Equal(typeof(string), column.ValueType);
+        Assert.Equal(
+            "6a85382d-fdfd-4533-ad6f-14333ad6f14a",
+            grid.Rows[0].Cells[0].Value);
+    }
 }

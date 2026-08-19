@@ -460,6 +460,7 @@ public sealed partial class MainForm : Form
     {
         ConfigureGrid(_assetGrid);
         EnableAssetMultiSelection(_assetGrid);
+        _assetGrid.Columns.Add(CreateAssetIdColumn());
         _assetGrid.Columns.Add(CreateColumn("文件", 220, DataGridViewAutoSizeColumnMode.Fill, 24));
         _assetGrid.Columns.Add(CreateColumn("类型", 125));
         _assetGrid.Columns.Add(CreateFileSizeColumn());
@@ -547,6 +548,14 @@ public sealed partial class MainForm : Form
         column.Name = "FileSizeBytes";
         column.ValueType = typeof(long);
         column.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+        return column;
+    }
+
+    internal static DataGridViewColumn CreateAssetIdColumn()
+    {
+        var column = CreateColumn("资产 ID", 236, minimumWidth: 180);
+        column.Name = "AssetId";
+        column.ValueType = typeof(string);
         return column;
     }
 
@@ -860,6 +869,7 @@ public sealed partial class MainForm : Form
         foreach (var asset in assets)
         {
             var rowIndex = _assetGrid.Rows.Add(
+                asset.AssetId.ToString("D"),
                 asset.OriginalFilename,
                 asset.MimeType ?? "未知",
                 asset.Size,

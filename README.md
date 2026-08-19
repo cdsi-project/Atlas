@@ -28,6 +28,7 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 - 在设置页配置 OpenWeb 源站域名，规范化后持久化到本机 SQLite
 - 按阿里云规则校验 Bucket，并规范化 Endpoint、地域和 HTTPS 设置
 - SQLite 只保存非敏感存储配置；AccessKey Secret 保存到 Windows 凭据管理器
+- 在资产列表中显示稳定的资产 ID，资产身份不依赖文件名或存储位置
 - 在资产列表中显式单选或多选文件，在确认窗口逐项设置 OSS 文件名；默认与当前本地文件名一致
 - 远端对象使用 <code>storage_profile_id + assets/&lt;AssetId&gt;/&lt;OSS文件名&gt;</code> 标识，不把文件名或永久 URL 当作资产身份
 - 上传以只读流处理本地文件；大文件使用分片上传，并将 UploadId 和已完成分片保存到 SQLite 以支持重试续传
