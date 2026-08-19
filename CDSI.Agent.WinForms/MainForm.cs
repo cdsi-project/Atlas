@@ -1,4 +1,5 @@
 using System.Reflection;
+using CDSI.Agent.Application.Collections;
 using CDSI.Agent.Application.Metadata;
 using CDSI.Agent.Application.Fingerprints;
 using CDSI.Agent.Application.Scanning;
@@ -62,6 +63,7 @@ public sealed partial class MainForm : Form
         ScanRootManagementService scanRootService,
         ObjectStorageProfileService storageService,
         ObjectStorageBackupService objectStorageBackupService,
+        AssetCollectionService assetCollectionService,
         ManagedAssetTransferService transferService,
         string dataDirectory)
     {
@@ -73,6 +75,7 @@ public sealed partial class MainForm : Form
         _scanRootService = scanRootService;
         _storageService = storageService;
         _objectStorageBackupService = objectStorageBackupService;
+        _assetCollectionService = assetCollectionService;
         _transferService = transferService;
         InitializeLayout(dataDirectory);
 
@@ -222,6 +225,7 @@ public sealed partial class MainForm : Form
 
         ConfigureAssetGrid();
         ConfigureDuplicateGrid();
+        ConfigureAssetCollectionTab();
         _assetGrid.SelectionChanged += AssetGrid_SelectionChanged;
 
         _assetsTabPage.Padding = new Padding(0);
@@ -265,6 +269,7 @@ public sealed partial class MainForm : Form
         };
         tabs.TabPages.Add(_assetsTabPage);
         tabs.TabPages.Add(_duplicatesTabPage);
+        tabs.TabPages.Add(_collectionsTabPage);
 
         var gridHost = new Panel
         {
@@ -903,6 +908,7 @@ public sealed partial class MainForm : Form
             ? $"  ·  当前显示 {assets.Count:N0}"
             : string.Empty;
         _assetsTabPage.Text = $"资产 ({statistics.FileCount:N0})";
+        await RefreshAssetCollectionsAsync();
         _duplicatesTabPage.Text = $"精确重复 ({duplicateGroups.Count:N0})";
         _statusLabel.Text =
             $"本地文件 {statistics.FileCount:N0}{visibleItemsSuffix}  ·  重复组 {duplicateGroups.Count:N0}";
@@ -974,6 +980,7 @@ public sealed partial class MainForm : Form
     }
     private void SetBusy(bool busy, bool allowCancel = true)
     {
+        _isBusy = busy;
         _scopeLabel.Enabled = !busy;
         _settingsButton.Enabled = !busy;
         _scanButton.Enabled = !busy;
@@ -981,6 +988,10 @@ public sealed partial class MainForm : Form
         _fullVerificationCheckBox.Enabled = !busy;
         _assetGrid.Enabled = !busy;
         _assetContextMenu.Enabled = !busy;
+        _collectionGrid.Enabled = !busy;
+        _collectionMemberGrid.Enabled = !busy;
+        _createCollectionButton.Enabled = !busy;
+        UpdateCollectionActionState();
         UseWaitCursor = busy && !allowCancel;
     }
 

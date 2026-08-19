@@ -16,7 +16,16 @@ public sealed partial class MainForm
             return;
         }
 
-        if (selected.Any(asset =>
+        await BackupAssetsAsync(selected, "正在备份到 OSS");
+    }
+
+    private async Task BackupAssetsAsync(
+        IReadOnlyCollection<AssetListItem> assets,
+        string progressStatus)
+    {
+        ArgumentNullException.ThrowIfNull(assets);
+
+        if (assets.Any(asset =>
                 asset.LocationStatus != AssetLocationStatus.Available))
         {
             MessageBox.Show(
@@ -52,7 +61,7 @@ public sealed partial class MainForm
             return;
         }
 
-        var uniqueAssets = selected
+        var uniqueAssets = assets
             .GroupBy(asset => asset.AssetId)
             .Select(group => group.First())
             .ToArray();
@@ -76,7 +85,7 @@ public sealed partial class MainForm
         _progressBar.Minimum = 0;
         _progressBar.Maximum = 1_000;
         _progressBar.Value = 0;
-        _statusLabel.Text = "正在备份到 OSS";
+        _statusLabel.Text = progressStatus;
 
         try
         {

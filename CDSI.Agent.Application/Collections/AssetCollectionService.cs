@@ -1,0 +1,121 @@
+using CDSI.Agent.Core.Abstractions;
+using CDSI.Agent.Core.Assets;
+using CDSI.Agent.Core.Collections;
+
+namespace CDSI.Agent.Application.Collections;
+
+public sealed class AssetCollectionService(IAssetCollectionRepository repository)
+{
+    private const int MaximumNameLength = 120;
+
+    public async Task<AssetCollection> CreateAsync(
+        string name,
+        AssetCollectionType type,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        var normalizedName = name.Trim();
+        if (normalizedName.Length == 0)
+        {
+            throw new ArgumentException("资产清单名称不能为空。", nameof(name));
+        }
+
+        if (normalizedName.Length > MaximumNameLength)
+        {
+            throw new ArgumentException(
+                $"资产清单名称不能超过 {MaximumNameLength} 个字符。",
+                nameof(name));
+        }
+
+        if (!Enum.IsDefined(type))
+        {
+            throw new ArgumentOutOfRangeException(nameof(type));
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var collection = new AssetCollection(
+            Guid.NewGuid(),
+            normalizedName,
+            type,
+            now,
+            now);
+        if (!await repository.CreateAssetCollectionAsync(collection, cancellationToken))
+        {
+            throw new InvalidOperationException("已存在同名资产清单。请使用其他名称。");
+        }
+
+        return collection;
+    }
+
+    public Task<IReadOnlyList<AssetCollectionSummary>> ListAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return repository.ListAssetCollectionsAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<AssetCollectionMember>> GetMembersAsync(
+        Guid collectionId,
+        CancellationToken cancellationToken = default)
+    {
+        await GetRequiredAsync(collectionId, cancellationToken);
+        return await repository.ListAssetCollectionMembersAsync(
+            collectionId,
+            cancellationToken);
+    }
+
+    public async Task<int> AddAssetsAsync(
+        Guid collectionId,
+        IReadOnlyCollection<Guid> assetIds,
+        CancellationToken cancellationToken = default)
+    {
+        await GetRequiredAsync(collectionId, cancellationToken);
+        return await repository.AddAssetsToCollectionAsync(
+            collectionId,
+            assetIds.Distinct().ToArray(),
+            DateTimeOffset.UtcNow,
+            cancellationToken);
+    }
+
+    public async Task<int> RemoveAssetsAsync(
+        Guid collectionId,
+        IReadOnlyCollection<Guid> assetIds,
+        CancellationToken cancellationToken = default)
+    {
+        await GetRequiredAsync(collectionId, cancellationToken);
+        return await repository.RemoveAssetsFromCollectionAsync(
+            collectionId,
+            assetIds.Distinct().ToArray(),
+            DateTimeOffset.UtcNow,
+            cancellationToken);
+    }
+
+    public async Task<AssetCollectionSyncPlan> PrepareSyncAsync(
+        Guid collectionId,
+        CancellationToken cancellationToken = default)
+    {
+        var collection = await GetRequiredAsync(collectionId, cancellationToken);
+        var members = await repository.ListAssetCollectionMembersAsync(
+            collectionId,
+            cancellationToken);
+        return new AssetCollectionSyncPlan(collection, members);
+    }
+
+    private async Task<AssetCollection> GetRequiredAsync(
+        Guid collectionId,
+        CancellationToken cancellationToken)
+    {
+        return await repository.GetAssetCollectionAsync(collectionId, cancellationToken)
+            ?? throw new KeyNotFoundException("资产清单不存在或已被移除。");
+    }
+}
+
+public sealed record AssetCollectionSyncPlan(
+    AssetCollection Collection,
+    IReadOnlyList<AssetCollectionMember> Members)
+{
+    public IReadOnlyList<AssetListItem> Assets =>
+        Members.Select(member => member.Asset).ToArray();
+
+    public int UnavailableAssetCount => Members.Count(member =>
+        member.Asset.LocationStatus != AssetLocationStatus.Available);
+}

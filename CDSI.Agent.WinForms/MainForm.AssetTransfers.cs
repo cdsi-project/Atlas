@@ -7,6 +7,7 @@ public sealed partial class MainForm
 {
     private void ConfigureAssetContextMenu()
     {
+        _addToCollectionMenuItem.Text = "加入资产清单";
         _copyToWorkspaceMenuItem.Text = "复制到 CDSI 工作目录";
         _moveToWorkspaceMenuItem.Text = "移动到 CDSI 工作目录";
         _backupToOssMenuItem.Text = "备份到 OSS";
@@ -14,11 +15,15 @@ public sealed partial class MainForm
             await TransferSelectedAssetsAsync(ManagedAssetTransferAction.Copy);
         _moveToWorkspaceMenuItem.Click += async (_, _) =>
             await TransferSelectedAssetsAsync(ManagedAssetTransferAction.Move);
+        _addToCollectionMenuItem.Click += async (_, _) =>
+            await AddSelectedAssetsToCollectionAsync();
         _backupToOssMenuItem.Click += async (_, _) =>
             await BackupSelectedAssetsAsync();
 
         _assetContextMenu.Items.AddRange(
             [
+                _addToCollectionMenuItem,
+                new ToolStripSeparator(),
                 _copyToWorkspaceMenuItem,
                 _moveToWorkspaceMenuItem,
                 new ToolStripSeparator(),
@@ -31,9 +36,12 @@ public sealed partial class MainForm
                 selected.All(asset =>
                     asset.LocationStatus == AssetLocationStatus.Available);
             args.Cancel = selected.Count == 0;
+            _addToCollectionMenuItem.Enabled = selected.Count > 0;
             _copyToWorkspaceMenuItem.Enabled = canOperate;
             _moveToWorkspaceMenuItem.Enabled = canOperate;
             _backupToOssMenuItem.Enabled = canOperate;
+            _addToCollectionMenuItem.Text =
+                $"加入资产清单 ({selected.Count:N0})";
             _copyToWorkspaceMenuItem.Text =
                 $"复制到 CDSI 工作目录 ({selected.Count:N0})";
             _moveToWorkspaceMenuItem.Text =
