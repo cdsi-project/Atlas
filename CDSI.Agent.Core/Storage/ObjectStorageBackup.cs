@@ -118,6 +118,7 @@ public sealed record ObjectStorageTransferRequest(
 
 public sealed record ObjectStorageTransferProgress(
     long TransferredBytes,
+    long CurrentRunTransferredBytes,
     long TotalBytes,
     int CompletedParts,
     int TotalParts,
@@ -153,6 +154,7 @@ public sealed record ObjectStorageBackupProgress(
     int ProcessedItems,
     long TotalBytes,
     long UploadedBytes,
+    long NetworkTransferredBytes,
     string? CurrentPath,
     string? Message);
 

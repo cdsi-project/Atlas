@@ -16,10 +16,12 @@ public sealed class ObjectStorageBackupServiceTests
     public async Task BackupAsync_UploadsVerifiesAndKeepsTheLocalFile()
     {
         await using var fixture = await BackupFixture.CreateAsync("source-content");
+        var progress = new RecordingProgress<ObjectStorageBackupProgress>();
 
         var result = await fixture.Service.BackupAsync(
             [new ObjectStorageBackupRequest(fixture.AssetId, fixture.SourcePath)],
-            fixture.ProfileId);
+            fixture.ProfileId,
+            progress);
         var audit = await fixture.Repository.GetUploadJobAsync(result.JobId);
         var assets = await fixture.Repository.ListAssetsAsync(100);
 
@@ -29,6 +31,9 @@ public sealed class ObjectStorageBackupServiceTests
         Assert.Equal("source-content", await File.ReadAllTextAsync(fixture.SourcePath));
         Assert.Equal(UploadItemStatus.Completed, Assert.Single(audit!.Items).Status);
         Assert.True(Assert.Single(assets).HasHealthyObjectStorageBackup);
+        Assert.Equal(
+            new FileInfo(fixture.SourcePath).Length,
+            progress.Values.Max(item => item.NetworkTransferredBytes));
     }
 
     [Fact]
@@ -41,14 +46,17 @@ public sealed class ObjectStorageBackupServiceTests
             ComputeSha256("same-content"),
             "existing-etag",
             DateTimeOffset.UtcNow);
+        var progress = new RecordingProgress<ObjectStorageBackupProgress>();
 
         var result = await fixture.Service.BackupAsync(
             [new ObjectStorageBackupRequest(fixture.AssetId, fixture.SourcePath)],
-            fixture.ProfileId);
+            fixture.ProfileId,
+            progress);
 
         Assert.Equal(UploadJobStatus.Completed, result.Status);
         Assert.Equal(0, fixture.Adapter.UploadCalls);
         Assert.True(File.Exists(fixture.SourcePath));
+        Assert.All(progress.Values, item => Assert.Equal(0, item.NetworkTransferredBytes));
     }
 
     [Fact]
@@ -133,6 +141,16 @@ public sealed class ObjectStorageBackupServiceTests
         Assert.True(File.Exists(fixture.SourcePath));
     }
 
+    private sealed class RecordingProgress<T> : IProgress<T>
+    {
+        public List<T> Values { get; } = [];
+
+        public void Report(T value)
+        {
+            Values.Add(value);
+        }
+    }
+
     private static string ComputeSha256(string content)
     {
         return Convert.ToHexStringLower(
@@ -202,6 +220,7 @@ public sealed class ObjectStorageBackupServiceTests
             }
 
             progress?.Report(new ObjectStorageTransferProgress(
+                request.Size,
                 request.Size,
                 request.Size,
                 1,

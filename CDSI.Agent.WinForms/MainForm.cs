@@ -478,7 +478,7 @@ public sealed partial class MainForm : Form
             34,
             minimumWidth: 220));
         _assetGrid.Columns.Add(CreateColumn("文本", 100));
-        _assetGrid.Columns.Add(CreateColumn("OSS", 82));
+        _assetGrid.Columns.Add(CreateObjectStorageStatusColumn());
         _assetGrid.Columns.Add(CreateColumn("状态", 80));
         ConfigureAssetContextMenu();
     }
@@ -556,24 +556,49 @@ public sealed partial class MainForm : Form
         return column;
     }
 
-    private static void Grid_CellFormatting(
+    internal static DataGridViewColumn CreateObjectStorageStatusColumn()
+    {
+        var column = CreateColumn("OSS", 82);
+        column.Name = "ObjectStorageStatus";
+        return column;
+    }
+
+    internal static void Grid_CellFormatting(
         object? sender,
         DataGridViewCellFormattingEventArgs e)
     {
         if (sender is not DataGridView grid ||
             e.ColumnIndex < 0 ||
-            e.ColumnIndex >= grid.Columns.Count ||
-            !string.Equals(
-                grid.Columns[e.ColumnIndex].Name,
-                "FileSizeBytes",
-                StringComparison.Ordinal) ||
-            e.Value is not long bytes)
+            e.ColumnIndex >= grid.Columns.Count)
         {
             return;
         }
 
-        e.Value = FormatFileSize(bytes);
-        e.FormattingApplied = true;
+        var columnName = grid.Columns[e.ColumnIndex].Name;
+        if (string.Equals(
+                columnName,
+                "FileSizeBytes",
+                StringComparison.Ordinal) &&
+            e.Value is long bytes)
+        {
+            e.Value = FormatFileSize(bytes);
+            e.FormattingApplied = true;
+            return;
+        }
+
+        if (string.Equals(
+                columnName,
+                "ObjectStorageStatus",
+                StringComparison.Ordinal) &&
+            string.Equals(
+                e.Value as string,
+                "已备份",
+                StringComparison.Ordinal))
+        {
+            var healthyColor = Color.FromArgb(24, 121, 78);
+            e.CellStyle.ForeColor = healthyColor;
+            e.CellStyle.SelectionForeColor = healthyColor;
+        }
     }
 
     private async void MainForm_Shown(object? sender, EventArgs e)

@@ -6,6 +6,8 @@ namespace CDSI.Agent.WinForms;
 
 public sealed partial class MainForm
 {
+    private readonly TransferSpeedTracker _backupSpeedTracker = new();
+
     private async Task BackupSelectedAssetsAsync()
     {
         var selected = GetSelectedAssets();
@@ -63,6 +65,7 @@ public sealed partial class MainForm
         }
 
         _scanCancellation?.Dispose();
+        _backupSpeedTracker.Reset();
         _scanCancellation = new CancellationTokenSource();
         var backupProgress =
             new Progress<ObjectStorageBackupProgress>(UpdateBackupProgress);
@@ -107,8 +110,12 @@ public sealed partial class MainForm
 
     private void UpdateBackupProgress(ObjectStorageBackupProgress progress)
     {
+        var bytesPerSecond = _backupSpeedTracker.Update(progress.NetworkTransferredBytes);
+        var speedText = bytesPerSecond <= 0
+            ? "--"
+            : $"{FormatFileSize((long)bytesPerSecond)}/s";
         _progressLabel.Text =
-            $"文件 {progress.ProcessedItems:N0}/{progress.TotalItems:N0} · {FormatFileSize(progress.UploadedBytes)}/{FormatFileSize(progress.TotalBytes)}";
+            $"文件 {progress.ProcessedItems:N0}/{progress.TotalItems:N0} · {FormatFileSize(progress.UploadedBytes)}/{FormatFileSize(progress.TotalBytes)} · 速度 {speedText}";
         _currentPathLabel.Text = progress.Message is null
             ? progress.CurrentPath ?? string.Empty
             : $"{progress.Message} · {progress.CurrentPath}";

@@ -116,6 +116,7 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
                 ProgressFn = (_, transferred, total) =>
                     progress?.Report(new ObjectStorageTransferProgress(
                         transferred,
+                        transferred,
                         total,
                         CompletedParts: transferred >= total ? 1 : 0,
                         TotalParts: 1,
@@ -123,6 +124,7 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
             },
             cancellationToken: cancellationToken);
         progress?.Report(new ObjectStorageTransferProgress(
+            request.Size,
             request.Size,
             request.Size,
             CompletedParts: 1,
@@ -182,8 +184,10 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
         }
 
         var completedBytes = uploadedParts.Values.Sum(part => part.Size);
+        var currentRunTransferredBytes = 0L;
         progress?.Report(new ObjectStorageTransferProgress(
             completedBytes,
+            currentRunTransferredBytes,
             request.Size,
             uploadedParts.Count,
             totalParts,
@@ -208,6 +212,7 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
                 offset,
                 size,
                 completedBytes,
+                currentRunTransferredBytes,
                 uploadedParts.Count,
                 totalParts,
                 progress,
@@ -224,6 +229,7 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
                 etag,
                 size);
             completedBytes += size;
+            currentRunTransferredBytes += size;
             session = session with
             {
                 Parts = uploadedParts.Values
@@ -234,6 +240,7 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
             await saveCheckpoint(session, cancellationToken);
             progress?.Report(new ObjectStorageTransferProgress(
                 completedBytes,
+                currentRunTransferredBytes,
                 request.Size,
                 uploadedParts.Count,
                 totalParts,
@@ -276,6 +283,7 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
         long offset,
         long size,
         long completedBytes,
+        long currentRunTransferredBytes,
         int completedParts,
         int totalParts,
         IProgress<ObjectStorageTransferProgress>? progress,
@@ -295,6 +303,7 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
                 ProgressFn = (_, transferred, _) =>
                     progress?.Report(new ObjectStorageTransferProgress(
                         completedBytes + transferred,
+                        currentRunTransferredBytes + transferred,
                         request.Size,
                         completedParts,
                         totalParts,

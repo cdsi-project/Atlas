@@ -93,6 +93,7 @@ public sealed class ObjectStorageBackupService
         await _uploadRepository.UpdateUploadJobAsync(job, cancellationToken);
 
         var processedBytes = 0L;
+        var networkTransferredBytes = 0L;
         var results = new List<ObjectStorageBackupItemResult>(resolved.Count);
         var cancelled = false;
         for (var index = 0; index < resolved.Count; index++)
@@ -116,13 +117,16 @@ public sealed class ObjectStorageBackupService
                     results.Count,
                     totalBytes,
                     processedBytes,
+                    networkTransferredBytes,
                     current.Request.SourcePath,
                     current.ValidationError);
                 continue;
             }
 
             var itemBaseBytes = processedBytes;
+            var itemBaseNetworkBytes = networkTransferredBytes;
             var itemProgressBytes = 0L;
+            var itemNetworkBytes = 0L;
             try
             {
                 var source = current.Source;
@@ -136,6 +140,7 @@ public sealed class ObjectStorageBackupService
                         results.Count,
                         totalBytes,
                         processedBytes,
+                        networkTransferredBytes,
                         source.Path,
                         "正在计算 SHA-256");
                     var discovered = new DiscoveredFile(
@@ -155,6 +160,7 @@ public sealed class ObjectStorageBackupService
                             results.Count,
                             totalBytes,
                             processedBytes,
+                            networkTransferredBytes,
                             source.Path,
                             $"正在计算 SHA-256 · {FormatProgress(hashProgress.BytesProcessed, hashProgress.TotalBytes)}"),
                         cancellationToken);
@@ -186,6 +192,7 @@ public sealed class ObjectStorageBackupService
                     results.Count,
                     totalBytes,
                     processedBytes,
+                    networkTransferredBytes,
                     source.Path,
                     "正在检查 OSS 目标");
 
@@ -217,10 +224,13 @@ public sealed class ObjectStorageBackupService
                         source,
                         current.ObjectKey,
                         cancellationToken);
-                    var transferProgress = new Progress<ObjectStorageTransferProgress>(
+                    var transferProgress = new InlineProgress<ObjectStorageTransferProgress>(
                         value =>
                         {
                             itemProgressBytes = Math.Min(value.TransferredBytes, source.Size);
+                            itemNetworkBytes = Math.Min(
+                                value.CurrentRunTransferredBytes,
+                                source.Size);
                             ReportProgress(
                                 progress,
                                 jobId,
@@ -228,6 +238,9 @@ public sealed class ObjectStorageBackupService
                                 results.Count,
                                 totalBytes,
                                 AddWithoutOverflow(itemBaseBytes, itemProgressBytes),
+                                AddWithoutOverflow(
+                                    itemBaseNetworkBytes,
+                                    itemNetworkBytes),
                                 source.Path,
                                 value.Message);
                         });
@@ -267,6 +280,9 @@ public sealed class ObjectStorageBackupService
                         results.Count,
                         totalBytes,
                         AddWithoutOverflow(itemBaseBytes, source.Size),
+                        AddWithoutOverflow(
+                            itemBaseNetworkBytes,
+                            itemNetworkBytes),
                         source.Path,
                         "正在校验 OSS 备份");
                     verifiedObject = await adapter.StatAsync(
@@ -355,6 +371,9 @@ public sealed class ObjectStorageBackupService
                 results.Add(ToResult(failed));
             }
 
+            networkTransferredBytes = AddWithoutOverflow(
+                itemBaseNetworkBytes,
+                itemNetworkBytes);
             ReportProgress(
                 progress,
                 jobId,
@@ -362,6 +381,7 @@ public sealed class ObjectStorageBackupService
                 results.Count,
                 totalBytes,
                 processedBytes,
+                networkTransferredBytes,
                 current.Source.Path,
                 null);
         }
@@ -569,6 +589,7 @@ public sealed class ObjectStorageBackupService
         int processedItems,
         long totalBytes,
         long uploadedBytes,
+        long networkTransferredBytes,
         string? currentPath,
         string? message)
     {
@@ -578,6 +599,7 @@ public sealed class ObjectStorageBackupService
             processedItems,
             totalBytes,
             Math.Min(uploadedBytes, totalBytes),
+            Math.Min(networkTransferredBytes, totalBytes),
             currentPath,
             message));
     }
@@ -602,6 +624,14 @@ public sealed class ObjectStorageBackupService
     private static long AddWithoutOverflow(long left, long right)
     {
         return long.MaxValue - left < right ? long.MaxValue : left + right;
+    }
+
+    private sealed class InlineProgress<T>(Action<T> handler) : IProgress<T>
+    {
+        public void Report(T value)
+        {
+            handler(value);
+        }
     }
 
     private static bool PathsEqual(string left, string right)
