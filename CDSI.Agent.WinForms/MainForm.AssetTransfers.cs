@@ -62,15 +62,80 @@ public sealed partial class MainForm
             return;
         }
 
-        var row = _assetGrid.Rows[e.RowIndex];
-        if (!row.Selected)
+        ApplyAssetGridRightClickSelection(
+            _assetGrid,
+            e.RowIndex,
+            e.ColumnIndex,
+            ModifierKeys);
+    }
+
+    internal static void ApplyAssetGridRightClickSelection(
+        DataGridView grid,
+        int rowIndex,
+        int columnIndex,
+        Keys modifiers)
+    {
+        ArgumentNullException.ThrowIfNull(grid);
+        if (rowIndex < 0 || rowIndex >= grid.Rows.Count || grid.Columns.Count == 0)
         {
-            _assetGrid.ClearSelection();
-            row.Selected = true;
+            return;
         }
 
-        var columnIndex = e.ColumnIndex >= 0 ? e.ColumnIndex : 0;
-        _assetGrid.CurrentCell = row.Cells[columnIndex];
+        var targetRow = grid.Rows[rowIndex];
+        var targetColumnIndex = columnIndex >= 0 && columnIndex < grid.Columns.Count
+            ? columnIndex
+            : 0;
+        var anchorRowIndex = grid.CurrentCell?.RowIndex ?? rowIndex;
+        var useShift = grid.MultiSelect && (modifiers & Keys.Shift) == Keys.Shift;
+        var useControl = grid.MultiSelect && (modifiers & Keys.Control) == Keys.Control;
+
+        if (useShift)
+        {
+            grid.ClearSelection();
+            grid.CurrentCell = targetRow.Cells[targetColumnIndex];
+            var firstRowIndex = Math.Min(anchorRowIndex, rowIndex);
+            var lastRowIndex = Math.Max(anchorRowIndex, rowIndex);
+            for (var index = firstRowIndex; index <= lastRowIndex; index++)
+            {
+                grid.Rows[index].Selected = true;
+            }
+
+            return;
+        }
+
+        if (useControl)
+        {
+            var selectedRowIndexes = grid.SelectedRows
+                .Cast<DataGridViewRow>()
+                .Select(row => row.Index)
+                .ToArray();
+            grid.CurrentCell = targetRow.Cells[targetColumnIndex];
+            foreach (var selectedRowIndex in selectedRowIndexes)
+            {
+                grid.Rows[selectedRowIndex].Selected = true;
+            }
+
+            targetRow.Selected = true;
+            return;
+        }
+
+        if (!targetRow.Selected)
+        {
+            grid.ClearSelection();
+            grid.CurrentCell = targetRow.Cells[targetColumnIndex];
+            targetRow.Selected = true;
+            return;
+        }
+
+        var preservedRowIndexes = grid.SelectedRows
+            .Cast<DataGridViewRow>()
+            .Select(row => row.Index)
+            .ToArray();
+        grid.CurrentCell = targetRow.Cells[targetColumnIndex];
+        foreach (var selectedRowIndex in preservedRowIndexes)
+        {
+            grid.Rows[selectedRowIndex].Selected = true;
+        }
     }
 
     private IReadOnlyList<AssetListItem> GetSelectedAssets()

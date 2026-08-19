@@ -76,6 +76,72 @@ public sealed class MainFormLayoutTests
     }
 
     [Fact]
+    public void RightClickSelection_WithShift_SelectsTheAnchorRange()
+    {
+        using var grid = CreateSelectionGrid();
+        grid.CurrentCell = grid.Rows[1].Cells[0];
+        grid.ClearSelection();
+        grid.Rows[1].Selected = true;
+
+        MainForm.ApplyAssetGridRightClickSelection(
+            grid,
+            rowIndex: 4,
+            columnIndex: 0,
+            Keys.Shift);
+
+        var selectedIndexes = grid.SelectedRows
+            .Cast<DataGridViewRow>()
+            .Select(row => row.Index)
+            .Order()
+            .ToArray();
+        Assert.Equal([1, 2, 3, 4], selectedIndexes);
+        Assert.Equal(4, grid.CurrentCell.RowIndex);
+    }
+
+    [Fact]
+    public void RightClickSelection_PreservesBatchAndControlAddsARow()
+    {
+        using var grid = CreateSelectionGrid();
+        grid.CurrentCell = grid.Rows[1].Cells[0];
+        grid.ClearSelection();
+        grid.Rows[1].Selected = true;
+        grid.Rows[3].Selected = true;
+
+        MainForm.ApplyAssetGridRightClickSelection(grid, 3, 0, Keys.None);
+        Assert.Equal(
+            [1, 3],
+            grid.SelectedRows
+                .Cast<DataGridViewRow>()
+                .Select(row => row.Index)
+                .Order());
+
+        MainForm.ApplyAssetGridRightClickSelection(grid, 4, 0, Keys.Control);
+        Assert.Equal(
+            [1, 3, 4],
+            grid.SelectedRows
+                .Cast<DataGridViewRow>()
+                .Select(row => row.Index)
+                .Order());
+    }
+
+    private static DataGridView CreateSelectionGrid()
+    {
+        var grid = new DataGridView
+        {
+            AllowUserToAddRows = false,
+            MultiSelect = true,
+            SelectionMode = DataGridViewSelectionMode.FullRowSelect
+        };
+        grid.Columns.Add("Name", "Name");
+        for (var index = 0; index < 5; index++)
+        {
+            grid.Rows.Add($"Asset {index}");
+        }
+
+        return grid;
+    }
+
+    [Fact]
     public void FileSizeColumn_SortsByRawBytesAcrossDisplayUnits()
     {
         using var grid = new DataGridView
