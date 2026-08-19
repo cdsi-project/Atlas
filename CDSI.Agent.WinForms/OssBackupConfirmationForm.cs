@@ -9,12 +9,14 @@ internal sealed partial class OssBackupConfirmationForm : Form
     private readonly ComboBox _profileComboBox = new();
     private readonly Label _targetLabel = new();
     private readonly DataGridView _assetsGrid = new();
+    private readonly string? _objectDirectory;
     private IReadOnlyDictionary<Guid, string> _selectedObjectNames =
         new Dictionary<Guid, string>();
 
     public OssBackupConfirmationForm(
         IReadOnlyCollection<ConfiguredObjectStorageProfile> profiles,
-        IReadOnlyCollection<AssetListItem> assets)
+        IReadOnlyCollection<AssetListItem> assets,
+        string? objectDirectory = null)
     {
         ArgumentNullException.ThrowIfNull(profiles);
         ArgumentNullException.ThrowIfNull(assets);
@@ -26,8 +28,9 @@ internal sealed partial class OssBackupConfirmationForm : Form
         {
             throw new ArgumentException("至少需要一个待备份资产。", nameof(assets));
         }
+        _objectDirectory = objectDirectory;
 
-        Text = "确认备份到 OSS";
+        Text = objectDirectory is null ? "确认备份到 OSS" : "确认同步清单到 OSS";
         StartPosition = FormStartPosition.CenterParent;
         MinimumSize = new Size(650, 430);
         Size = new Size(790, 540);
@@ -95,12 +98,14 @@ internal sealed partial class OssBackupConfirmationForm : Form
         layout.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
-            Text = "这会把下列文件内容发送到选定的 OSS Bucket。上传后将校验大小和 SHA-256；本地文件不会被修改或删除。",
+            Text = objectDirectory is null
+                ? "这会把下列文件内容发送到选定的 OSS Bucket。上传后将校验大小和 SHA-256；本地文件不会被修改或删除。"
+                : $"文件将同步到 OSS 目录“{objectDirectory}/”，文件名保持本地原名。上传后将校验大小和 SHA-256。",
             ForeColor = Color.FromArgb(137, 49, 49),
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 2);
 
-        ConfigureAssetGrid(assets);
+        ConfigureAssetGrid(assets, allowCustomObjectNames: objectDirectory is null);
         layout.Controls.Add(_assetsGrid, 0, 3);
 
         var buttons = new FlowLayoutPanel
@@ -149,8 +154,11 @@ internal sealed partial class OssBackupConfirmationForm : Form
         }
 
         var profile = choice.Profile.Profile;
+        var directoryText = _objectDirectory is null
+            ? string.Empty
+            : $" · 目录: {_objectDirectory}/";
         _targetLabel.Text =
-            $"Bucket: {profile.BucketName} · Endpoint: {profile.Endpoint}";
+            $"Bucket: {profile.BucketName} · Endpoint: {profile.Endpoint}{directoryText}";
     }
 
     private sealed record ProfileChoice(ConfiguredObjectStorageProfile Profile)

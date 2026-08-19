@@ -325,7 +325,8 @@ public sealed partial class MainForm
 
             await BackupAssetsAsync(
                 plan.Assets,
-                $"正在同步清单：{plan.Collection.Name}");
+                $"正在同步清单：{plan.Collection.Name}",
+                objectDirectory: plan.Collection.Name);
         }
         catch (Exception exception)
         {

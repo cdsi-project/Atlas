@@ -28,7 +28,8 @@ public sealed class ObjectStorageConnection
 public sealed record ObjectStorageBackupRequest(
     Guid AssetId,
     string SourcePath,
-    string? ObjectName = null);
+    string? ObjectName = null,
+    string? ObjectDirectory = null);
 
 public enum UploadJobStatus
 {

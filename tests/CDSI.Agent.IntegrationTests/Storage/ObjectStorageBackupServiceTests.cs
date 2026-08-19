@@ -60,6 +60,76 @@ public sealed class ObjectStorageBackupServiceTests
     }
 
     [Fact]
+    public async Task BackupAsync_WithObjectDirectory_UsesCollectionNameAndOriginalFilename()
+    {
+        await using var fixture = await BackupFixture.CreateAsync("collection-content");
+
+        var result = await fixture.Service.BackupAsync(
+            [new ObjectStorageBackupRequest(
+                fixture.AssetId,
+                fixture.SourcePath,
+                ObjectName: "source.txt",
+                ObjectDirectory: "第一期视频")],
+            fixture.ProfileId);
+        var item = Assert.Single(result.Items);
+
+        Assert.Equal(UploadJobStatus.Completed, result.Status);
+        Assert.Equal("第一期视频/source.txt", item.ObjectKey);
+        Assert.Equal("collection-content", await File.ReadAllTextAsync(fixture.SourcePath));
+    }
+
+    [Fact]
+    public async Task BackupAsync_WhenCollectionContainsDuplicateFilenames_DoesNotUpload()
+    {
+        await using var fixture = await BackupFixture.CreateAsync("first-content");
+        var secondPath = Path.Combine(
+            fixture.Directory.Path,
+            "Other",
+            "source.txt");
+        System.IO.Directory.CreateDirectory(Path.GetDirectoryName(secondPath)!);
+        await File.WriteAllTextAsync(secondPath, "second-content");
+        var secondInfo = new FileInfo(secondPath);
+        secondInfo.Refresh();
+        var secondFile = new DiscoveredFile(
+            secondPath,
+            secondInfo.Name,
+            secondInfo.Extension,
+            "text/plain",
+            secondInfo.Length,
+            secondInfo.CreationTimeUtc,
+            secondInfo.LastWriteTimeUtc);
+        var deviceId = await fixture.Repository.GetOrCreateDeviceIdAsync();
+        var secondAsset = Assert.Single(
+            await fixture.Repository.RegisterLocalFilesAsync(
+                deviceId,
+                [secondFile],
+                DateTimeOffset.UtcNow));
+
+        var result = await fixture.Service.BackupAsync(
+            [
+                new ObjectStorageBackupRequest(
+                    fixture.AssetId,
+                    fixture.SourcePath,
+                    ObjectName: "source.txt",
+                    ObjectDirectory: "第一期视频"),
+                new ObjectStorageBackupRequest(
+                    secondAsset.AssetId,
+                    secondPath,
+                    ObjectName: "source.txt",
+                    ObjectDirectory: "第一期视频")
+            ],
+            fixture.ProfileId);
+
+        Assert.Equal(UploadJobStatus.Failed, result.Status);
+        Assert.Equal(0, fixture.Adapter.UploadCalls);
+        Assert.All(
+            result.Items,
+            item => Assert.Contains("同一个 OSS 对象", item.ErrorMessage));
+        Assert.True(File.Exists(fixture.SourcePath));
+        Assert.True(File.Exists(secondPath));
+    }
+
+    [Fact]
     public async Task BackupAsync_WhenObjectNameContainsAPath_DoesNotUpload()
     {
         await using var fixture = await BackupFixture.CreateAsync("invalid-name-content");

@@ -8,7 +8,9 @@ internal sealed partial class OssBackupConfirmationForm
     public IReadOnlyDictionary<Guid, string> SelectedObjectNames =>
         _selectedObjectNames;
 
-    private void ConfigureAssetGrid(IReadOnlyCollection<AssetListItem> assets)
+    private void ConfigureAssetGrid(
+        IReadOnlyCollection<AssetListItem> assets,
+        bool allowCustomObjectNames)
     {
         _assetsGrid.Dock = DockStyle.Fill;
         _assetsGrid.AccessibleName = "OSS 备份文件名列表";
@@ -23,7 +25,9 @@ internal sealed partial class OssBackupConfirmationForm
         _assetsGrid.ColumnHeadersHeight = 32;
         _assetsGrid.ColumnHeadersHeightSizeMode =
             DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-        _assetsGrid.EditMode = DataGridViewEditMode.EditOnEnter;
+        _assetsGrid.EditMode = allowCustomObjectNames
+            ? DataGridViewEditMode.EditOnEnter
+            : DataGridViewEditMode.EditProgrammatically;
         _assetsGrid.MultiSelect = false;
         _assetsGrid.RowHeadersVisible = false;
         _assetsGrid.RowTemplate.Height = 30;
@@ -42,8 +46,8 @@ internal sealed partial class OssBackupConfirmationForm
         _assetsGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             Name = ObjectNameColumnName,
-            HeaderText = "OSS 文件名",
-            ReadOnly = false,
+            HeaderText = allowCustomObjectNames ? "OSS 文件名" : "OSS 文件名（保持原名）",
+            ReadOnly = !allowCustomObjectNames,
             AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
             FillWeight = 38,
             MinimumWidth = 200,
@@ -85,7 +89,10 @@ internal sealed partial class OssBackupConfirmationForm
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning);
             _assetsGrid.Focus();
-            _assetsGrid.BeginEdit(true);
+            if (invalidCell?.ReadOnly == false)
+            {
+                _assetsGrid.BeginEdit(true);
+            }
             return;
         }
 
@@ -110,6 +117,7 @@ internal sealed partial class OssBackupConfirmationForm
         out DataGridViewCell? invalidCell)
     {
         var result = new Dictionary<Guid, string>();
+        var objectKeys = new HashSet<string>(StringComparer.Ordinal);
         foreach (DataGridViewRow row in _assetsGrid.Rows)
         {
             if (row.IsNewRow || row.Tag is not Guid assetId)
@@ -119,16 +127,36 @@ internal sealed partial class OssBackupConfirmationForm
 
             var cell = row.Cells[ObjectNameColumnName];
             var filename = Convert.ToString(cell.Value);
-            if (!ObjectStorageObjectKey.TryCreateForAsset(
+            string objectKey;
+            string? validationError;
+            var hasValidObjectKey = _objectDirectory is null
+                ? ObjectStorageObjectKey.TryCreateForAsset(
                     assetId,
                     filename,
-                    out _,
-                    out var validationError))
+                    out objectKey,
+                    out validationError)
+                : ObjectStorageObjectKey.TryCreateForDirectory(
+                    _objectDirectory,
+                    filename,
+                    out objectKey,
+                    out validationError);
+            if (!hasValidObjectKey)
             {
                 var localFilename = Path.GetFileName(
                     Convert.ToString(row.Cells["LocalPath"].Value));
                 objectNames = result;
                 errorMessage = $"{localFilename}: {validationError}";
+                invalidCell = cell;
+                return false;
+            }
+
+            if (!objectKeys.Add(objectKey))
+            {
+                var localFilename = Path.GetFileName(
+                    Convert.ToString(row.Cells["LocalPath"].Value));
+                objectNames = result;
+                errorMessage =
+                    $"{localFilename}: 清单中存在同名文件，无法在保持原文件名的同时同步。";
                 invalidCell = cell;
                 return false;
             }

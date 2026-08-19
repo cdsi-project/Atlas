@@ -451,11 +451,19 @@ public sealed class ObjectStorageBackupService
             var requestToUse = selectedRequest!;
             var objectName = requestToUse.ObjectName ??
                 Path.GetFileName(source?.Path ?? requestToUse.SourcePath);
-            var hasValidObjectKey = ObjectStorageObjectKey.TryCreateForAsset(
-                requestToUse.AssetId,
-                objectName,
-                out var objectKey,
-                out var objectKeyError);
+            string objectKey;
+            string? objectKeyError;
+            var hasValidObjectKey = requestToUse.ObjectDirectory is null
+                ? ObjectStorageObjectKey.TryCreateForAsset(
+                    requestToUse.AssetId,
+                    objectName,
+                    out objectKey,
+                    out objectKeyError)
+                : ObjectStorageObjectKey.TryCreateForDirectory(
+                    requestToUse.ObjectDirectory,
+                    objectName,
+                    out objectKey,
+                    out objectKeyError);
             result.Add(new ResolvedBackup(
                 requestToUse,
                 source,
@@ -467,7 +475,20 @@ public sealed class ObjectStorageBackupService
                         : objectKeyError));
         }
 
-        return result;
+        var duplicateObjectKeys = result
+            .Where(item => item.ValidationError is null)
+            .GroupBy(item => item.ObjectKey, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToHashSet(StringComparer.Ordinal);
+        return result.Select(item =>
+            item.ValidationError is null && duplicateObjectKeys.Contains(item.ObjectKey)
+                ? item with
+                {
+                    ValidationError =
+                        $"多个资产将写入同一个 OSS 对象：{item.ObjectKey}。请处理清单中的同名文件后重试。"
+                }
+                : item).ToList();
     }
 
     private async Task<MultipartUploadSession?> LoadValidSessionAsync(

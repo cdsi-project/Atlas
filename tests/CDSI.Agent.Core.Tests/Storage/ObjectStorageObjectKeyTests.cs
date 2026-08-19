@@ -56,4 +56,37 @@ public sealed class ObjectStorageObjectKeyTests
         Assert.False(success);
         Assert.Equal("OSS 文件名过长。", errorMessage);
     }
+
+    [Fact]
+    public void TryCreateForDirectory_PreservesCollectionAndOriginalFilename()
+    {
+        var success = ObjectStorageObjectKey.TryCreateForDirectory(
+            "第一期视频",
+            "成片-最终版.mp4",
+            out var objectKey,
+            out var errorMessage);
+
+        Assert.True(success);
+        Assert.Null(errorMessage);
+        Assert.Equal("第一期视频/成片-最终版.mp4", objectKey);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(".")]
+    [InlineData("项目/子目录")]
+    [InlineData("项目\\子目录")]
+    [InlineData("项目\n目录")]
+    public void TryCreateForDirectory_RejectsInvalidDirectoryNames(string directoryName)
+    {
+        var success = ObjectStorageObjectKey.TryCreateForDirectory(
+            directoryName,
+            "asset.mp4",
+            out var objectKey,
+            out var errorMessage);
+
+        Assert.False(success);
+        Assert.Empty(objectKey);
+        Assert.Contains("OSS 目录名", errorMessage);
+    }
 }

@@ -21,7 +21,8 @@ public sealed partial class MainForm
 
     private async Task BackupAssetsAsync(
         IReadOnlyCollection<AssetListItem> assets,
-        string progressStatus)
+        string progressStatus,
+        string? objectDirectory = null)
     {
         ArgumentNullException.ThrowIfNull(assets);
 
@@ -67,7 +68,8 @@ public sealed partial class MainForm
             .ToArray();
         using var confirmation = new OssBackupConfirmationForm(
             profiles,
-            uniqueAssets);
+            uniqueAssets,
+            objectDirectory);
         if (confirmation.ShowDialog(this) != DialogResult.OK)
         {
             return;
@@ -93,7 +95,8 @@ public sealed partial class MainForm
                 new ObjectStorageBackupRequest(
                     asset.AssetId,
                     asset.Path,
-                    confirmation.SelectedObjectNames[asset.AssetId]))
+                    confirmation.SelectedObjectNames[asset.AssetId],
+                    ObjectDirectory: objectDirectory))
                 .ToArray();
             var result = await _objectStorageBackupService.BackupAsync(
                 requests,
