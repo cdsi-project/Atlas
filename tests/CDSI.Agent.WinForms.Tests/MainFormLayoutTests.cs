@@ -63,6 +63,62 @@ public sealed class MainFormLayoutTests
             control => control is TextBox);
     }
     [Fact]
+    public void CreateAssetPaginationPanel_OffersSupportedPageSizes()
+    {
+        using var pageSizeComboBox = new ComboBox();
+        using var previousButton = new Button();
+        using var pageLabel = new Label();
+        using var nextButton = new Button();
+        using var panel = MainForm.CreateAssetPaginationPanel(
+            pageSizeComboBox,
+            previousButton,
+            pageLabel,
+            nextButton);
+        panel.Size = new Size(900, 36);
+        panel.CreateControl();
+        panel.PerformLayout();
+
+        Assert.Equal(
+            [100, 200, 500],
+            pageSizeComboBox.Items.Cast<int>());
+        Assert.Equal(ComboBoxStyle.DropDownList, pageSizeComboBox.DropDownStyle);
+        Assert.Equal(100, pageSizeComboBox.SelectedItem);
+        Assert.Equal("上一页", previousButton.Text);
+        Assert.Equal("下一页", nextButton.Text);
+        Assert.Equal("第 1 / 1 页 · 0 条", pageLabel.Text);
+    }
+
+    [Fact]
+    public void CalculateAssetPagination_ClampsToTheLastAvailablePage()
+    {
+        var state = MainForm.CalculateAssetPagination(
+            totalItems: 250,
+            pageSize: 100,
+            requestedPageIndex: 99);
+
+        Assert.Equal(2, state.PageIndex);
+        Assert.Equal(3, state.PageCount);
+        Assert.Equal(200, state.Offset);
+        Assert.Equal(201, state.FirstItem);
+        Assert.Equal(250, state.LastItem);
+    }
+
+    [Fact]
+    public void CalculateAssetPagination_RepresentsAnEmptyListAsPageOne()
+    {
+        var state = MainForm.CalculateAssetPagination(
+            totalItems: 0,
+            pageSize: 200,
+            requestedPageIndex: 5);
+
+        Assert.Equal(0, state.PageIndex);
+        Assert.Equal(1, state.PageCount);
+        Assert.Equal(0, state.Offset);
+        Assert.Equal(0, state.FirstItem);
+        Assert.Equal(0, state.LastItem);
+    }
+
+    [Fact]
     public void EnableAssetMultiSelection_AllowsFullRowBatchSelection()
     {
         using var grid = new DataGridView

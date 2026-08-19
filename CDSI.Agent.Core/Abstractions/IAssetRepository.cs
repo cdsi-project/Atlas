@@ -164,8 +164,12 @@ public interface IAssetRepository
     Task<AssetStatistics> GetLocalAssetStatisticsAsync(
         CancellationToken cancellationToken = default);
 
+    Task<long> GetAssetListCountAsync(
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<AssetListItem>> ListAssetsAsync(
         int limit,
+        long offset = 0,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<ExactDuplicateGroup>> ListExactDuplicateGroupsAsync(

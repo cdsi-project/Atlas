@@ -708,10 +708,36 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             videoDurationMilliseconds);
     }
 
-    public async Task<IReadOnlyList<AssetListItem>> ListAssetsAsync(
-        int limit,
+    public async Task<long> GetAssetListCountAsync(
         CancellationToken cancellationToken = default)
     {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT COUNT(*)
+            FROM asset_locations
+            WHERE location_type = 'Local';
+            """;
+        return Convert.ToInt64(
+            await command.ExecuteScalarAsync(cancellationToken));
+    }
+
+    public async Task<IReadOnlyList<AssetListItem>> ListAssetsAsync(
+        int limit,
+        long offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        if (limit is < 1 or > 100_000)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit));
+        }
+
+        if (offset < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(offset));
+        }
+
         var assets = new List<AssetListItem>();
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -767,10 +793,15 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                AND t.source_size = a.size
                AND t.source_modified_at = a.modified_at
             WHERE l.location_type = 'Local'
-            ORDER BY a.discovered_at DESC, a.original_filename
-            LIMIT $limit;
+            ORDER BY
+                a.discovered_at DESC,
+                a.original_filename,
+                l.path,
+                a.id
+            LIMIT $limit OFFSET $offset;
             """;
         command.Parameters.AddWithValue("$limit", limit);
+        command.Parameters.AddWithValue("$offset", offset);
         command.Parameters.AddWithValue(
             "$metadata_pipeline_version",
             MetadataPipeline.CurrentVersion);

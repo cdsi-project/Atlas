@@ -233,12 +233,13 @@ public sealed partial class MainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 3,
+            RowCount = 4,
             Margin = Padding.Empty,
             Padding = Padding.Empty
         };
         assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
         assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
         assetTabLayout.Controls.Add(
             CreateStatisticsPanel(
@@ -249,12 +250,13 @@ public sealed partial class MainForm : Form
             0,
             0);
         assetTabLayout.Controls.Add(_assetGrid, 0, 1);
+        assetTabLayout.Controls.Add(ConfigureAssetPagination(), 0, 2);
         assetTabLayout.Controls.Add(
             CreateAssetDetailsPanel(
                 _assetDetailTitleLabel,
                 _assetDetailSummaryLabel),
             0,
-            2);
+            3);
         _assetsTabPage.Controls.Add(assetTabLayout);
         _duplicatesTabPage.Padding = new Padding(0);
         _duplicatesTabPage.BackColor = Color.White;
@@ -828,12 +830,23 @@ public sealed partial class MainForm : Form
 
     private async Task RefreshAssetsAsync()
     {
-        var assetsTask = _scanService.ListAssetsAsync();
+        var assetCountTask = _scanService.GetAssetListCountAsync();
         var duplicateGroupsTask = _scanService.ListExactDuplicateGroupsAsync();
         var statisticsTask = _scanService.GetLocalAssetStatisticsAsync();
-        await Task.WhenAll(assetsTask, duplicateGroupsTask, statisticsTask);
+        await Task.WhenAll(
+            assetCountTask,
+            duplicateGroupsTask,
+            statisticsTask);
 
-        var assets = await assetsTask;
+        var assetCount = await assetCountTask;
+        var pagination = CalculateAssetPagination(
+            assetCount,
+            _assetPageSize,
+            _assetPageIndex);
+        _assetPageIndex = pagination.PageIndex;
+        var assets = await _scanService.ListAssetsAsync(
+            _assetPageSize,
+            pagination.Offset);
         var duplicateGroups = await duplicateGroupsTask;
         var statistics = await statisticsTask;
         _assetGrid.Rows.Clear();
@@ -887,14 +900,12 @@ public sealed partial class MainForm : Form
         _videoDurationValueLabel.Text =
             FormatTotalDuration(statistics.VideoDurationMilliseconds);
 
-        var visibleItemsSuffix = assets.Count < statistics.FileCount
-            ? $"  ·  当前显示 {assets.Count:N0}"
-            : string.Empty;
-        _assetsTabPage.Text = $"资产 ({statistics.FileCount:N0})";
+        UpdateAssetPaginationControls(assetCount);
+        _assetsTabPage.Text = $"资产 ({assetCount:N0})";
         await RefreshAssetCollectionsAsync();
         _duplicatesTabPage.Text = $"精确重复 ({duplicateGroups.Count:N0})";
         _statusLabel.Text =
-            $"本地文件 {statistics.FileCount:N0}{visibleItemsSuffix}  ·  重复组 {duplicateGroups.Count:N0}";
+            $"资产位置 {assetCount:N0}  ·  当前页 {assets.Count:N0}  ·  可用文件 {statistics.FileCount:N0}  ·  重复组 {duplicateGroups.Count:N0}";
     }
 
     private void AssetGrid_SelectionChanged(object? sender, EventArgs e)
@@ -967,6 +978,7 @@ public sealed partial class MainForm : Form
         _fullVerificationCheckBox.Enabled = !busy;
         _assetGrid.Enabled = !busy;
         _assetContextMenu.Enabled = !busy;
+        UpdateAssetPaginationControls(_assetTotalItems);
         _collectionGrid.Enabled = !busy;
         _collectionMemberGrid.Enabled = !busy;
         _createCollectionButton.Enabled = !busy;

@@ -81,6 +81,45 @@ public sealed class SqliteAssetRepositoryTests
     }
 
     [Fact]
+    public async Task ListAssetsAsync_ReturnsStableDatabasePagesAndTotalCount()
+    {
+        using var directory = new TestDirectory();
+        var repository = new SqliteAssetRepository(
+            Path.Combine(directory.Path, "cdsi.db"));
+        await repository.InitializeAsync();
+        var deviceId = await repository.GetOrCreateDeviceIdAsync();
+        var files = Enumerable.Range(1, 5)
+            .Select(index => CreateFile(
+                Path.Combine(directory.Path, $"asset-{index}.txt"),
+                $"asset-{index}.txt"))
+            .ToArray();
+        await repository.RegisterLocalFilesAsync(
+            deviceId,
+            files,
+            DateTimeOffset.UtcNow);
+
+        var totalCount = await repository.GetAssetListCountAsync();
+        var firstPage = await repository.ListAssetsAsync(2, 0);
+        var secondPage = await repository.ListAssetsAsync(2, 2);
+        var lastPage = await repository.ListAssetsAsync(2, 4);
+
+        Assert.Equal(5, totalCount);
+        Assert.Equal(
+            ["asset-1.txt", "asset-2.txt"],
+            firstPage.Select(asset => asset.OriginalFilename));
+        Assert.Equal(
+            ["asset-3.txt", "asset-4.txt"],
+            secondPage.Select(asset => asset.OriginalFilename));
+        Assert.Equal(
+            ["asset-5.txt"],
+            lastPage.Select(asset => asset.OriginalFilename));
+        Assert.Empty(await repository.ListAssetsAsync(2, 6));
+
+        SqliteConnection.ClearAllPools();
+    }
+
+
+    [Fact]
     public async Task ListExactDuplicateGroupsAsync_GroupsOnlyMatchingSha256Values()
     {
         using var directory = new TestDirectory();

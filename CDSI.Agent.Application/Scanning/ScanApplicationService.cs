@@ -27,6 +27,7 @@ public sealed class ScanApplicationService
 
     public Task<IReadOnlyList<AssetListItem>> ListAssetsAsync(
         int limit = 5_000,
+        long offset = 0,
         CancellationToken cancellationToken = default)
     {
         if (limit is < 1 or > 100_000)
@@ -34,7 +35,18 @@ public sealed class ScanApplicationService
             throw new ArgumentOutOfRangeException(nameof(limit));
         }
 
-        return _repository.ListAssetsAsync(limit, cancellationToken);
+        if (offset < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(offset));
+        }
+
+        return _repository.ListAssetsAsync(limit, offset, cancellationToken);
+    }
+
+    public Task<long> GetAssetListCountAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return _repository.GetAssetListCountAsync(cancellationToken);
     }
 
     public Task<AssetStatistics> GetLocalAssetStatisticsAsync(
