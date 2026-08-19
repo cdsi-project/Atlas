@@ -41,7 +41,6 @@ public sealed partial class MainForm : Form
     private readonly Label _videoDurationValueLabel = new();
     private readonly Label _assetDetailTitleLabel = new();
     private readonly Label _assetDetailSummaryLabel = new();
-    private readonly TextBox _assetTextPreviewBox = new();
     private readonly DataGridView _assetGrid = new();
     private readonly DataGridView _duplicateGrid = new();
     private readonly ContextMenuStrip _assetContextMenu = new();
@@ -253,8 +252,7 @@ public sealed partial class MainForm : Form
         assetTabLayout.Controls.Add(
             CreateAssetDetailsPanel(
                 _assetDetailTitleLabel,
-                _assetDetailSummaryLabel,
-                _assetTextPreviewBox),
+                _assetDetailSummaryLabel),
             0,
             2);
         _assetsTabPage.Controls.Add(assetTabLayout);
@@ -348,33 +346,30 @@ public sealed partial class MainForm : Form
 
     internal static TableLayoutPanel CreateAssetDetailsPanel(
         Label titleLabel,
-        Label summaryLabel,
-        TextBox previewTextBox)
+        Label summaryLabel)
     {
         var panel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 2,
+            ColumnCount = 1,
             RowCount = 2,
             GrowStyle = TableLayoutPanelGrowStyle.FixedSize,
             Margin = Padding.Empty,
             Padding = new Padding(8, 6, 8, 8),
             BackColor = Color.White
         };
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 330));
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
         panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         panel.Controls.Add(CreateDetailHeader("资产详情"), 0, 0);
-        panel.Controls.Add(CreateDetailHeader("文本预览"), 1, 0);
 
         var summaryPanel = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 2,
-            Margin = new Padding(0, 0, 12, 0),
+            Margin = Padding.Empty,
             Padding = Padding.Empty
         };
         summaryPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -396,22 +391,10 @@ public sealed partial class MainForm : Form
         summaryLabel.ForeColor = Color.FromArgb(88, 98, 106);
         summaryLabel.AccessibleName = "资产摘要";
 
-        previewTextBox.Dock = DockStyle.Fill;
-        previewTextBox.Margin = Padding.Empty;
-        previewTextBox.Multiline = true;
-        previewTextBox.MaxLength = TextExtractionOptions.DefaultMaximumOutputCharacters;
-        previewTextBox.ReadOnly = true;
-        previewTextBox.ScrollBars = ScrollBars.Vertical;
-        previewTextBox.WordWrap = true;
-        previewTextBox.BorderStyle = BorderStyle.FixedSingle;
-        previewTextBox.BackColor = Color.White;
-        previewTextBox.ForeColor = Color.FromArgb(52, 61, 69);
-        previewTextBox.AccessibleName = "提取文本预览";
 
         summaryPanel.Controls.Add(titleLabel, 0, 0);
         summaryPanel.Controls.Add(summaryLabel, 0, 1);
         panel.Controls.Add(summaryPanel, 0, 1);
-        panel.Controls.Add(previewTextBox, 1, 1);
         return panel;
     }
 
@@ -925,7 +908,6 @@ public sealed partial class MainForm : Form
         {
             _assetDetailTitleLabel.Text = "未选择资产";
             _assetDetailSummaryLabel.Text = string.Empty;
-            _assetTextPreviewBox.Text = string.Empty;
             return;
         }
 
@@ -936,9 +918,6 @@ public sealed partial class MainForm : Form
             $"{asset.MimeType ?? "未知类型"} · {FormatFileSize(asset.Size)} · {asset.ModifiedAt.ToLocalTime():yyyy-MM-dd HH:mm}",
             asset.Path,
             FormatTextDetails(asset.Text));
-        _assetTextPreviewBox.Text = asset.Text?.Content?.PlainText ?? string.Empty;
-        _assetTextPreviewBox.SelectionStart = 0;
-        _assetTextPreviewBox.SelectionLength = 0;
     }
 
     private static string FormatTextStatus(AssetText? text)

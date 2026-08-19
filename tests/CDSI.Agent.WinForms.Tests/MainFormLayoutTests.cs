@@ -36,27 +36,31 @@ public sealed class MainFormLayoutTests
     }
 
     [Fact]
-    public void CreateAssetDetailsPanel_ReservesReadablePreviewArea()
+    public void CreateAssetDetailsPanel_UsesTheFullAvailableWidth()
     {
         using var titleLabel = new Label();
         using var summaryLabel = new Label();
-        using var previewTextBox = new TextBox();
         using var panel = MainForm.CreateAssetDetailsPanel(
             titleLabel,
-            summaryLabel,
-            previewTextBox);
+            summaryLabel);
         panel.Size = new Size(900, 150);
         panel.CreateControl();
         panel.PerformLayout();
+        var summaryPanel = Assert.Single(
+            panel.Controls.OfType<TableLayoutPanel>());
+        summaryPanel.PerformLayout();
 
-        Assert.Equal(2, panel.ColumnStyles.Count);
-        Assert.Equal(SizeType.Absolute, panel.ColumnStyles[0].SizeType);
-        Assert.Equal(330, panel.ColumnStyles[0].Width);
-        Assert.Equal(SizeType.Percent, panel.ColumnStyles[1].SizeType);
-        Assert.True(previewTextBox.Width > 400);
-        Assert.True(previewTextBox.Height >= 100);
-        Assert.True(previewTextBox.Multiline);
-        Assert.True(previewTextBox.ReadOnly);
+        Assert.Single(panel.ColumnStyles);
+        Assert.Equal(SizeType.Percent, panel.ColumnStyles[0].SizeType);
+        Assert.Equal(2, panel.Controls.Count);
+        Assert.Equal(
+            "资产详情",
+            Assert.Single(panel.Controls.OfType<Label>()).Text);
+        Assert.True(titleLabel.Width > 800);
+        Assert.True(summaryLabel.Width > 800);
+        Assert.DoesNotContain(
+            panel.Controls.Cast<Control>(),
+            control => control is TextBox);
     }
     [Fact]
     public void EnableAssetMultiSelection_AllowsFullRowBatchSelection()
