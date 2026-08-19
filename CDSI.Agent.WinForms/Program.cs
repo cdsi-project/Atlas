@@ -1,6 +1,7 @@
 using CDSI.Agent.Application.Collections;
 using CDSI.Agent.Application.Fingerprints;
 using CDSI.Agent.Application.Metadata;
+using CDSI.Agent.Application.OpenWeb;
 using CDSI.Agent.Application.Scanning;
 using CDSI.Agent.Application.Storage;
 using CDSI.Agent.Application.Text;
@@ -42,6 +43,7 @@ static class Program
         var storageService = new ObjectStorageProfileService(
             repository,
             new WindowsCredentialSecretStore());
+        var openWebSettingsService = new OpenWebSettingsService(repository);
         var objectStorageBackupService = new ObjectStorageBackupService(
             repository,
             repository,
@@ -77,6 +79,7 @@ static class Program
             workspaceService,
             scanRootService,
             storageService,
+            openWebSettingsService,
             objectStorageBackupService,
             assetCollectionService,
             transferService,

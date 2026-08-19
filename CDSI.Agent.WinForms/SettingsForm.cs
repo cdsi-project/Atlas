@@ -1,3 +1,4 @@
+using CDSI.Agent.Application.OpenWeb;
 using CDSI.Agent.Application.Scanning;
 using CDSI.Agent.Application.Storage;
 using CDSI.Agent.Application.Workspaces;
@@ -5,7 +6,7 @@ using CDSI.Agent.Core.Scanning;
 
 namespace CDSI.Agent.WinForms;
 
-public sealed class SettingsForm : Form
+public sealed partial class SettingsForm : Form
 {
     private readonly WorkspaceApplicationService _workspaceService;
     private readonly ScanRootManagementService _scanRootService;
@@ -22,11 +23,13 @@ public sealed class SettingsForm : Form
     public SettingsForm(
         WorkspaceApplicationService workspaceService,
         ScanRootManagementService scanRootService,
-        ObjectStorageProfileService storageService)
+        ObjectStorageProfileService storageService,
+        OpenWebSettingsService openWebSettingsService)
     {
         _workspaceService = workspaceService;
         _scanRootService = scanRootService;
         _storageService = storageService;
+        _openWebSettingsService = openWebSettingsService;
 
         Text = "CDSI Atlas 设置";
         StartPosition = FormStartPosition.CenterParent;
@@ -44,6 +47,7 @@ public sealed class SettingsForm : Form
         tabs.TabPages.Add(CreateWorkspacePage());
         tabs.TabPages.Add(CreateScanRootsPage());
         tabs.TabPages.Add(CreateStoragePage());
+        tabs.TabPages.Add(CreateOpenWebPage());
 
         var closeButton = CreateButton(
             "关闭",
@@ -304,6 +308,7 @@ public sealed class SettingsForm : Form
             await RefreshWorkspaceAsync();
             await RefreshRootsAsync();
             await RefreshStorageAsync();
+            await RefreshOpenWebAsync();
         }
         catch (Exception exception)
         {

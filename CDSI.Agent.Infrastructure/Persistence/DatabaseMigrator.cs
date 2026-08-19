@@ -435,6 +435,28 @@ internal static class DatabaseMigrator
             await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
+        if (currentVersion < 9)
+        {
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await using var migrationCommand = connection.CreateCommand();
+            migrationCommand.Transaction = (SqliteTransaction)transaction;
+            migrationCommand.CommandText =
+                """
+                CREATE TABLE agent_settings (
+                    setting_key TEXT NOT NULL PRIMARY KEY,
+                    setting_value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (9, $applied_at);
+                """;
+            migrationCommand.Parameters.AddWithValue(
+                "$applied_at",
+                DateTimeOffset.UtcNow.ToString("O"));
+            await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     private static async Task<bool> TableExistsAsync(

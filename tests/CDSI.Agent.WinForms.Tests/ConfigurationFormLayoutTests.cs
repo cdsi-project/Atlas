@@ -1,3 +1,4 @@
+using CDSI.Agent.Application.OpenWeb;
 using CDSI.Agent.Application.Scanning;
 using CDSI.Agent.Application.Storage;
 using CDSI.Agent.Application.Workspaces;
@@ -38,7 +39,8 @@ public sealed class ConfigurationFormLayoutTests
             new ScanRootManagementService(repository),
             new ObjectStorageProfileService(
                 repository,
-                new WindowsCredentialSecretStore()));
+                new WindowsCredentialSecretStore()),
+            new OpenWebSettingsService(repository));
         form.CreateControl();
 
         var tabs = Assert.Single(Descendants(form).OfType<TabControl>());
@@ -50,10 +52,17 @@ public sealed class ConfigurationFormLayoutTests
             .OfType<DataGridView>()
             .Single(grid => grid.AccessibleName == "OSS 配置列表");
 
-        Assert.Equal(3, tabs.TabPages.Count);
+        var openWebOriginDomainTextBox = Descendants(form)
+            .OfType<TextBox>()
+            .Single(control =>
+                control.AccessibleName == "OpenWeb 源站域名");
+
+        Assert.Equal(4, tabs.TabPages.Count);
         Assert.Equal("工作目录", tabs.TabPages[0].Text);
         Assert.Equal("扫描目录", tabs.TabPages[1].Text);
         Assert.Equal("OSS 配置", tabs.TabPages[2].Text);
+        Assert.Equal("OpenWeb", tabs.TabPages[3].Text);
+        Assert.Equal(DockStyle.Fill, openWebOriginDomainTextBox.Dock);
         Assert.Equal(3, rootsGrid.Columns.Count);
         Assert.Equal(DataGridViewAutoSizeColumnMode.Fill, rootsGrid.Columns[0].AutoSizeMode);
         Assert.True(rootsGrid.Columns[0].MinimumWidth >= 320);

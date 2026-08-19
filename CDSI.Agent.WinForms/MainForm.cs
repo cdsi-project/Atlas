@@ -1,6 +1,7 @@
 using System.Reflection;
 using CDSI.Agent.Application.Collections;
 using CDSI.Agent.Application.Metadata;
+using CDSI.Agent.Application.OpenWeb;
 using CDSI.Agent.Application.Fingerprints;
 using CDSI.Agent.Application.Scanning;
 using CDSI.Agent.Application.Storage;
@@ -22,6 +23,7 @@ public sealed partial class MainForm : Form
     private readonly WorkspaceApplicationService _workspaceService;
     private readonly ScanRootManagementService _scanRootService;
     private readonly ObjectStorageProfileService _storageService;
+    private readonly OpenWebSettingsService _openWebSettingsService;
     private readonly ObjectStorageBackupService _objectStorageBackupService;
     private readonly ManagedAssetTransferService _transferService;
     private readonly Label _scopeLabel = new();
@@ -61,6 +63,7 @@ public sealed partial class MainForm : Form
         WorkspaceApplicationService workspaceService,
         ScanRootManagementService scanRootService,
         ObjectStorageProfileService storageService,
+        OpenWebSettingsService openWebSettingsService,
         ObjectStorageBackupService objectStorageBackupService,
         AssetCollectionService assetCollectionService,
         ManagedAssetTransferService transferService,
@@ -73,6 +76,7 @@ public sealed partial class MainForm : Form
         _workspaceService = workspaceService;
         _scanRootService = scanRootService;
         _storageService = storageService;
+        _openWebSettingsService = openWebSettingsService;
         _objectStorageBackupService = objectStorageBackupService;
         _assetCollectionService = assetCollectionService;
         _transferService = transferService;
@@ -630,7 +634,8 @@ public sealed partial class MainForm : Form
         using var settingsForm = new SettingsForm(
             _workspaceService,
             _scanRootService,
-            _storageService);
+            _storageService,
+            _openWebSettingsService);
         settingsForm.ShowDialog(this);
         await RefreshScanScopeAsync();
     }

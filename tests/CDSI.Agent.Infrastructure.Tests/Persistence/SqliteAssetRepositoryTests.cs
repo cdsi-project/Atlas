@@ -261,13 +261,13 @@ public sealed class SqliteAssetRepositoryTests
                     'file_operation_items', 'object_storage_locations',
                     'upload_jobs', 'upload_items',
                     'multipart_upload_sessions', 'asset_collections',
-                    'asset_collection_items');
+                    'asset_collection_items', 'agent_settings');
                 """;
             var tableCount = Convert.ToInt32(await tableCommand.ExecuteScalarAsync());
 
             SqliteConnection.ClearAllPools();
-            Assert.Equal(8, version);
-            Assert.Equal(12, tableCount);
+            Assert.Equal(9, version);
+            Assert.Equal(13, tableCount);
         }
     }
 
