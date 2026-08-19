@@ -2,6 +2,7 @@ using CDSI.Agent.Application.Fingerprints;
 using CDSI.Agent.Application.Metadata;
 using CDSI.Agent.Application.Scanning;
 using CDSI.Agent.Application.Text;
+using CDSI.Agent.Application.Workspaces;
 using CDSI.Agent.Infrastructure.FileSystem;
 using CDSI.Agent.Infrastructure.Fingerprints;
 using CDSI.Agent.Infrastructure.Metadata;
@@ -28,6 +29,10 @@ static class Program
         var repository = new SqliteAssetRepository(Path.Combine(dataDirectory, "cdsi.db"));
         var fingerprintEngine = new Sha256FileFingerprintService();
         var scanService = new ScanApplicationService(new FileSystemScanner(), repository);
+        var workspaceService = new WorkspaceApplicationService(
+            repository,
+            new WorkspaceProvisioner());
+        var scanRootService = new ScanRootManagementService(repository);
         var fingerprintService = new FingerprintApplicationService(
             fingerprintEngine,
             repository);
@@ -49,6 +54,8 @@ static class Program
             fingerprintService,
             metadataService,
             textService,
+            workspaceService,
+            scanRootService,
             dataDirectory));
     }
 }

@@ -174,6 +174,46 @@ internal static class DatabaseMigrator
             await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
+
+        if (currentVersion < 4)
+        {
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await using var migrationCommand = connection.CreateCommand();
+            migrationCommand.Transaction = (SqliteTransaction)transaction;
+            migrationCommand.CommandText =
+                """
+                ALTER TABLE scan_roots
+                    ADD COLUMN mode TEXT NOT NULL DEFAULT 'Readonly';
+                ALTER TABLE scan_roots
+                    ADD COLUMN status TEXT NOT NULL DEFAULT 'Active';
+                ALTER TABLE scan_roots
+                    ADD COLUMN updated_at TEXT NULL;
+                ALTER TABLE scan_roots
+                    ADD COLUMN removed_at TEXT NULL;
+
+                UPDATE scan_roots
+                SET updated_at = created_at
+                WHERE updated_at IS NULL;
+
+                CREATE TABLE managed_workspaces (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    device_id TEXT NOT NULL UNIQUE,
+                    path TEXT NOT NULL,
+                    path_key TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (device_id) REFERENCES devices(id)
+                );
+
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (4, $applied_at);
+                """;
+            migrationCommand.Parameters.AddWithValue(
+                "$applied_at",
+                DateTimeOffset.UtcNow.ToString("O"));
+            await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     private static async Task ExecuteAsync(

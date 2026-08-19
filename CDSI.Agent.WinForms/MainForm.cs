@@ -3,6 +3,7 @@ using CDSI.Agent.Application.Metadata;
 using CDSI.Agent.Application.Fingerprints;
 using CDSI.Agent.Application.Scanning;
 using CDSI.Agent.Application.Text;
+using CDSI.Agent.Application.Workspaces;
 using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Fingerprints;
 using CDSI.Agent.Core.Metadata;
@@ -14,12 +15,14 @@ namespace CDSI.Agent.WinForms;
 public sealed class MainForm : Form
 {
     private readonly ScanApplicationService _scanService;
-    private readonly TextBox _rootPathTextBox = new();
+    private readonly WorkspaceApplicationService _workspaceService;
+    private readonly ScanRootManagementService _scanRootService;
+    private readonly Label _scopeLabel = new();
     private readonly FingerprintApplicationService _fingerprintService;
     private readonly MetadataExtractionApplicationService _metadataService;
     private readonly TextExtractionApplicationService _textService;
     private readonly CheckBox _fullVerificationCheckBox = new();
-    private readonly Button _browseButton = new();
+    private readonly Button _settingsButton = new();
     private readonly Button _scanButton = new();
     private readonly Button _cancelButton = new();
     private readonly ProgressBar _progressBar = new();
@@ -45,12 +48,16 @@ public sealed class MainForm : Form
         FingerprintApplicationService fingerprintService,
         MetadataExtractionApplicationService metadataService,
         TextExtractionApplicationService textService,
+        WorkspaceApplicationService workspaceService,
+        ScanRootManagementService scanRootService,
         string dataDirectory)
     {
         _scanService = scanService;
         _fingerprintService = fingerprintService;
         _metadataService = metadataService;
         _textService = textService;
+        _workspaceService = workspaceService;
+        _scanRootService = scanRootService;
         InitializeLayout(dataDirectory);
 
         Shown += MainForm_Shown;
@@ -132,12 +139,15 @@ public sealed class MainForm : Form
         commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
         commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
 
-        _rootPathTextBox.Dock = DockStyle.Fill;
-        _rootPathTextBox.Margin = new Padding(0, 0, 10, 0);
-        _rootPathTextBox.PlaceholderText = "选择需要建立索引的目录";
-        _rootPathTextBox.BorderStyle = BorderStyle.FixedSingle;
+        _scopeLabel.Dock = DockStyle.Fill;
+        _scopeLabel.Margin = new Padding(0, 0, 10, 0);
+        _scopeLabel.Text = "正在读取工作目录和扫描目录";
+        _scopeLabel.TextAlign = ContentAlignment.MiddleLeft;
+        _scopeLabel.AutoEllipsis = true;
+        _scopeLabel.ForeColor = Color.FromArgb(52, 61, 69);
+        _scopeLabel.AccessibleName = "当前扫描范围";
 
-        ConfigureCommandButton(_browseButton, "选择目录", Color.FromArgb(236, 239, 242), Color.FromArgb(31, 37, 43));
+        ConfigureCommandButton(_settingsButton, "设置", Color.FromArgb(236, 239, 242), Color.FromArgb(31, 37, 43));
         ConfigureCommandButton(_scanButton, "开始扫描", Color.FromArgb(24, 121, 78), Color.White);
         _fullVerificationCheckBox.Text = "完整校验";
         _fullVerificationCheckBox.AutoSize = true;
@@ -149,12 +159,12 @@ public sealed class MainForm : Form
         ConfigureCommandButton(_cancelButton, "取消", Color.FromArgb(236, 239, 242), Color.FromArgb(137, 49, 49));
         _cancelButton.Enabled = false;
 
-        _browseButton.Click += BrowseButton_Click;
+        _settingsButton.Click += SettingsButton_Click;
         _scanButton.Click += ScanButton_Click;
         _cancelButton.Click += (_, _) => _scanCancellation?.Cancel();
 
-        commandPanel.Controls.Add(_rootPathTextBox, 0, 0);
-        commandPanel.Controls.Add(_browseButton, 1, 0);
+        commandPanel.Controls.Add(_scopeLabel, 0, 0);
+        commandPanel.Controls.Add(_settingsButton, 1, 0);
         commandPanel.Controls.Add(_fullVerificationCheckBox, 2, 0);
         commandPanel.Controls.Add(_scanButton, 3, 0);
         commandPanel.Controls.Add(_cancelButton, 4, 0);
@@ -516,13 +526,27 @@ public sealed class MainForm : Form
         try
         {
             await _scanService.InitializeAsync();
+            var workspace = await _workspaceService.GetAsync();
+            if (workspace is null)
+            {
+                using var setupForm = new FirstRunSetupForm();
+                if (setupForm.ShowDialog(this) != DialogResult.OK)
+                {
+                    Close();
+                    return;
+                }
+
+                await _workspaceService.ConfigureAsync(setupForm.SelectedPath);
+            }
+
+            await RefreshScanScopeAsync();
             await RefreshAssetsAsync();
             _statusLabel.Text = "就绪";
         }
         catch (Exception exception)
         {
             _statusLabel.Text = "初始化失败";
-            ShowError("无法初始化本地数据库", exception);
+            ShowError("无法初始化应用", exception);
         }
         finally
         {
@@ -530,32 +554,38 @@ public sealed class MainForm : Form
         }
     }
 
-    private void BrowseButton_Click(object? sender, EventArgs e)
+    private async void SettingsButton_Click(object? sender, EventArgs e)
     {
-        using var dialog = new FolderBrowserDialog
-        {
-            Description = "选择要建立索引的目录",
-            UseDescriptionForTitle = true,
-            ShowNewFolderButton = false,
-            InitialDirectory = Directory.Exists(_rootPathTextBox.Text)
-                ? _rootPathTextBox.Text
-                : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
-        };
+        using var settingsForm = new SettingsForm(
+            _workspaceService,
+            _scanRootService);
+        settingsForm.ShowDialog(this);
+        await RefreshScanScopeAsync();
+    }
 
-        if (dialog.ShowDialog(this) == DialogResult.OK)
-        {
-            _rootPathTextBox.Text = dialog.SelectedPath;
-        }
+    private async Task RefreshScanScopeAsync()
+    {
+        var workspaceTask = _workspaceService.GetAsync();
+        var rootsTask = _scanRootService.ListAllAsync();
+        await Task.WhenAll(workspaceTask, rootsTask);
+
+        var workspace = await workspaceTask;
+        var roots = await rootsTask;
+        var enabledRoots = roots.Count(root => root.Enabled);
+        var externalRoots = roots.Count(root => root.Mode == ScanRootMode.Readonly);
+        _scopeLabel.Text = workspace is null
+            ? $"未配置工作目录 · 外部目录 {externalRoots:N0}"
+            : $"工作目录: {workspace.Path} · 已启用 {enabledRoots:N0} · 外部目录 {externalRoots:N0}";
     }
 
     private async void ScanButton_Click(object? sender, EventArgs e)
     {
-        var scanRoot = _rootPathTextBox.Text.Trim();
-        if (!Directory.Exists(scanRoot))
+        var configuredRoots = await _scanService.ListScanRootsAsync();
+        if (!configuredRoots.Any(root => root.Enabled))
         {
             MessageBox.Show(
                 this,
-                "请选择一个存在的目录。",
+                "没有已启用的扫描目录。",
                 "CDSI Atlas",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
@@ -577,14 +607,14 @@ public sealed class MainForm : Form
         try
         {
             var scanSummary = await Task.Run(
-                () => _scanService.ScanDirectoryAsync(
-                    scanRoot,
+                () => _scanService.ScanConfiguredRootsAsync(
                     scanProgress,
                     _scanCancellation.Token),
                 _scanCancellation.Token);
 
             await RefreshAssetsAsync();
-            if (scanSummary.Status == ScanJobStatus.Cancelled)
+            await RefreshScanScopeAsync();
+            if (scanSummary.Cancelled)
             {
                 _statusLabel.Text = "扫描已取消";
                 return;
@@ -650,7 +680,7 @@ public sealed class MainForm : Form
             await RefreshAssetsAsync();
             _statusLabel.Text = fingerprintSummary.Cancelled
                 ? $"哈希已取消，已完成 {fingerprintSummary.FingerprintedFiles:N0} 个文件"
-                : $"扫描完成，已索引 {scanSummary.FilesIndexed:N0} 个文件，元数据 {metadataSummary.ExtractedFiles:N0}，文本 {textSummary.ExtractedFiles:N0}，哈希 {fingerprintSummary.FingerprintedFiles:N0}";
+                : $"扫描完成，目录 {scanSummary.RootsScanned:N0}/{scanSummary.RootsConfigured:N0}，已索引 {scanSummary.FilesIndexed:N0} 个文件，元数据 {metadataSummary.ExtractedFiles:N0}，文本 {textSummary.ExtractedFiles:N0}，哈希 {fingerprintSummary.FingerprintedFiles:N0}";
         }
         catch (OperationCanceledException)
         {
@@ -861,8 +891,8 @@ public sealed class MainForm : Form
     }
     private void SetBusy(bool busy, bool allowCancel = true)
     {
-        _rootPathTextBox.Enabled = !busy;
-        _browseButton.Enabled = !busy;
+        _scopeLabel.Enabled = !busy;
+        _settingsButton.Enabled = !busy;
         _scanButton.Enabled = !busy;
         _cancelButton.Enabled = busy && allowCancel;
         _fullVerificationCheckBox.Enabled = !busy;

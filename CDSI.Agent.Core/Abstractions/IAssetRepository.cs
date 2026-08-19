@@ -4,6 +4,7 @@ using CDSI.Agent.Core.Fingerprints;
 using CDSI.Agent.Core.Metadata;
 using CDSI.Agent.Core.Scanning;
 using CDSI.Agent.Core.Text;
+using CDSI.Agent.Core.Workspaces;
 
 namespace CDSI.Agent.Core.Abstractions;
 
@@ -14,6 +15,38 @@ public interface IAssetRepository
     Task<string> GetOrCreateDeviceIdAsync(CancellationToken cancellationToken = default);
 
     Task<ScanRoot> GetOrCreateScanRootAsync(
+        string path,
+        ScanRootMode mode,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ScanRoot>> ListScanRootsAsync(
+        bool includeRemoved = false,
+        CancellationToken cancellationToken = default);
+
+    Task SetScanRootEnabledAsync(
+        Guid scanRootId,
+        bool enabled,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default);
+
+    Task RemoveScanRootAsync(
+        Guid scanRootId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default);
+
+    Task SetScanRootStatusAsync(
+        Guid scanRootId,
+        ScanRootStatus status,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default);
+
+    Task<ManagedWorkspace?> GetManagedWorkspaceAsync(
+        string deviceId,
+        CancellationToken cancellationToken = default);
+
+    Task<ManagedWorkspace> SaveManagedWorkspaceAsync(
+        string deviceId,
         string path,
         DateTimeOffset now,
         CancellationToken cancellationToken = default);

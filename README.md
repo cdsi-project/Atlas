@@ -2,11 +2,17 @@
 
 CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己的 Windows 设备上扫描所选目录，建立独立于文件路径的资产与位置记录，不移动、不重命名，也不删除源文件。
 
-当前仓库实现 Milestone 0.4：带精确重复检测、基础媒体理解和本地文本理解的资产索引闭环。
+当前仓库实现 Milestone 0.5：带受管工作目录、多扫描目录、精确重复检测、基础媒体理解和本地文本理解的资产索引闭环。
 
 ## 当前能力
 
-- 手动选择本地目录并在后台递归扫描
+- 首次启动配置一个受管工作目录，并自动创建 <code>Inbox</code>、<code>Assets</code>、<code>Exports</code>、<code>Cache</code>、<code>Temp</code> 和 <code>System</code>
+- 工作目录可后续修改；切换时不搬移、不删除旧目录中的任何文件
+- 将受管工作目录的 <code>Inbox</code> 作为受管扫描入口
+- 添加、停用、启用和软移除多个外部扫描目录
+- 外部扫描目录固定为只读策略；扫描、索引、哈希和提取不会修改源文件
+- 一次扫描全部已启用目录；离线磁盘或 NAS 标记为不可用后继续处理其他目录
+- 检测嵌套或重叠扫描目录并提示，位置身份仍按设备和规范化路径保持幂等
 - 默认忽略 <code>.git</code>、<code>.vs</code>、<code>node_modules</code>、<code>vendor</code>、<code>bin</code>、<code>obj</code> 等目录
 - 默认不跟随符号链接和 junction
 - 识别常见文件扩展名与 MIME 类型，未知格式仍可索引
@@ -32,6 +38,7 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 - 将资产、位置、扫描根和扫描任务持久化到 SQLite
 - 同一设备和路径重复扫描时保持幂等
 - 文件消失时仅将本地位置标记为 <code>Missing</code>，保留逻辑资产
+- 只有完整且无遍历错误的扫描才更新缺失状态，避免权限或临时 IO 故障造成误报
 - 在 WinForms 中显示扫描进度、错误计数和资产列表
 - 在 Windows 标题栏和应用页眉显示当前构建版本
 - 哈希阶段显示文件数、读取字节数与吞吐率
@@ -101,10 +108,11 @@ dotnet run --project CDSI.Agent.WinForms/CDSI.Agent.WinForms.csproj
 
 ## 下一阶段
 
-下一阶段将扩展文本资产理解与复核能力：
+下一阶段将实现 OSS 配置管理：
 
-- PDF 与 Office 文本提取
-- Inbox 与批量复核入口
-- 更完整的位置核验
+- 独立的存储配置档案，不把 OSS SDK 耦合进扫描模块
+- 使用 Windows 安全存储保存 AccessKey 等凭据，禁止明文落库和日志输出
+- 连接测试、Bucket/Endpoint 配置和最小权限校验
+- 默认不上传外部扫描目录中的资产；上传保持显式授权
 
-AI 分类、云存储、CDSI Server API 和自动文件整理不在当前阶段。
+后续再扩展 PDF/Office 文本提取、Inbox 复核、直接分片上传和远端完整性验证。AI 分类、CDSI Server API 和自动文件整理仍不在当前阶段。

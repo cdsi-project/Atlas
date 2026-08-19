@@ -69,6 +69,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
 
     public async Task<ScanRoot> GetOrCreateScanRootAsync(
         string path,
+        ScanRootMode mode,
         DateTimeOffset now,
         CancellationToken cancellationToken = default)
     {
@@ -81,21 +82,35 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
         {
             insertCommand.CommandText =
                 """
-                INSERT OR IGNORE INTO scan_roots(
-                    id, path, path_key, enabled, created_at, last_scanned_at)
-                VALUES ($id, $path, $path_key, 1, $created_at, NULL);
+                INSERT INTO scan_roots(
+                    id, path, path_key, mode, enabled, status,
+                    created_at, updated_at, last_scanned_at, removed_at)
+                VALUES (
+                    $id, $path, $path_key, $mode, 1, 'Active',
+                    $created_at, $updated_at, NULL, NULL)
+                ON CONFLICT(path_key) DO UPDATE SET
+                    path = excluded.path,
+                    mode = excluded.mode,
+                    enabled = 1,
+                    status = 'Active',
+                    updated_at = excluded.updated_at,
+                    removed_at = NULL;
                 """;
             insertCommand.Parameters.AddWithValue("$id", proposedId.ToString("D"));
             insertCommand.Parameters.AddWithValue("$path", normalizedPath);
             insertCommand.Parameters.AddWithValue("$path_key", pathKey);
+            insertCommand.Parameters.AddWithValue("$mode", mode.ToString());
             insertCommand.Parameters.AddWithValue("$created_at", now.ToString("O"));
+            insertCommand.Parameters.AddWithValue("$updated_at", now.ToString("O"));
             await insertCommand.ExecuteNonQueryAsync(cancellationToken);
         }
 
         await using var selectCommand = connection.CreateCommand();
         selectCommand.CommandText =
             """
-            SELECT id, path, enabled, created_at, last_scanned_at
+            SELECT
+                id, path, mode, enabled, status, created_at,
+                updated_at, last_scanned_at, removed_at
             FROM scan_roots
             WHERE path_key = $path_key;
             """;
@@ -107,14 +122,8 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             throw new InvalidOperationException("Unable to load the scan root after registration.");
         }
 
-        return new ScanRoot(
-            Guid.Parse(reader.GetString(0)),
-            reader.GetString(1),
-            reader.GetInt64(2) != 0,
-            ParseTimestamp(reader.GetString(3)),
-            reader.IsDBNull(4) ? null : ParseTimestamp(reader.GetString(4)));
+        return ReadScanRoot(reader);
     }
-
     public async Task CreateScanJobAsync(
         ScanJob job,
         CancellationToken cancellationToken = default)
@@ -165,7 +174,9 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
         command.CommandText =
             """
             UPDATE scan_roots
-            SET last_scanned_at = $last_scanned_at
+            SET last_scanned_at = $last_scanned_at,
+                status = 'Active',
+                updated_at = $last_scanned_at
             WHERE id = $id;
             """;
         command.Parameters.AddWithValue("$id", scanRootId.ToString("D"));

@@ -55,10 +55,110 @@ public sealed class ScanApplicationService
         return _repository.ListExactDuplicateGroupsAsync(limit, cancellationToken);
     }
 
+    public Task<IReadOnlyList<ScanRoot>> ListScanRootsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return _repository.ListScanRootsAsync(
+            includeRemoved: false,
+            cancellationToken);
+    }
+
+    public async Task<ScanBatchSummary> ScanConfiguredRootsAsync(
+        IProgress<ScanProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        var roots = (await _repository.ListScanRootsAsync(
+                includeRemoved: false,
+                cancellationToken))
+            .Where(root => root.Enabled)
+            .ToArray();
+        var rootsScanned = 0;
+        var rootsUnavailable = 0;
+        var rootsFailed = 0;
+        var filesDiscovered = 0;
+        var filesIndexed = 0;
+        var errors = 0;
+        var cancelled = false;
+
+        foreach (var root in roots)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                cancelled = true;
+                break;
+            }
+
+            if (!Directory.Exists(root.Path))
+            {
+                rootsUnavailable++;
+                errors++;
+                await _repository.SetScanRootStatusAsync(
+                    root.Id,
+                    ScanRootStatus.Unavailable,
+                    DateTimeOffset.UtcNow,
+                    CancellationToken.None);
+                progress?.Report(new ScanProgress(
+                    ScanStage.Failed,
+                    filesDiscovered,
+                    filesIndexed,
+                    errors,
+                    root.Path,
+                    "目录当前不可用，已跳过。"));
+                continue;
+            }
+
+            try
+            {
+                var summary = await ScanDirectoryAsync(
+                    root.Path,
+                    progress,
+                    cancellationToken,
+                    root.Mode);
+                rootsScanned++;
+                filesDiscovered += summary.FilesDiscovered;
+                filesIndexed += summary.FilesIndexed;
+                errors += summary.Errors;
+                if (summary.Status == ScanJobStatus.Cancelled)
+                {
+                    cancelled = true;
+                    break;
+                }
+            }
+            catch (Exception exception)
+                when (exception is not OperationCanceledException)
+            {
+                rootsFailed++;
+                errors++;
+                await _repository.SetScanRootStatusAsync(
+                    root.Id,
+                    ScanRootStatus.Error,
+                    DateTimeOffset.UtcNow,
+                    CancellationToken.None);
+                progress?.Report(new ScanProgress(
+                    ScanStage.Failed,
+                    filesDiscovered,
+                    filesIndexed,
+                    errors,
+                    root.Path,
+                    exception.Message));
+            }
+        }
+
+        return new ScanBatchSummary(
+            roots.Length,
+            rootsScanned,
+            rootsUnavailable,
+            rootsFailed,
+            filesDiscovered,
+            filesIndexed,
+            errors,
+            cancelled);
+    }
     public async Task<ScanSummary> ScanDirectoryAsync(
         string rootPath,
         IProgress<ScanProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ScanRootMode mode = ScanRootMode.Readonly)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
 
@@ -73,6 +173,7 @@ public sealed class ScanApplicationService
 
         var scanRoot = await _repository.GetOrCreateScanRootAsync(
             normalizedRoot,
+            mode,
             startedAt,
             cancellationToken);
         var deviceId = await _repository.GetOrCreateDeviceIdAsync(cancellationToken);
@@ -182,11 +283,14 @@ public sealed class ScanApplicationService
                 cancellationToken);
 
             await FlushAsync(cancellationToken);
-            await _repository.MarkMissingLocalLocationsAsync(
-                deviceId,
-                normalizedRoot,
-                startedAt,
-                cancellationToken);
+            if (errors == 0)
+            {
+                await _repository.MarkMissingLocalLocationsAsync(
+                    deviceId,
+                    normalizedRoot,
+                    startedAt,
+                    cancellationToken);
+            }
 
             var completedAt = DateTimeOffset.UtcNow;
             job = job with
@@ -200,6 +304,15 @@ public sealed class ScanApplicationService
 
             await _repository.UpdateScanJobAsync(job, cancellationToken);
             await _repository.MarkScanRootCompletedAsync(scanRoot.Id, completedAt, cancellationToken);
+            if (errors > 0)
+            {
+                await _repository.SetScanRootStatusAsync(
+                    scanRoot.Id,
+                    ScanRootStatus.Error,
+                    completedAt,
+                    cancellationToken);
+            }
+
             Report(ScanStage.Completed, normalizedRoot);
 
             return new ScanSummary(
@@ -241,6 +354,11 @@ public sealed class ScanApplicationService
                 ErrorMessage = exception.Message
             };
             await _repository.UpdateScanJobAsync(job, CancellationToken.None);
+            await _repository.SetScanRootStatusAsync(
+                scanRoot.Id,
+                ScanRootStatus.Error,
+                DateTimeOffset.UtcNow,
+                CancellationToken.None);
             errors++;
             Report(ScanStage.Failed, normalizedRoot, exception.Message);
             throw;

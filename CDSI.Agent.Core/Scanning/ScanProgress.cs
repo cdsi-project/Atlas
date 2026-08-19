@@ -24,3 +24,13 @@ public sealed record ScanSummary(
     int FilesDiscovered,
     int FilesIndexed,
     int Errors);
+
+public sealed record ScanBatchSummary(
+    int RootsConfigured,
+    int RootsScanned,
+    int RootsUnavailable,
+    int RootsFailed,
+    int FilesDiscovered,
+    int FilesIndexed,
+    int Errors,
+    bool Cancelled);

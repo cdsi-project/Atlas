@@ -1,0 +1,144 @@
+using CDSI.Agent.Core.Abstractions;
+using CDSI.Agent.Core.Scanning;
+
+namespace CDSI.Agent.Application.Scanning;
+
+public sealed class ScanRootManagementService
+{
+    private readonly IAssetRepository _repository;
+
+    public ScanRootManagementService(IAssetRepository repository)
+    {
+        _repository = repository;
+    }
+
+    public async Task<IReadOnlyList<ScanRoot>> ListExternalAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return (await _repository.ListScanRootsAsync(
+                includeRemoved: false,
+                cancellationToken))
+            .Where(root => root.Mode == ScanRootMode.Readonly)
+            .ToArray();
+    }
+
+    public Task<IReadOnlyList<ScanRoot>> ListAllAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return _repository.ListScanRootsAsync(
+            includeRemoved: false,
+            cancellationToken);
+    }
+
+    public async Task<ScanRootRegistrationResult> AddExternalAsync(
+        string path,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        var normalizedPath = NormalizePath(path);
+        if (!Directory.Exists(normalizedPath))
+        {
+            throw new DirectoryNotFoundException(
+                $"扫描目录不存在或当前不可用: {normalizedPath}");
+        }
+
+        var roots = await _repository.ListScanRootsAsync(
+            includeRemoved: false,
+            cancellationToken);
+        var exactRoot = roots.FirstOrDefault(root =>
+            PathsEqual(root.Path, normalizedPath));
+        if (exactRoot?.Mode == ScanRootMode.Managed)
+        {
+            throw new InvalidOperationException(
+                "该目录属于 CDSI 受管工作区，不能改为外部只读目录。");
+        }
+
+        var warnings = roots
+            .Where(root => !PathsEqual(root.Path, normalizedPath))
+            .Where(root =>
+                IsUnder(normalizedPath, root.Path) ||
+                IsUnder(root.Path, normalizedPath))
+            .Select(root => $"与已配置目录重叠: {root.Path}")
+            .ToArray();
+
+        var scanRoot = await _repository.GetOrCreateScanRootAsync(
+            normalizedPath,
+            ScanRootMode.Readonly,
+            DateTimeOffset.UtcNow,
+            cancellationToken);
+        return new ScanRootRegistrationResult(scanRoot, warnings);
+    }
+
+    public async Task SetEnabledAsync(
+        Guid scanRootId,
+        bool enabled,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureExternalRootAsync(scanRootId, cancellationToken);
+        await _repository.SetScanRootEnabledAsync(
+            scanRootId,
+            enabled,
+            DateTimeOffset.UtcNow,
+            cancellationToken);
+    }
+
+    public async Task RemoveAsync(
+        Guid scanRootId,
+        CancellationToken cancellationToken = default)
+    {
+        await EnsureExternalRootAsync(scanRootId, cancellationToken);
+        await _repository.RemoveScanRootAsync(
+            scanRootId,
+            DateTimeOffset.UtcNow,
+            cancellationToken);
+    }
+
+    private async Task EnsureExternalRootAsync(
+        Guid scanRootId,
+        CancellationToken cancellationToken)
+    {
+        var root = (await _repository.ListScanRootsAsync(
+                includeRemoved: false,
+                cancellationToken))
+            .SingleOrDefault(item => item.Id == scanRootId)
+            ?? throw new InvalidOperationException("扫描目录不存在。");
+        if (root.Mode != ScanRootMode.Readonly)
+        {
+            throw new InvalidOperationException("受管工作目录不能通过扫描目录操作修改。");
+        }
+    }
+
+    private static bool IsUnder(string candidate, string parent)
+    {
+        var relative = Path.GetRelativePath(parent, candidate);
+        return relative != "." &&
+            !Path.IsPathRooted(relative) &&
+            !relative.Equals("..", StringComparison.Ordinal) &&
+            !relative.StartsWith(
+                $"..{Path.DirectorySeparatorChar}",
+                StringComparison.Ordinal);
+    }
+
+    private static bool PathsEqual(string left, string right)
+    {
+        return string.Equals(
+            NormalizePath(left),
+            NormalizePath(right),
+            OperatingSystem.IsWindows()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal);
+    }
+
+    private static string NormalizePath(string path)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var root = Path.GetPathRoot(fullPath);
+        return string.Equals(fullPath, root, StringComparison.OrdinalIgnoreCase)
+            ? fullPath
+            : fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+    }
+}
+
+public sealed record ScanRootRegistrationResult(
+    ScanRoot Root,
+    IReadOnlyList<string> Warnings);

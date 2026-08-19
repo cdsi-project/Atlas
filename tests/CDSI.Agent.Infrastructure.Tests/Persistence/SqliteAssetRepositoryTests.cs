@@ -177,6 +177,20 @@ public sealed class SqliteAssetRepositoryTests
                     version INTEGER NOT NULL PRIMARY KEY,
                     applied_at TEXT NOT NULL
                 );
+                CREATE TABLE devices (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    platform TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE scan_roots (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    path TEXT NOT NULL,
+                    path_key TEXT NOT NULL UNIQUE,
+                    enabled INTEGER NOT NULL,
+                    created_at TEXT NOT NULL,
+                    last_scanned_at TEXT NULL
+                );
                 CREATE TABLE assets (
                     id TEXT NOT NULL PRIMARY KEY
                 );
@@ -202,15 +216,14 @@ public sealed class SqliteAssetRepositoryTests
                 """
                 SELECT COUNT(*)
                 FROM sqlite_master
-                WHERE type = 'table' AND name IN ('asset_metadata', 'asset_text');
+                WHERE type = 'table' AND name IN ('asset_metadata', 'asset_text', 'managed_workspaces');
                 """;
             var tableCount = Convert.ToInt32(await tableCommand.ExecuteScalarAsync());
 
-            Assert.Equal(3, version);
-            Assert.Equal(2, tableCount);
+            SqliteConnection.ClearAllPools();
+            Assert.Equal(4, version);
+            Assert.Equal(3, tableCount);
         }
-
-        SqliteConnection.ClearAllPools();
     }
 
     [Fact]
