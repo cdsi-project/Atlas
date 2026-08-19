@@ -244,6 +244,107 @@ internal static class DatabaseMigrator
             await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
+
+        if (currentVersion < 6)
+        {
+            var assetLocationsExist = await TableExistsAsync(
+                connection,
+                "asset_locations",
+                cancellationToken);
+            var ownershipColumnExists =
+                await AssetLocationOwnershipColumnExistsAsync(
+                    connection,
+                    cancellationToken);
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            if (assetLocationsExist && !ownershipColumnExists)
+            {
+                await using var locationMigrationCommand = connection.CreateCommand();
+                locationMigrationCommand.Transaction = (SqliteTransaction)transaction;
+                locationMigrationCommand.CommandText =
+                    """
+                    ALTER TABLE asset_locations
+                        ADD COLUMN ownership TEXT NOT NULL DEFAULT 'External';
+                    """;
+                await locationMigrationCommand.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            await using var migrationCommand = connection.CreateCommand();
+            migrationCommand.Transaction = (SqliteTransaction)transaction;
+            migrationCommand.CommandText =
+                """
+                CREATE TABLE file_operations (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    action TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    started_at TEXT NOT NULL,
+                    finished_at TEXT NULL,
+                    total_items INTEGER NOT NULL,
+                    completed_items INTEGER NOT NULL,
+                    failed_items INTEGER NOT NULL,
+                    error_message TEXT NULL
+                );
+
+                CREATE TABLE file_operation_items (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    operation_id TEXT NOT NULL,
+                    asset_id TEXT NOT NULL,
+                    source_path TEXT NOT NULL,
+                    target_path TEXT NULL,
+                    status TEXT NOT NULL,
+                    source_deleted INTEGER NOT NULL,
+                    sha256 TEXT NULL,
+                    error_message TEXT NULL,
+                    finished_at TEXT NULL,
+                    FOREIGN KEY (operation_id) REFERENCES file_operations(id) ON DELETE CASCADE,
+                    FOREIGN KEY (asset_id) REFERENCES assets(id)
+                );
+
+                CREATE INDEX ix_file_operation_items_operation_id
+                ON file_operation_items(operation_id);
+
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (6, $applied_at);
+                """;
+            migrationCommand.Parameters.AddWithValue(
+                "$applied_at",
+                DateTimeOffset.UtcNow.ToString("O"));
+            await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+    }
+
+    private static async Task<bool> TableExistsAsync(
+        SqliteConnection connection,
+        string tableName,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT EXISTS(
+                SELECT 1
+                FROM sqlite_master
+                WHERE type = 'table' AND name = $table_name);
+            """;
+        command.Parameters.AddWithValue("$table_name", tableName);
+        return Convert.ToInt32(
+            await command.ExecuteScalarAsync(cancellationToken)) != 0;
+    }
+
+    private static async Task<bool> AssetLocationOwnershipColumnExistsAsync(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT EXISTS(
+                SELECT 1
+                FROM pragma_table_info('asset_locations')
+                WHERE name = 'ownership');
+            """;
+        return Convert.ToInt32(
+            await command.ExecuteScalarAsync(cancellationToken)) != 0;
     }
 
     private static async Task ExecuteAsync(

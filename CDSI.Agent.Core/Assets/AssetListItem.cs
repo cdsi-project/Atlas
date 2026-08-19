@@ -11,6 +11,7 @@ public sealed record AssetListItem(
     long Size,
     DateTimeOffset ModifiedAt,
     string Path,
+    AssetLocationOwnership LocationOwnership,
     AssetLocationStatus LocationStatus,
     AssetStatus Status,
     AssetMetadata? Metadata = null,

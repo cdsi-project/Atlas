@@ -4,6 +4,7 @@ using CDSI.Agent.Core.Fingerprints;
 using CDSI.Agent.Core.Metadata;
 using CDSI.Agent.Core.Scanning;
 using CDSI.Agent.Core.Text;
+using CDSI.Agent.Core.Transfers;
 using CDSI.Agent.Core.Workspaces;
 
 namespace CDSI.Agent.Core.Abstractions;
@@ -72,6 +73,41 @@ public interface IAssetRepository
         DateTimeOffset discoveredAt,
         CancellationToken cancellationToken = default);
 
+    Task<LocalAssetTransferSource?> GetLocalAssetTransferSourceAsync(
+        Guid assetId,
+        string deviceId,
+        string sourcePath,
+        CancellationToken cancellationToken = default);
+
+    Task RegisterManagedLocalLocationAsync(
+        Guid assetId,
+        string deviceId,
+        string path,
+        DateTimeOffset verifiedAt,
+        CancellationToken cancellationToken = default);
+
+    Task MarkLocalLocationMissingAsync(
+        string deviceId,
+        string path,
+        DateTimeOffset verifiedAt,
+        CancellationToken cancellationToken = default);
+
+    Task CreateFileOperationAsync(
+        FileOperationRecord operation,
+        IReadOnlyCollection<FileOperationItemRecord> items,
+        CancellationToken cancellationToken = default);
+
+    Task SaveFileOperationItemAsync(
+        FileOperationItemRecord item,
+        CancellationToken cancellationToken = default);
+
+    Task UpdateFileOperationAsync(
+        FileOperationRecord operation,
+        CancellationToken cancellationToken = default);
+
+    Task<FileOperationAudit?> GetFileOperationAsync(
+        Guid operationId,
+        CancellationToken cancellationToken = default);
     Task<bool> SaveSha256Async(
         Guid assetId,
         long expectedSize,

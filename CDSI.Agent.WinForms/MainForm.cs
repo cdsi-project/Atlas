@@ -4,21 +4,24 @@ using CDSI.Agent.Application.Fingerprints;
 using CDSI.Agent.Application.Scanning;
 using CDSI.Agent.Application.Storage;
 using CDSI.Agent.Application.Text;
+using CDSI.Agent.Application.Transfers;
 using CDSI.Agent.Application.Workspaces;
 using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Fingerprints;
 using CDSI.Agent.Core.Metadata;
 using CDSI.Agent.Core.Scanning;
 using CDSI.Agent.Core.Text;
+using CDSI.Agent.Core.Transfers;
 
 namespace CDSI.Agent.WinForms;
 
-public sealed class MainForm : Form
+public sealed partial class MainForm : Form
 {
     private readonly ScanApplicationService _scanService;
     private readonly WorkspaceApplicationService _workspaceService;
     private readonly ScanRootManagementService _scanRootService;
     private readonly ObjectStorageProfileService _storageService;
+    private readonly ManagedAssetTransferService _transferService;
     private readonly Label _scopeLabel = new();
     private readonly FingerprintApplicationService _fingerprintService;
     private readonly MetadataExtractionApplicationService _metadataService;
@@ -39,6 +42,9 @@ public sealed class MainForm : Form
     private readonly TextBox _assetTextPreviewBox = new();
     private readonly DataGridView _assetGrid = new();
     private readonly DataGridView _duplicateGrid = new();
+    private readonly ContextMenuStrip _assetContextMenu = new();
+    private readonly ToolStripMenuItem _copyToWorkspaceMenuItem = new();
+    private readonly ToolStripMenuItem _moveToWorkspaceMenuItem = new();
     private readonly TabPage _assetsTabPage = new("资产");
     private readonly TabPage _duplicatesTabPage = new("精确重复");
     private readonly ToolStripStatusLabel _statusLabel = new();
@@ -53,6 +59,7 @@ public sealed class MainForm : Form
         WorkspaceApplicationService workspaceService,
         ScanRootManagementService scanRootService,
         ObjectStorageProfileService storageService,
+        ManagedAssetTransferService transferService,
         string dataDirectory)
     {
         _scanService = scanService;
@@ -62,6 +69,7 @@ public sealed class MainForm : Form
         _workspaceService = workspaceService;
         _scanRootService = scanRootService;
         _storageService = storageService;
+        _transferService = transferService;
         InitializeLayout(dataDirectory);
 
         Shown += MainForm_Shown;
@@ -453,6 +461,7 @@ public sealed class MainForm : Form
     private void ConfigureAssetGrid()
     {
         ConfigureGrid(_assetGrid);
+        EnableAssetMultiSelection(_assetGrid);
         _assetGrid.Columns.Add(CreateColumn("文件", 220, DataGridViewAutoSizeColumnMode.Fill, 24));
         _assetGrid.Columns.Add(CreateColumn("类型", 125));
         _assetGrid.Columns.Add(CreateColumn("大小", 90));
@@ -466,6 +475,14 @@ public sealed class MainForm : Form
             minimumWidth: 220));
         _assetGrid.Columns.Add(CreateColumn("文本", 100));
         _assetGrid.Columns.Add(CreateColumn("状态", 80));
+        ConfigureAssetContextMenu();
+    }
+
+    internal static void EnableAssetMultiSelection(DataGridView grid)
+    {
+        ArgumentNullException.ThrowIfNull(grid);
+        grid.MultiSelect = true;
+        grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
     }
 
     private void ConfigureDuplicateGrid()
@@ -901,6 +918,8 @@ public sealed class MainForm : Form
         _scanButton.Enabled = !busy;
         _cancelButton.Enabled = busy && allowCancel;
         _fullVerificationCheckBox.Enabled = !busy;
+        _assetGrid.Enabled = !busy;
+        _assetContextMenu.Enabled = !busy;
         UseWaitCursor = busy && !allowCancel;
     }
 
@@ -909,6 +928,11 @@ public sealed class MainForm : Form
         if (asset.LocationStatus == AssetLocationStatus.Missing)
         {
             return "位置缺失";
+        }
+
+        if (asset.LocationOwnership == AssetLocationOwnership.Managed)
+        {
+            return "工作目录";
         }
 
         return asset.Status switch

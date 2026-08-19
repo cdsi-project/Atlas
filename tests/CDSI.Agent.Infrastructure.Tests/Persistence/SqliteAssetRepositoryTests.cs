@@ -216,13 +216,16 @@ public sealed class SqliteAssetRepositoryTests
                 """
                 SELECT COUNT(*)
                 FROM sqlite_master
-                WHERE type = 'table' AND name IN ('asset_metadata', 'asset_text', 'managed_workspaces', 'storage_profiles');
+                WHERE type = 'table' AND name IN (
+                    'asset_metadata', 'asset_text', 'managed_workspaces',
+                    'storage_profiles', 'file_operations',
+                    'file_operation_items');
                 """;
             var tableCount = Convert.ToInt32(await tableCommand.ExecuteScalarAsync());
 
             SqliteConnection.ClearAllPools();
-            Assert.Equal(5, version);
-            Assert.Equal(4, tableCount);
+            Assert.Equal(6, version);
+            Assert.Equal(6, tableCount);
         }
     }
 

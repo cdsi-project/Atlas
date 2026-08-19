@@ -58,4 +58,20 @@ public sealed class MainFormLayoutTests
         Assert.True(previewTextBox.Multiline);
         Assert.True(previewTextBox.ReadOnly);
     }
+    [Fact]
+    public void EnableAssetMultiSelection_AllowsFullRowBatchSelection()
+    {
+        using var grid = new DataGridView
+        {
+            MultiSelect = false,
+            SelectionMode = DataGridViewSelectionMode.CellSelect
+        };
+
+        MainForm.EnableAssetMultiSelection(grid);
+
+        Assert.True(grid.MultiSelect);
+        Assert.Equal(
+            DataGridViewSelectionMode.FullRowSelect,
+            grid.SelectionMode);
+    }
 }

@@ -3,6 +3,7 @@ using CDSI.Agent.Application.Metadata;
 using CDSI.Agent.Application.Scanning;
 using CDSI.Agent.Application.Storage;
 using CDSI.Agent.Application.Text;
+using CDSI.Agent.Application.Transfers;
 using CDSI.Agent.Application.Workspaces;
 using CDSI.Agent.Infrastructure.FileSystem;
 using CDSI.Agent.Infrastructure.Fingerprints;
@@ -31,13 +32,18 @@ static class Program
         var repository = new SqliteAssetRepository(Path.Combine(dataDirectory, "cdsi.db"));
         var fingerprintEngine = new Sha256FileFingerprintService();
         var scanService = new ScanApplicationService(new FileSystemScanner(), repository);
+        var workspaceProvisioner = new WorkspaceProvisioner();
         var workspaceService = new WorkspaceApplicationService(
             repository,
-            new WorkspaceProvisioner());
+            workspaceProvisioner);
         var scanRootService = new ScanRootManagementService(repository);
         var storageService = new ObjectStorageProfileService(
             repository,
             new WindowsCredentialSecretStore());
+        var transferService = new ManagedAssetTransferService(
+            repository,
+            workspaceProvisioner,
+            new VerifiedManagedFileTransfer());
         var fingerprintService = new FingerprintApplicationService(
             fingerprintEngine,
             repository);
@@ -62,6 +68,7 @@ static class Program
             workspaceService,
             scanRootService,
             storageService,
+            transferService,
             dataDirectory));
     }
 }

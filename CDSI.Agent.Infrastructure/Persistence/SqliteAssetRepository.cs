@@ -725,6 +725,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                 a.size,
                 a.modified_at,
                 l.path,
+                l.ownership,
                 l.status,
                 a.status,
                 m.extractor_name,
@@ -780,10 +781,11 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                 reader.GetInt64(4),
                 ParseTimestamp(reader.GetString(5)),
                 reader.GetString(6),
-                Enum.Parse<AssetLocationStatus>(reader.GetString(7)),
-                Enum.Parse<AssetStatus>(reader.GetString(8)),
-                ReadMetadata(reader, Guid.Parse(reader.GetString(0)), 9),
-                ReadText(reader, Guid.Parse(reader.GetString(0)), 17)));
+                Enum.Parse<AssetLocationOwnership>(reader.GetString(7)),
+                Enum.Parse<AssetLocationStatus>(reader.GetString(8)),
+                Enum.Parse<AssetStatus>(reader.GetString(9)),
+                ReadMetadata(reader, Guid.Parse(reader.GetString(0)), 10),
+                ReadText(reader, Guid.Parse(reader.GetString(0)), 18)));
         }
 
         return assets;
@@ -975,10 +977,10 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
         command.CommandText =
             """
             INSERT INTO asset_locations(
-                id, asset_id, location_type, device_id, path, path_key,
+                id, asset_id, location_type, ownership, device_id, path, path_key,
                 status, last_seen_at, last_verified_at)
             VALUES (
-                $id, $asset_id, 'Local', $device_id, $path, $path_key,
+                $id, $asset_id, 'Local', 'External', $device_id, $path, $path_key,
                 'Available', $last_seen_at, NULL);
             """;
         command.Parameters.AddWithValue("$id", locationId.ToString("D"));
