@@ -33,6 +33,25 @@ public sealed class ObjectStorageProfileService
         return configured;
     }
 
+    public async Task<ObjectStorageConnection> GetConnectionAsync(
+        Guid profileId,
+        CancellationToken cancellationToken = default)
+    {
+        var profile = (await _repository.ListStorageProfilesAsync(cancellationToken))
+            .SingleOrDefault(item => item.Id == profileId)
+            ?? throw new InvalidOperationException("OSS 配置不存在或已被删除。");
+        var secret = await _secretStore.RetrieveAsync(
+            CreateSecretKey(profileId),
+            cancellationToken);
+        if (string.IsNullOrWhiteSpace(secret))
+        {
+            throw new InvalidOperationException(
+                "OSS 配置缺少 AccessKey Secret，请在设置中重新保存凭据。");
+        }
+
+        return new ObjectStorageConnection(profile, secret);
+    }
+
     public async Task<ConfiguredObjectStorageProfile> SaveAsync(
         SaveObjectStorageProfileRequest request,
         CancellationToken cancellationToken = default)

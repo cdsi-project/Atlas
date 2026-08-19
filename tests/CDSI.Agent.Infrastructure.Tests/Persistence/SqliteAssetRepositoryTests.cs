@@ -219,13 +219,15 @@ public sealed class SqliteAssetRepositoryTests
                 WHERE type = 'table' AND name IN (
                     'asset_metadata', 'asset_text', 'managed_workspaces',
                     'storage_profiles', 'file_operations',
-                    'file_operation_items');
+                    'file_operation_items', 'object_storage_locations',
+                    'upload_jobs', 'upload_items',
+                    'multipart_upload_sessions');
                 """;
             var tableCount = Convert.ToInt32(await tableCommand.ExecuteScalarAsync());
 
             SqliteConnection.ClearAllPools();
-            Assert.Equal(6, version);
-            Assert.Equal(6, tableCount);
+            Assert.Equal(7, version);
+            Assert.Equal(10, tableCount);
         }
     }
 

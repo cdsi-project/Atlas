@@ -96,6 +96,61 @@ public sealed class WindowsCredentialSecretStore : ISecretStore
         return Task.FromResult(true);
     }
 
+    public Task<string?> RetrieveAsync(
+        string key,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureWindows();
+        ValidateKey(key);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (!CredRead(
+                BuildTarget(key),
+                CredentialTypeGeneric,
+                0,
+                out var credentialPointer))
+        {
+            var error = Marshal.GetLastPInvokeError();
+            if (error == ErrorNotFound)
+            {
+                return Task.FromResult<string?>(null);
+            }
+
+            throw new Win32Exception(error);
+        }
+
+        try
+        {
+            var credential = Marshal.PtrToStructure<NativeCredential>(
+                credentialPointer);
+            var length = checked((int)credential.CredentialBlobSize);
+            if (length == 0)
+            {
+                return Task.FromResult<string?>(string.Empty);
+            }
+
+            var secretBytes = new byte[length];
+            try
+            {
+                Marshal.Copy(
+                    credential.CredentialBlob,
+                    secretBytes,
+                    0,
+                    secretBytes.Length);
+                var secret = Encoding.Unicode.GetString(secretBytes);
+                return Task.FromResult<string?>(secret.TrimEnd('\0'));
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(secretBytes);
+            }
+        }
+        finally
+        {
+            CredFree(credentialPointer);
+        }
+    }
+
     public Task DeleteAsync(
         string key,
         CancellationToken cancellationToken = default)

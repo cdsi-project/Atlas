@@ -21,6 +21,7 @@ public sealed partial class MainForm : Form
     private readonly WorkspaceApplicationService _workspaceService;
     private readonly ScanRootManagementService _scanRootService;
     private readonly ObjectStorageProfileService _storageService;
+    private readonly ObjectStorageBackupService _objectStorageBackupService;
     private readonly ManagedAssetTransferService _transferService;
     private readonly Label _scopeLabel = new();
     private readonly FingerprintApplicationService _fingerprintService;
@@ -45,6 +46,7 @@ public sealed partial class MainForm : Form
     private readonly ContextMenuStrip _assetContextMenu = new();
     private readonly ToolStripMenuItem _copyToWorkspaceMenuItem = new();
     private readonly ToolStripMenuItem _moveToWorkspaceMenuItem = new();
+    private readonly ToolStripMenuItem _backupToOssMenuItem = new();
     private readonly TabPage _assetsTabPage = new("资产");
     private readonly TabPage _duplicatesTabPage = new("精确重复");
     private readonly ToolStripStatusLabel _statusLabel = new();
@@ -59,6 +61,7 @@ public sealed partial class MainForm : Form
         WorkspaceApplicationService workspaceService,
         ScanRootManagementService scanRootService,
         ObjectStorageProfileService storageService,
+        ObjectStorageBackupService objectStorageBackupService,
         ManagedAssetTransferService transferService,
         string dataDirectory)
     {
@@ -69,6 +72,7 @@ public sealed partial class MainForm : Form
         _workspaceService = workspaceService;
         _scanRootService = scanRootService;
         _storageService = storageService;
+        _objectStorageBackupService = objectStorageBackupService;
         _transferService = transferService;
         InitializeLayout(dataDirectory);
 
@@ -474,6 +478,7 @@ public sealed partial class MainForm : Form
             34,
             minimumWidth: 220));
         _assetGrid.Columns.Add(CreateColumn("文本", 100));
+        _assetGrid.Columns.Add(CreateColumn("OSS", 82));
         _assetGrid.Columns.Add(CreateColumn("状态", 80));
         ConfigureAssetContextMenu();
     }
@@ -801,6 +806,7 @@ public sealed partial class MainForm : Form
                 asset.Path,
                 FormatMetadata(asset.Metadata),
                 FormatTextStatus(asset.Text),
+                asset.HasHealthyObjectStorageBackup ? "已备份" : "未备份",
                 FormatStatus(asset));
             _assetGrid.Rows[rowIndex].Tag = asset;
         }

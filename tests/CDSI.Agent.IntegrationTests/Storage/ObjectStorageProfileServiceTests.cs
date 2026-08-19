@@ -175,6 +175,15 @@ public sealed class ObjectStorageProfileServiceTests
             return Task.CompletedTask;
         }
 
+        public Task<string?> RetrieveAsync(
+            string key,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Values.TryGetValue(key, out var secret);
+            return Task.FromResult(secret);
+        }
+
         public Task<bool> ExistsAsync(
             string key,
             CancellationToken cancellationToken = default)

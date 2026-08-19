@@ -11,6 +11,9 @@ public interface ISecretStore
         string key,
         CancellationToken cancellationToken = default);
 
+    Task<string?> RetrieveAsync(
+        string key,
+        CancellationToken cancellationToken = default);
     Task DeleteAsync(
         string key,
         CancellationToken cancellationToken = default);

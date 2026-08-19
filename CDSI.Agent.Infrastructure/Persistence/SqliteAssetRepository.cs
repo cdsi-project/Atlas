@@ -728,6 +728,12 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                 l.ownership,
                 l.status,
                 a.status,
+                EXISTS (
+                    SELECT 1
+                    FROM object_storage_locations osl
+                    WHERE osl.asset_id = a.id
+                      AND osl.status = 'Healthy'
+                ) AS has_healthy_backup,
                 m.extractor_name,
                 m.pipeline_version,
                 m.status,
@@ -784,8 +790,9 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                 Enum.Parse<AssetLocationOwnership>(reader.GetString(7)),
                 Enum.Parse<AssetLocationStatus>(reader.GetString(8)),
                 Enum.Parse<AssetStatus>(reader.GetString(9)),
-                ReadMetadata(reader, Guid.Parse(reader.GetString(0)), 10),
-                ReadText(reader, Guid.Parse(reader.GetString(0)), 18)));
+                reader.GetInt64(10) != 0,
+                ReadMetadata(reader, Guid.Parse(reader.GetString(0)), 11),
+                ReadText(reader, Guid.Parse(reader.GetString(0)), 19)));
         }
 
         return assets;

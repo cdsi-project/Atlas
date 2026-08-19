@@ -9,13 +9,21 @@ public sealed partial class MainForm
     {
         _copyToWorkspaceMenuItem.Text = "复制到 CDSI 工作目录";
         _moveToWorkspaceMenuItem.Text = "移动到 CDSI 工作目录";
+        _backupToOssMenuItem.Text = "备份到 OSS";
         _copyToWorkspaceMenuItem.Click += async (_, _) =>
             await TransferSelectedAssetsAsync(ManagedAssetTransferAction.Copy);
         _moveToWorkspaceMenuItem.Click += async (_, _) =>
             await TransferSelectedAssetsAsync(ManagedAssetTransferAction.Move);
+        _backupToOssMenuItem.Click += async (_, _) =>
+            await BackupSelectedAssetsAsync();
 
         _assetContextMenu.Items.AddRange(
-            [_copyToWorkspaceMenuItem, _moveToWorkspaceMenuItem]);
+            [
+                _copyToWorkspaceMenuItem,
+                _moveToWorkspaceMenuItem,
+                new ToolStripSeparator(),
+                _backupToOssMenuItem
+            ]);
         _assetContextMenu.Opening += (_, args) =>
         {
             var selected = GetSelectedAssets();
@@ -25,10 +33,13 @@ public sealed partial class MainForm
             args.Cancel = selected.Count == 0;
             _copyToWorkspaceMenuItem.Enabled = canOperate;
             _moveToWorkspaceMenuItem.Enabled = canOperate;
+            _backupToOssMenuItem.Enabled = canOperate;
             _copyToWorkspaceMenuItem.Text =
                 $"复制到 CDSI 工作目录 ({selected.Count:N0})";
             _moveToWorkspaceMenuItem.Text =
                 $"移动到 CDSI 工作目录 ({selected.Count:N0})";
+            _backupToOssMenuItem.Text =
+                $"备份到 OSS ({selected.Count:N0})";
         };
         _assetGrid.ContextMenuStrip = _assetContextMenu;
         _assetGrid.CellMouseDown += AssetGrid_CellMouseDown;

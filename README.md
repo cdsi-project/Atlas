@@ -1,8 +1,8 @@
 # CDSI Atlas
 
-CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己的 Windows 设备上扫描所选目录，建立独立于文件路径的资产与位置记录。扫描和分析不会修改源文件；复制或移动只会在用户明确选择文件并确认后执行。
+CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己的 Windows 设备上扫描所选目录，建立独立于文件路径的资产与位置记录。扫描和分析不会修改源文件；复制、移动或 OSS 备份只会在用户明确选择文件并确认后执行。
 
-当前仓库实现 Milestone 0.7：带受管工作目录、多扫描目录、显式受管资产操作、OSS 安全配置、精确重复检测、基础媒体理解和本地文本理解的资产索引闭环。
+当前仓库实现 Milestone 0.8：带受管工作目录、多扫描目录、显式受管资产操作、可验证 OSS 备份、精确重复检测、基础媒体理解和本地文本理解的资产索引闭环。
 
 ## 当前能力
 
@@ -21,6 +21,12 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 - 在设置页添加、编辑和删除多个阿里云 OSS 配置
 - 按阿里云规则校验 Bucket，并规范化 Endpoint、地域和 HTTPS 设置
 - SQLite 只保存非敏感存储配置；AccessKey Secret 保存到 Windows 凭据管理器
+- 在资产列表中显式单选或多选文件，选择一个已配置目标后备份到阿里云 OSS
+- 远端对象使用 <code>storage_profile_id + assets/&lt;AssetId&gt;/original.&lt;ext&gt;</code> 标识，不把永久 URL 当作资产身份
+- 上传以只读流处理本地文件；大文件使用分片上传，并将 UploadId 和已完成分片保存到 SQLite 以支持重试续传
+- 上传前拒绝覆盖同一对象键下内容不同的对象；相同大小和 SHA-256 的对象可幂等复用
+- 上传完成后通过 HEAD 校验对象存在性、大小和 <code>cdsi-sha256</code> 元数据，再登记为健康远端位置
+- 资产列表显示已通过校验的 OSS 备份状态；上传任务、文件结果和失败原因写入本地审计
 - 编辑配置时不读取或回显已有 Secret，留空会保留原凭据
 - 删除 OSS 配置只删除本机记录和凭据，不删除 Bucket 或云端对象
 - 配置 OSS 不会触发连接、上传或同步
@@ -73,8 +79,8 @@ CDSI.Agent.Infrastructure
 ~~~
 
 - <code>CDSI.Agent.Core</code>：领域模型与抽象，不依赖 WinForms、SQLite 或云 SDK。
-- <code>CDSI.Agent.Application</code>：扫描、元数据、文本和哈希工作流编排。
-- <code>CDSI.Agent.Infrastructure</code>：文件系统扫描、媒体/文本提取、SQLite 和 Windows 凭据管理器适配器。
+- <code>CDSI.Agent.Application</code>：扫描、元数据、文本、哈希、受管文件操作和对象存储备份工作流编排。
+- <code>CDSI.Agent.Infrastructure</code>：文件系统扫描、媒体/文本提取、SQLite、Windows 凭据管理器和阿里云 OSS 适配器。
 - <code>CDSI.Agent.WinForms</code>：桌面界面与依赖组合根。
 - <code>tests</code>：领域、基础设施和端到端临时目录测试。
 
@@ -117,16 +123,16 @@ dotnet run --project CDSI.Agent.WinForms/CDSI.Agent.WinForms.csproj
 
 工作目录由用户首次启动时选择，推荐路径为 <code>D:\cdsi_workspace</code>；如果 D 盘不可用，则使用用户目录下的 <code>cdsi_workspace</code>。切换工作目录不会搬移或删除旧内容。
 
-扫描、索引、哈希和提取只读取扫描目标。用户可在资产列表中显式复制或移动选中的文件到 CDSI 工作目录；移动操作会先复制并校验，失败时保留源文件。提取文本、文件操作审计和非敏感 OSS 配置保存在本机 SQLite 中；AccessKey Secret 保存在当前 Windows 用户的凭据管理器中。配置 OSS 不会自动上传。测试只使用 <code>%TEMP%\cdsi-agent-tests\&lt;随机目录&gt;</code>，不会扫描或清理真实用户目录。
+扫描、索引、哈希和提取只读取扫描目标。用户可在资产列表中显式复制或移动选中的文件到 CDSI 工作目录，或在确认目标 Bucket 和源文件清单后备份到 OSS；这些操作失败时保留源文件。提取文本、文件操作审计、上传断点和非敏感 OSS 配置保存在本机 SQLite 中；AccessKey Secret 保存在当前 Windows 用户的凭据管理器中。仅配置 OSS 或执行扫描不会自动上传。测试只使用 <code>%TEMP%\cdsi-agent-tests\&lt;随机目录&gt;</code>，不会扫描或清理真实用户目录，也不会连接真实 OSS。
 
 ## 下一阶段
 
-下一阶段将实现对象存储适配器与验证闭环：
+下一阶段将增强对象存储的身份与运维能力：
 
 - OSS 连接测试和最小权限检查
 - 优先接入 CDSI Server 下发的 STS 临时凭证
-- 显式上传任务、分片重试和断点续传
-- 上传完成后的对象存在性、大小和校验和验证
-- 外部扫描资产默认不具备自动上传资格
+- 上传队列、并发数、带宽限制和后台优先级
+- 定期重新验证、缺失提醒和显式修复任务
+- S3 兼容存储适配器，并继续保持外部扫描资产不自动上传
 
 后续再扩展 PDF/Office 文本提取和 Inbox 复核。AI 分类、自动文件整理和任何静默上传仍不在当前阶段。

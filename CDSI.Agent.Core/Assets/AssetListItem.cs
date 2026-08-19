@@ -14,5 +14,6 @@ public sealed record AssetListItem(
     AssetLocationOwnership LocationOwnership,
     AssetLocationStatus LocationStatus,
     AssetStatus Status,
+    bool HasHealthyObjectStorageBackup,
     AssetMetadata? Metadata = null,
     AssetText? Text = null);

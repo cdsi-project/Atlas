@@ -10,6 +10,7 @@ using CDSI.Agent.Infrastructure.Fingerprints;
 using CDSI.Agent.Infrastructure.Metadata;
 using CDSI.Agent.Infrastructure.Persistence;
 using CDSI.Agent.Infrastructure.Security;
+using CDSI.Agent.Infrastructure.Storage;
 using CDSI.Agent.Infrastructure.Text;
 
 namespace CDSI.Agent.WinForms;
@@ -40,6 +41,12 @@ static class Program
         var storageService = new ObjectStorageProfileService(
             repository,
             new WindowsCredentialSecretStore());
+        var objectStorageBackupService = new ObjectStorageBackupService(
+            repository,
+            repository,
+            storageService,
+            fingerprintEngine,
+            [new AliyunOssStorageAdapter()]);
         var transferService = new ManagedAssetTransferService(
             repository,
             workspaceProvisioner,
@@ -68,6 +75,7 @@ static class Program
             workspaceService,
             scanRootService,
             storageService,
+            objectStorageBackupService,
             transferService,
             dataDirectory));
     }

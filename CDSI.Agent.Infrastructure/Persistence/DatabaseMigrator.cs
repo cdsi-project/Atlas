@@ -311,6 +311,91 @@ internal static class DatabaseMigrator
             await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
+
+        if (currentVersion < 7)
+        {
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await using var migrationCommand = connection.CreateCommand();
+            migrationCommand.Transaction = (SqliteTransaction)transaction;
+            migrationCommand.CommandText =
+                """
+                CREATE TABLE object_storage_locations (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    asset_id TEXT NOT NULL,
+                    storage_profile_id TEXT NOT NULL,
+                    object_key TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    size INTEGER NOT NULL,
+                    sha256 TEXT NULL,
+                    etag TEXT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    last_verified_at TEXT NULL,
+                    FOREIGN KEY (asset_id) REFERENCES assets(id),
+                    UNIQUE (storage_profile_id, object_key)
+                );
+
+                CREATE TABLE upload_jobs (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    storage_profile_id TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    started_at TEXT NOT NULL,
+                    finished_at TEXT NULL,
+                    total_items INTEGER NOT NULL,
+                    completed_items INTEGER NOT NULL,
+                    failed_items INTEGER NOT NULL,
+                    total_bytes INTEGER NOT NULL,
+                    uploaded_bytes INTEGER NOT NULL,
+                    error_message TEXT NULL
+                );
+
+                CREATE TABLE upload_items (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    job_id TEXT NOT NULL,
+                    asset_id TEXT NOT NULL,
+                    source_path TEXT NOT NULL,
+                    object_key TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    size INTEGER NOT NULL,
+                    uploaded_bytes INTEGER NOT NULL,
+                    etag TEXT NULL,
+                    error_message TEXT NULL,
+                    finished_at TEXT NULL,
+                    FOREIGN KEY (job_id) REFERENCES upload_jobs(id) ON DELETE CASCADE,
+                    FOREIGN KEY (asset_id) REFERENCES assets(id)
+                );
+
+                CREATE TABLE multipart_upload_sessions (
+                    storage_profile_id TEXT NOT NULL,
+                    object_key TEXT NOT NULL,
+                    asset_id TEXT NOT NULL,
+                    source_path TEXT NOT NULL,
+                    upload_id TEXT NOT NULL,
+                    part_size INTEGER NOT NULL,
+                    source_size INTEGER NOT NULL,
+                    source_modified_at TEXT NOT NULL,
+                    parts_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (storage_profile_id, object_key),
+                    FOREIGN KEY (asset_id) REFERENCES assets(id)
+                );
+
+                CREATE INDEX ix_object_storage_locations_asset_id
+                ON object_storage_locations(asset_id);
+                CREATE INDEX ix_upload_items_job_id
+                ON upload_items(job_id);
+                CREATE INDEX ix_multipart_upload_sessions_asset_id
+                ON multipart_upload_sessions(asset_id);
+
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (7, $applied_at);
+                """;
+            migrationCommand.Parameters.AddWithValue(
+                "$applied_at",
+                DateTimeOffset.UtcNow.ToString("O"));
+            await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     private static async Task<bool> TableExistsAsync(
