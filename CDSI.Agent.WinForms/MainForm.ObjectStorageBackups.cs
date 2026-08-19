@@ -80,10 +80,12 @@ public sealed partial class MainForm
 
         try
         {
-            var requests = selected.Select(asset =>
+            var requests = uniqueAssets.Select(asset =>
                 new ObjectStorageBackupRequest(
                     asset.AssetId,
-                    asset.Path)).ToArray();
+                    asset.Path,
+                    confirmation.SelectedObjectNames[asset.AssetId]))
+                .ToArray();
             var result = await _objectStorageBackupService.BackupAsync(
                 requests,
                 confirmation.SelectedProfileId,

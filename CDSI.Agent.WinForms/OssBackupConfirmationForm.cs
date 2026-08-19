@@ -3,10 +3,14 @@ using CDSI.Agent.Core.Assets;
 
 namespace CDSI.Agent.WinForms;
 
-internal sealed class OssBackupConfirmationForm : Form
+internal sealed partial class OssBackupConfirmationForm : Form
 {
+    private const string ObjectNameColumnName = "ObjectName";
     private readonly ComboBox _profileComboBox = new();
     private readonly Label _targetLabel = new();
+    private readonly DataGridView _assetsGrid = new();
+    private IReadOnlyDictionary<Guid, string> _selectedObjectNames =
+        new Dictionary<Guid, string>();
 
     public OssBackupConfirmationForm(
         IReadOnlyCollection<ConfiguredObjectStorageProfile> profiles,
@@ -17,6 +21,10 @@ internal sealed class OssBackupConfirmationForm : Form
         if (profiles.Count == 0)
         {
             throw new ArgumentException("至少需要一个可用的 OSS 配置。", nameof(profiles));
+        }
+        if (assets.Count == 0)
+        {
+            throw new ArgumentException("至少需要一个待备份资产。", nameof(assets));
         }
 
         Text = "确认备份到 OSS";
@@ -92,17 +100,8 @@ internal sealed class OssBackupConfirmationForm : Form
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 2);
 
-        var paths = new ListBox
-        {
-            Dock = DockStyle.Fill,
-            BorderStyle = BorderStyle.FixedSingle,
-            SelectionMode = SelectionMode.None,
-            HorizontalScrollbar = true,
-            IntegralHeight = false,
-            AccessibleName = "将备份的文件"
-        };
-        paths.Items.AddRange(assets.Select(asset => asset.Path).Cast<object>().ToArray());
-        layout.Controls.Add(paths, 0, 3);
+        ConfigureAssetGrid(assets);
+        layout.Controls.Add(_assetsGrid, 0, 3);
 
         var buttons = new FlowLayoutPanel
         {
@@ -114,13 +113,13 @@ internal sealed class OssBackupConfirmationForm : Form
         var confirmButton = new Button
         {
             Text = "确认备份",
-            DialogResult = DialogResult.OK,
             Size = new Size(104, 32),
             BackColor = Color.FromArgb(24, 121, 78),
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat
         };
         confirmButton.FlatAppearance.BorderSize = 0;
+        confirmButton.Click += ConfirmButton_Click;
         var cancelButton = new Button
         {
             Text = "取消",

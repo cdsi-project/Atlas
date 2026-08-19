@@ -21,8 +21,8 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 - 在设置页添加、编辑和删除多个阿里云 OSS 配置
 - 按阿里云规则校验 Bucket，并规范化 Endpoint、地域和 HTTPS 设置
 - SQLite 只保存非敏感存储配置；AccessKey Secret 保存到 Windows 凭据管理器
-- 在资产列表中显式单选或多选文件，选择一个已配置目标后备份到阿里云 OSS
-- 远端对象使用 <code>storage_profile_id + assets/&lt;AssetId&gt;/original.&lt;ext&gt;</code> 标识，不把永久 URL 当作资产身份
+- 在资产列表中显式单选或多选文件，在确认窗口逐项设置 OSS 文件名；默认与当前本地文件名一致
+- 远端对象使用 <code>storage_profile_id + assets/&lt;AssetId&gt;/&lt;OSS文件名&gt;</code> 标识，不把文件名或永久 URL 当作资产身份
 - 上传以只读流处理本地文件；大文件使用分片上传，并将 UploadId 和已完成分片保存到 SQLite 以支持重试续传
 - 上传前拒绝覆盖同一对象键下内容不同的对象；相同大小和 SHA-256 的对象可幂等复用
 - 上传完成后通过 HEAD 校验对象存在性、大小和 <code>cdsi-sha256</code> 元数据，再登记为健康远端位置

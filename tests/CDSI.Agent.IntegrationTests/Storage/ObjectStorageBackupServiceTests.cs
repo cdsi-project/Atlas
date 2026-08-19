@@ -30,10 +30,52 @@ public sealed class ObjectStorageBackupServiceTests
         Assert.True(File.Exists(fixture.SourcePath));
         Assert.Equal("source-content", await File.ReadAllTextAsync(fixture.SourcePath));
         Assert.Equal(UploadItemStatus.Completed, Assert.Single(audit!.Items).Status);
+        Assert.Equal(
+            $"assets/{fixture.AssetId:N}/source.txt",
+            Assert.Single(result.Items).ObjectKey);
         Assert.True(Assert.Single(assets).HasHealthyObjectStorageBackup);
         Assert.Equal(
             new FileInfo(fixture.SourcePath).Length,
             progress.Values.Max(item => item.NetworkTransferredBytes));
+    }
+
+    [Fact]
+    public async Task BackupAsync_UsesTheRequestedObjectNameAndKeepsTheLocalFile()
+    {
+        await using var fixture = await BackupFixture.CreateAsync("custom-name-content");
+
+        var result = await fixture.Service.BackupAsync(
+            [new ObjectStorageBackupRequest(
+                fixture.AssetId,
+                fixture.SourcePath,
+                "发布版-成片.txt")],
+            fixture.ProfileId);
+        var item = Assert.Single(result.Items);
+
+        Assert.Equal(UploadJobStatus.Completed, result.Status);
+        Assert.Equal(
+            $"assets/{fixture.AssetId:N}/发布版-成片.txt",
+            item.ObjectKey);
+        Assert.Equal("custom-name-content", await File.ReadAllTextAsync(fixture.SourcePath));
+    }
+
+    [Fact]
+    public async Task BackupAsync_WhenObjectNameContainsAPath_DoesNotUpload()
+    {
+        await using var fixture = await BackupFixture.CreateAsync("invalid-name-content");
+
+        var result = await fixture.Service.BackupAsync(
+            [new ObjectStorageBackupRequest(
+                fixture.AssetId,
+                fixture.SourcePath,
+                "folder/renamed.txt")],
+            fixture.ProfileId);
+        var item = Assert.Single(result.Items);
+
+        Assert.Equal(UploadJobStatus.Failed, result.Status);
+        Assert.Equal(0, fixture.Adapter.UploadCalls);
+        Assert.Contains("路径分隔符", item.ErrorMessage);
+        Assert.True(File.Exists(fixture.SourcePath));
     }
 
     [Fact]

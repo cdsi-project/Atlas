@@ -449,16 +449,22 @@ public sealed class ObjectStorageBackupService
             }
 
             var requestToUse = selectedRequest!;
-            var objectKey = BuildObjectKey(
+            var objectName = requestToUse.ObjectName ??
+                Path.GetFileName(source?.Path ?? requestToUse.SourcePath);
+            var hasValidObjectKey = ObjectStorageObjectKey.TryCreateForAsset(
                 requestToUse.AssetId,
-                source?.OriginalFilename ?? requestToUse.SourcePath);
+                objectName,
+                out var objectKey,
+                out var objectKeyError);
             result.Add(new ResolvedBackup(
                 requestToUse,
                 source,
                 objectKey,
                 source is null
                     ? "该位置不是当前设备上可用的已登记资产。"
-                    : null));
+                    : hasValidObjectKey
+                        ? null
+                        : objectKeyError));
         }
 
         return result;
@@ -568,18 +574,6 @@ public sealed class ObjectStorageBackupService
         }
 
         return value;
-    }
-
-    private static string BuildObjectKey(Guid assetId, string filename)
-    {
-        var extension = Path.GetExtension(filename);
-        if (extension.Length > 16 || extension.Any(character =>
-                character != '.' && !char.IsAsciiLetterOrDigit(character)))
-        {
-            extension = string.Empty;
-        }
-
-        return $"assets/{assetId:N}/original{extension.ToLowerInvariant()}";
     }
 
     private static void ReportProgress(
