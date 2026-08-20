@@ -1,3 +1,4 @@
+using System.Text;
 using CDSI.Agent.Infrastructure.OpenWeb;
 
 namespace CDSI.Agent.Infrastructure.Tests.OpenWeb;
@@ -36,6 +37,22 @@ public sealed class LocalOpenWebArticleContentReaderTests
             "<p>第一行<br />\n第二行</p>" + Environment.NewLine +
             "<p>&lt;unsafe&gt;</p>",
             content.Html);
+    }
+
+    [Fact]
+    public async Task ReadAsync_DecodesGb18030ForExplicitArticlePublishing()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        using var directory = new TestDirectory();
+        var path = Path.Combine(directory.Path, "article.txt");
+        await File.WriteAllBytesAsync(
+            path,
+            Encoding.GetEncoding(54936).GetBytes("中文文章正文"));
+        var reader = new LocalOpenWebArticleContentReader();
+
+        var content = await reader.ReadAsync(path);
+
+        Assert.Contains("中文文章正文", content.Html, StringComparison.Ordinal);
     }
 
     [Fact]

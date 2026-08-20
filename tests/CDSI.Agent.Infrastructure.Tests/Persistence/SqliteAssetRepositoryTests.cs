@@ -93,10 +93,11 @@ public sealed class SqliteAssetRepositoryTests
                 Path.Combine(directory.Path, $"asset-{index}.txt"),
                 $"asset-{index}.txt"))
             .ToArray();
+        var indexedAt = DateTimeOffset.Parse("2026-08-20T09:30:00+08:00");
         await repository.RegisterLocalFilesAsync(
             deviceId,
             files,
-            DateTimeOffset.UtcNow);
+            indexedAt);
 
         var totalCount = await repository.GetAssetListCountAsync();
         var firstPage = await repository.ListAssetsAsync(2, 0);
@@ -113,6 +114,9 @@ public sealed class SqliteAssetRepositoryTests
         Assert.Equal(
             ["asset-5.txt"],
             lastPage.Select(asset => asset.OriginalFilename));
+        Assert.All(
+            firstPage.Concat(secondPage).Concat(lastPage),
+            asset => Assert.Equal(indexedAt, asset.DiscoveredAt));
         Assert.Empty(await repository.ListAssetsAsync(2, 6));
 
         SqliteConnection.ClearAllPools();

@@ -4,7 +4,6 @@ using CDSI.Agent.Application.Metadata;
 using CDSI.Agent.Application.OpenWeb;
 using CDSI.Agent.Application.Scanning;
 using CDSI.Agent.Application.Storage;
-using CDSI.Agent.Application.Text;
 using CDSI.Agent.Application.Transfers;
 using CDSI.Agent.Application.Workspaces;
 using CDSI.Agent.Infrastructure.FileSystem;
@@ -14,7 +13,6 @@ using CDSI.Agent.Infrastructure.OpenWeb;
 using CDSI.Agent.Infrastructure.Persistence;
 using CDSI.Agent.Infrastructure.Security;
 using CDSI.Agent.Infrastructure.Storage;
-using CDSI.Agent.Infrastructure.Text;
 
 namespace CDSI.Agent.WinForms;
 
@@ -76,18 +74,10 @@ static class Program
                 new GenericMetadataExtractor()
             ],
             repository);
-        var textService = new TextExtractionApplicationService(
-            [
-                new MarkdownTextExtractor(),
-                new PlainTextExtractor(),
-                new GenericTextExtractor()
-            ],
-            repository);
         System.Windows.Forms.Application.Run(new MainForm(
             scanService,
             fingerprintService,
             metadataService,
-            textService,
             workspaceService,
             scanRootService,
             storageService,

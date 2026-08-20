@@ -32,6 +32,7 @@ public sealed class OssBackupConfirmationFormTests
             "video/mp4",
             42,
             now,
+            now,
             @"D:\素材\原始视频.mp4",
             AssetLocationOwnership.External,
             AssetLocationStatus.Available,

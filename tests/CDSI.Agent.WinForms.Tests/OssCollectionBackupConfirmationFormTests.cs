@@ -95,6 +95,7 @@ public sealed class OssCollectionBackupConfirmationFormTests
             "video/mp4",
             42,
             now,
+            now,
             path,
             AssetLocationOwnership.External,
             AssetLocationStatus.Available,

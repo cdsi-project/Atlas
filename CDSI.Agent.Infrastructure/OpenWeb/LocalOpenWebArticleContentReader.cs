@@ -2,8 +2,6 @@ using System.Net;
 using System.Text.RegularExpressions;
 using CDSI.Agent.Core.Abstractions;
 using CDSI.Agent.Core.OpenWeb;
-using CDSI.Agent.Core.Text;
-using CDSI.Agent.Infrastructure.Text;
 using Markdig;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
@@ -24,11 +22,8 @@ public sealed class LocalOpenWebArticleContentReader : IOpenWebArticleContentRea
             .UseAdvancedExtensions()
             .Build();
 
-    private static readonly TextExtractionOptions ReadOptions = new()
-    {
-        MaximumInputBytes = 4 * 1024 * 1024,
-        MaximumOutputCharacters = 2_000_000
-    };
+    private const int MaximumInputBytes = 4 * 1024 * 1024;
+    private const int MaximumOutputCharacters = 2_000_000;
 
     public bool Supports(string path)
     {
@@ -55,9 +50,10 @@ public sealed class LocalOpenWebArticleContentReader : IOpenWebArticleContentRea
 
         var expectedSize = source.Length;
         var expectedModifiedAt = source.LastWriteTimeUtc;
-        var decoded = await TextFileReader.ReadAsync(
+        var decoded = await LocalArticleTextFileReader.ReadAsync(
             source.FullName,
-            ReadOptions,
+            MaximumInputBytes,
+            MaximumOutputCharacters,
             cancellationToken);
         if (decoded.IsTruncated)
         {

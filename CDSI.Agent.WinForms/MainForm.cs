@@ -5,14 +5,12 @@ using CDSI.Agent.Application.OpenWeb;
 using CDSI.Agent.Application.Fingerprints;
 using CDSI.Agent.Application.Scanning;
 using CDSI.Agent.Application.Storage;
-using CDSI.Agent.Application.Text;
 using CDSI.Agent.Application.Transfers;
 using CDSI.Agent.Application.Workspaces;
 using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Fingerprints;
 using CDSI.Agent.Core.Metadata;
 using CDSI.Agent.Core.Scanning;
-using CDSI.Agent.Core.Text;
 using CDSI.Agent.Core.Transfers;
 
 namespace CDSI.Agent.WinForms;
@@ -30,7 +28,6 @@ public sealed partial class MainForm : Form
     private readonly Label _scopeLabel = new();
     private readonly FingerprintApplicationService _fingerprintService;
     private readonly MetadataExtractionApplicationService _metadataService;
-    private readonly TextExtractionApplicationService _textService;
     private readonly CheckBox _fullVerificationCheckBox = new();
     private readonly Button _settingsButton = new();
     private readonly Button _scanButton = new();
@@ -60,7 +57,6 @@ public sealed partial class MainForm : Form
         ScanApplicationService scanService,
         FingerprintApplicationService fingerprintService,
         MetadataExtractionApplicationService metadataService,
-        TextExtractionApplicationService textService,
         WorkspaceApplicationService workspaceService,
         ScanRootManagementService scanRootService,
         ObjectStorageProfileService storageService,
@@ -74,7 +70,6 @@ public sealed partial class MainForm : Form
         _scanService = scanService;
         _fingerprintService = fingerprintService;
         _metadataService = metadataService;
-        _textService = textService;
         _workspaceService = workspaceService;
         _scanRootService = scanRootService;
         _storageService = storageService;
@@ -467,22 +462,7 @@ public sealed partial class MainForm : Form
     {
         ConfigureGrid(_assetGrid);
         EnableAssetMultiSelection(_assetGrid);
-        _assetGrid.Columns.Add(CreateRowNumberColumn());
-        _assetGrid.Columns.Add(CreateAssetIdColumn());
-        _assetGrid.Columns.Add(CreateColumn("文件", 220, DataGridViewAutoSizeColumnMode.Fill, 24));
-        _assetGrid.Columns.Add(CreateColumn("类型", 125));
-        _assetGrid.Columns.Add(CreateFileSizeColumn());
-        _assetGrid.Columns.Add(CreateColumn("修改时间", 145));
-        _assetGrid.Columns.Add(CreateColumn("位置", 320, DataGridViewAutoSizeColumnMode.Fill, 42));
-        _assetGrid.Columns.Add(CreateColumn(
-            "媒体信息",
-            220,
-            DataGridViewAutoSizeColumnMode.Fill,
-            34,
-            minimumWidth: 220));
-        _assetGrid.Columns.Add(CreateColumn("文本", 100));
-        _assetGrid.Columns.Add(CreateObjectStorageStatusColumn());
-        _assetGrid.Columns.Add(CreateColumn("状态", 80));
+        ConfigureAssetGridColumns(_assetGrid);
         EnableFreeColumnResizing(_assetGrid);
         _assetGrid.Sorted += (_, _) => UpdateAssetRowNumbers(
             _assetGrid,
@@ -491,6 +471,33 @@ public sealed partial class MainForm : Form
                 _assetPageSize,
                 _assetPageIndex).FirstItem);
         ConfigureAssetContextMenu();
+    }
+
+    internal static void ConfigureAssetGridColumns(DataGridView grid)
+    {
+        ArgumentNullException.ThrowIfNull(grid);
+        grid.Columns.Add(CreateRowNumberColumn());
+        grid.Columns.Add(CreateAssetIdColumn());
+        grid.Columns.Add(CreateColumn("文件", 220, DataGridViewAutoSizeColumnMode.Fill, 24));
+        grid.Columns.Add(CreateColumn("类型", 125));
+        grid.Columns.Add(CreateFileSizeColumn());
+        grid.Columns.Add(CreateColumn("修改时间", 145));
+        var indexedAtColumn = CreateColumn("索引时间", 145);
+        indexedAtColumn.Name = "IndexedAt";
+        grid.Columns.Add(indexedAtColumn);
+        grid.Columns.Add(CreateColumn(
+            "位置",
+            320,
+            DataGridViewAutoSizeColumnMode.Fill,
+            42));
+        grid.Columns.Add(CreateColumn(
+            "媒体信息",
+            220,
+            DataGridViewAutoSizeColumnMode.Fill,
+            34,
+            minimumWidth: 220));
+        grid.Columns.Add(CreateObjectStorageStatusColumn());
+        grid.Columns.Add(CreateColumn("状态", 80));
     }
 
     internal static void EnableAssetMultiSelection(DataGridView grid)
@@ -743,7 +750,6 @@ public sealed partial class MainForm : Form
         var scanProgress = new Progress<ScanProgress>(UpdateScanProgress);
         var fingerprintProgress = new Progress<FingerprintProgress>(UpdateFingerprintProgress);
         var metadataProgress = new Progress<MetadataProgress>(UpdateMetadataProgress);
-        var textProgress = new Progress<TextProgress>(UpdateTextProgress);
 
         SetBusy(true);
         _progressBar.Style = ProgressBarStyle.Marquee;
@@ -787,23 +793,6 @@ public sealed partial class MainForm : Form
                 return;
             }
 
-            _progressBar.Value = 0;
-            _statusLabel.Text = "正在提取文本";
-
-            var textSummary = await Task.Run(
-                () => _textService.ProcessPendingAsync(
-                    textProgress,
-                    _scanCancellation.Token),
-                _scanCancellation.Token);
-
-            await RefreshAssetsAsync();
-            if (textSummary.Cancelled)
-            {
-                _statusLabel.Text =
-                    $"文本提取已取消，已完成 {textSummary.ExtractedFiles:N0} 个文件";
-                return;
-            }
-
             var mode = _fullVerificationCheckBox.Checked
                 ? FingerprintMode.Complete
                 : FingerprintMode.DuplicateCandidates;
@@ -826,7 +815,7 @@ public sealed partial class MainForm : Form
             await RefreshAssetsAsync();
             _statusLabel.Text = fingerprintSummary.Cancelled
                 ? $"哈希已取消，已完成 {fingerprintSummary.FingerprintedFiles:N0} 个文件"
-                : $"扫描完成，目录 {scanSummary.RootsScanned:N0}/{scanSummary.RootsConfigured:N0}，已索引 {scanSummary.FilesIndexed:N0} 个文件，元数据 {metadataSummary.ExtractedFiles:N0}，文本 {textSummary.ExtractedFiles:N0}，哈希 {fingerprintSummary.FingerprintedFiles:N0}";
+                : $"扫描完成，目录 {scanSummary.RootsScanned:N0}/{scanSummary.RootsConfigured:N0}，已索引 {scanSummary.FilesIndexed:N0} 个文件，元数据 {metadataSummary.ExtractedFiles:N0}，哈希 {fingerprintSummary.FingerprintedFiles:N0}";
         }
         catch (OperationCanceledException)
         {
@@ -861,20 +850,6 @@ public sealed partial class MainForm : Form
     {
         _progressLabel.Text =
             $"元数据 {progress.CompletedFiles:N0}/{progress.TotalFiles:N0}  ·  已提取 {progress.ExtractedFiles:N0}  ·  不支持 {progress.UnsupportedFiles:N0}  ·  错误 {progress.Errors:N0}";
-        _currentPathLabel.Text = progress.Message ?? progress.CurrentPath ?? string.Empty;
-
-        _progressBar.Value = progress.TotalFiles == 0
-            ? 0
-            : (int)Math.Clamp(
-                progress.CompletedFiles * 1_000d / progress.TotalFiles,
-                0d,
-                1_000d);
-    }
-
-    private void UpdateTextProgress(TextProgress progress)
-    {
-        _progressLabel.Text =
-            $"文本 {progress.CompletedFiles:N0}/{progress.TotalFiles:N0}  ·  已提取 {progress.ExtractedFiles:N0}  ·  非文本 {progress.UnsupportedFiles:N0}  ·  错误 {progress.Errors:N0}";
         _currentPathLabel.Text = progress.Message ?? progress.CurrentPath ?? string.Empty;
 
         _progressBar.Value = progress.TotalFiles == 0
@@ -945,9 +920,9 @@ public sealed partial class MainForm : Form
                 asset.MimeType ?? "未知",
                 asset.Size,
                 asset.ModifiedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+                asset.DiscoveredAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
                 asset.Path,
                 FormatMetadata(asset.Metadata),
-                FormatTextStatus(asset.Text),
                 asset.HasHealthyObjectStorageBackup ? "已备份" : "未备份",
                 FormatStatus(asset));
             _assetGrid.Rows[rowIndex].Tag = asset;
@@ -1015,51 +990,11 @@ public sealed partial class MainForm : Form
             return;
         }
 
-        _assetDetailTitleLabel.Text =
-            asset.Text?.Content?.Title ?? asset.OriginalFilename;
+        _assetDetailTitleLabel.Text = asset.OriginalFilename;
         _assetDetailSummaryLabel.Text = string.Join(
             Environment.NewLine,
-            $"{asset.MimeType ?? "未知类型"} · {FormatFileSize(asset.Size)} · {asset.ModifiedAt.ToLocalTime():yyyy-MM-dd HH:mm}",
-            asset.Path,
-            FormatTextDetails(asset.Text));
-    }
-
-    private static string FormatTextStatus(AssetText? text)
-    {
-        if (text is null)
-        {
-            return "待提取";
-        }
-
-        return text.Status switch
-        {
-            TextExtractionStatus.Extracted when text.Content?.IsTruncated == true =>
-                "已提取（节选）",
-            TextExtractionStatus.Extracted => "已提取",
-            TextExtractionStatus.Unsupported => "非文本",
-            TextExtractionStatus.Error => "提取失败",
-            _ => text.Status.ToString()
-        };
-    }
-
-    private static string FormatTextDetails(AssetText? text)
-    {
-        if (text?.Content is not { } content)
-        {
-            return FormatTextStatus(text);
-        }
-
-        var parts = new List<string>
-        {
-            FormatTextStatus(text),
-            content.EncodingName
-        };
-        if (content.Headings.Length > 0)
-        {
-            parts.Add($"{content.Headings.Length:N0} 个标题");
-        }
-
-        return string.Join(" · ", parts);
+            $"{asset.MimeType ?? "未知类型"} · {FormatFileSize(asset.Size)} · 修改 {asset.ModifiedAt.ToLocalTime():yyyy-MM-dd HH:mm} · 索引 {asset.DiscoveredAt.ToLocalTime():yyyy-MM-dd HH:mm}",
+            asset.Path);
     }
     private void SetBusy(bool busy, bool allowCancel = true)
     {

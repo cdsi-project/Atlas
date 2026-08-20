@@ -1,5 +1,4 @@
 using CDSI.Agent.Core.Metadata;
-using CDSI.Agent.Core.Text;
 
 namespace CDSI.Agent.Core.Assets;
 
@@ -10,10 +9,10 @@ public sealed record AssetListItem(
     string? MimeType,
     long Size,
     DateTimeOffset ModifiedAt,
+    DateTimeOffset DiscoveredAt,
     string Path,
     AssetLocationOwnership LocationOwnership,
     AssetLocationStatus LocationStatus,
     AssetStatus Status,
     bool HasHealthyObjectStorageBackup,
-    AssetMetadata? Metadata = null,
-    AssetText? Text = null);
+    AssetMetadata? Metadata = null);

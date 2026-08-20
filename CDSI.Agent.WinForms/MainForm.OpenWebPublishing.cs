@@ -30,11 +30,7 @@ public sealed partial class MainForm
             return;
         }
 
-        var defaultTitle = asset.Text?.Content?.Title;
-        if (string.IsNullOrWhiteSpace(defaultTitle))
-        {
-            defaultTitle = Path.GetFileNameWithoutExtension(asset.OriginalFilename);
-        }
+        var defaultTitle = Path.GetFileNameWithoutExtension(asset.OriginalFilename);
 
         using var confirmation = new OpenWebArticlePublishForm(
             defaultTitle,

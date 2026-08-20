@@ -2,7 +2,6 @@ using CDSI.Agent.Core.Abstractions;
 using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Collections;
 using CDSI.Agent.Core.Metadata;
-using CDSI.Agent.Core.Text;
 
 namespace CDSI.Agent.Infrastructure.Persistence;
 
@@ -201,6 +200,7 @@ public sealed partial class SqliteAssetRepository : IAssetCollectionRepository
                 a.mime_type,
                 a.size,
                 a.modified_at,
+                a.discovered_at,
                 l.path,
                 l.ownership,
                 l.status,
@@ -219,18 +219,6 @@ public sealed partial class SqliteAssetRepository : IAssetCollectionRepository
                 m.metadata_json,
                 m.error_message,
                 m.extracted_at,
-                t.extractor_name,
-                t.pipeline_version,
-                t.status,
-                t.source_size,
-                t.source_modified_at,
-                t.title,
-                t.plain_text,
-                t.headings_json,
-                t.encoding_name,
-                t.is_truncated,
-                t.error_message,
-                t.extracted_at,
                 ci.added_at
             FROM asset_collection_items ci
             INNER JOIN assets a ON a.id = ci.asset_id
@@ -253,11 +241,6 @@ public sealed partial class SqliteAssetRepository : IAssetCollectionRepository
                AND m.pipeline_version = $metadata_pipeline_version
                AND m.source_size = a.size
                AND m.source_modified_at = a.modified_at
-            LEFT JOIN asset_text t
-                ON t.asset_id = a.id
-               AND t.pipeline_version = $text_pipeline_version
-               AND t.source_size = a.size
-               AND t.source_modified_at = a.modified_at
             WHERE ci.collection_id = $collection_id
             ORDER BY ci.added_at, a.original_filename;
             """;
@@ -265,7 +248,6 @@ public sealed partial class SqliteAssetRepository : IAssetCollectionRepository
         command.Parameters.AddWithValue(
             "$metadata_pipeline_version",
             MetadataPipeline.CurrentVersion);
-        command.Parameters.AddWithValue("$text_pipeline_version", TextPipeline.CurrentVersion);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -278,17 +260,17 @@ public sealed partial class SqliteAssetRepository : IAssetCollectionRepository
                 reader.IsDBNull(3) ? null : reader.GetString(3),
                 reader.GetInt64(4),
                 ParseTimestamp(reader.GetString(5)),
-                reader.GetString(6),
-                Enum.Parse<AssetLocationOwnership>(reader.GetString(7)),
-                Enum.Parse<AssetLocationStatus>(reader.GetString(8)),
-                Enum.Parse<AssetStatus>(reader.GetString(9)),
-                reader.GetInt64(10) != 0,
-                ReadMetadata(reader, assetId, 11),
-                ReadText(reader, assetId, 19));
+                ParseTimestamp(reader.GetString(6)),
+                reader.GetString(7),
+                Enum.Parse<AssetLocationOwnership>(reader.GetString(8)),
+                Enum.Parse<AssetLocationStatus>(reader.GetString(9)),
+                Enum.Parse<AssetStatus>(reader.GetString(10)),
+                reader.GetInt64(11) != 0,
+                ReadMetadata(reader, assetId, 12));
             members.Add(new AssetCollectionMember(
                 collectionId,
                 asset,
-                ParseTimestamp(reader.GetString(31))));
+                ParseTimestamp(reader.GetString(20))));
         }
 
         return members;

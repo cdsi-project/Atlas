@@ -1,27 +1,34 @@
 using System.Text;
-using CDSI.Agent.Core.Text;
 
-namespace CDSI.Agent.Infrastructure.Text;
+namespace CDSI.Agent.Infrastructure.OpenWeb;
 
-internal static class TextFileReader
+internal static class LocalArticleTextFileReader
 {
     private static readonly Encoding StrictUtf8 = new UTF8Encoding(
         encoderShouldEmitUTF8Identifier: false,
         throwOnInvalidBytes: true);
 
-    static TextFileReader()
+    static LocalArticleTextFileReader()
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
     }
 
-    public static async Task<DecodedText> ReadAsync(
+    public static async Task<LocalArticleText> ReadAsync(
         string path,
-        TextExtractionOptions options,
+        int maximumInputBytes,
+        int maximumOutputCharacters,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        ArgumentNullException.ThrowIfNull(options);
-        options.Validate();
+        if (maximumInputBytes < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maximumInputBytes));
+        }
+
+        if (maximumOutputCharacters < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maximumOutputCharacters));
+        }
 
         await using var stream = new FileStream(
             path,
@@ -30,7 +37,7 @@ internal static class TextFileReader
             FileShare.Read,
             bufferSize: 64 * 1024,
             FileOptions.Asynchronous | FileOptions.SequentialScan);
-        var bytesToRead = (int)Math.Min(stream.Length, options.MaximumInputBytes);
+        var bytesToRead = (int)Math.Min(stream.Length, maximumInputBytes);
         var bytes = GC.AllocateUninitializedArray<byte>(bytesToRead);
         var offset = 0;
 
@@ -55,19 +62,18 @@ internal static class TextFileReader
         var inputTruncated = stream.Length > offset;
         var decoded = Decode(bytes, inputTruncated);
         var normalized = NormalizeLineEndings(decoded.Text);
-        var outputTruncated = normalized.Length > options.MaximumOutputCharacters;
+        var outputTruncated = normalized.Length > maximumOutputCharacters;
         if (outputTruncated)
         {
-            normalized = normalized[..options.MaximumOutputCharacters];
+            normalized = normalized[..maximumOutputCharacters];
         }
 
-        return new DecodedText(
+        return new LocalArticleText(
             normalized.Trim(),
-            decoded.EncodingName,
             inputTruncated || outputTruncated);
     }
 
-    private static DecodedText Decode(byte[] bytes, bool inputTruncated)
+    private static DecodedArticleText Decode(byte[] bytes, bool inputTruncated)
     {
         var span = bytes.AsSpan();
 
@@ -77,7 +83,6 @@ internal static class TextFileReader
                 span[4..],
                 new UTF32Encoding(true, false, true),
                 new UTF32Encoding(true, false, false),
-                "UTF-32 BE",
                 inputTruncated);
         }
 
@@ -87,7 +92,6 @@ internal static class TextFileReader
                 span[4..],
                 new UTF32Encoding(false, false, true),
                 new UTF32Encoding(false, false, false),
-                "UTF-32 LE",
                 inputTruncated);
         }
 
@@ -97,7 +101,6 @@ internal static class TextFileReader
                 span[3..],
                 StrictUtf8,
                 new UTF8Encoding(false, false),
-                "UTF-8",
                 inputTruncated);
         }
 
@@ -107,7 +110,6 @@ internal static class TextFileReader
                 span[2..],
                 new UnicodeEncoding(true, false, true),
                 new UnicodeEncoding(true, false, false),
-                "UTF-16 BE",
                 inputTruncated);
         }
 
@@ -117,13 +119,12 @@ internal static class TextFileReader
                 span[2..],
                 new UnicodeEncoding(false, false, true),
                 new UnicodeEncoding(false, false, false),
-                "UTF-16 LE",
                 inputTruncated);
         }
 
         if (TryDecode(StrictUtf8, span, inputTruncated, out var utf8))
         {
-            return new DecodedText(utf8, "UTF-8", inputTruncated);
+            return new DecodedArticleText(utf8, inputTruncated);
         }
 
         var strictGb18030 = Encoding.GetEncoding(
@@ -132,33 +133,29 @@ internal static class TextFileReader
             DecoderFallback.ExceptionFallback);
         if (TryDecode(strictGb18030, span, inputTruncated, out var gb18030))
         {
-            return new DecodedText(gb18030, "GB18030", inputTruncated);
+            return new DecodedArticleText(gb18030, inputTruncated);
         }
 
-        var windows1252 = Encoding.GetEncoding(1252);
-        return new DecodedText(
-            windows1252.GetString(span),
-            "Windows-1252",
+        return new DecodedArticleText(
+            Encoding.GetEncoding(1252).GetString(span),
             inputTruncated);
     }
 
-    private static DecodedText DecodeKnownEncoding(
+    private static DecodedArticleText DecodeKnownEncoding(
         ReadOnlySpan<byte> bytes,
         Encoding strictEncoding,
         Encoding lenientEncoding,
-        string name,
         bool inputTruncated)
     {
         try
         {
-            return new DecodedText(
+            return new DecodedArticleText(
                 strictEncoding.GetString(bytes),
-                name,
                 inputTruncated);
         }
         catch (DecoderFallbackException)
         {
-            return new DecodedText(lenientEncoding.GetString(bytes), name, true);
+            return new DecodedArticleText(lenientEncoding.GetString(bytes), true);
         }
     }
 
@@ -202,9 +199,8 @@ internal static class TextFileReader
             .Replace("\r\n", "\n", StringComparison.Ordinal)
             .Replace('\r', '\n');
     }
+
+    private sealed record DecodedArticleText(string Text, bool IsTruncated);
 }
 
-internal sealed record DecodedText(
-    string Text,
-    string EncodingName,
-    bool IsTruncated);
+internal sealed record LocalArticleText(string Text, bool IsTruncated);

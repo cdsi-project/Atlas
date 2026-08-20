@@ -369,6 +369,22 @@ public sealed class MainFormLayoutTests
     }
 
     [Fact]
+    public void AssetGridColumns_IncludeIndexTimeAndExcludeExtractedText()
+    {
+        using var grid = new DataGridView();
+
+        MainForm.ConfigureAssetGridColumns(grid);
+
+        var headers = grid.Columns
+            .Cast<DataGridViewColumn>()
+            .Select(column => column.HeaderText)
+            .ToArray();
+        Assert.Contains("索引时间", headers);
+        Assert.DoesNotContain("文本", headers);
+        Assert.Equal("IndexedAt", grid.Columns["IndexedAt"]?.Name);
+    }
+
+    [Fact]
     public void RowNumberColumn_UsesTheVisibleOrderAndGlobalPageOffset()
     {
         using var grid = new DataGridView
