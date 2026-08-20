@@ -27,15 +27,8 @@ public sealed partial class MainForm : Form
     private readonly ObjectStorageBackupService _objectStorageBackupService;
     private readonly ObjectStorageRestoreService _objectStorageRestoreService;
     private readonly ManagedAssetTransferService _transferService;
-    private readonly Label _scopeLabel = new();
     private readonly FingerprintApplicationService _fingerprintService;
     private readonly MetadataExtractionApplicationService _metadataService;
-    private readonly Button _settingsButton = new();
-    private readonly Button _scanButton = new();
-    private readonly Button _scanOptionsButton = new();
-    private readonly ContextMenuStrip _scanOptionsMenu = new();
-    private readonly Button _taskCenterButton = new();
-    private readonly Button _cancelButton = new();
     private readonly ProgressBar _progressBar = new();
     private readonly Label _progressLabel = new();
     private readonly Label _currentPathLabel = new();
@@ -58,6 +51,7 @@ public sealed partial class MainForm : Form
     private readonly TabControl _mainTabControl = new();
     private readonly string _dataDirectory;
     private CancellationTokenSource? _scanCancellation;
+    private bool _canCancelCurrentTask;
 
     public MainForm(
         ScanApplicationService scanService,
@@ -98,8 +92,6 @@ public sealed partial class MainForm : Form
         {
             _scanCancellation?.Cancel();
             StopLocalVolumeMonitoring();
-            _mainToolTip.Dispose();
-            _scanOptionsMenu.Dispose();
         };
     }
 
@@ -121,7 +113,7 @@ public sealed partial class MainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 5,
+            RowCount = 4,
             Padding = new Padding(0),
             BackColor = BackColor
         };
@@ -162,47 +154,6 @@ public sealed partial class MainForm : Form
             AccessibleName = "应用版本"
         });
         mainLayout.Controls.Add(header, 0, 1);
-
-        var commandPanel = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 5,
-            Padding = new Padding(28, 14, 28, 10),
-            BackColor = Color.White
-        };
-        commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 104));
-        commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
-        commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
-        commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 84));
-
-        _scopeLabel.Dock = DockStyle.Fill;
-        _scopeLabel.Margin = new Padding(0, 0, 10, 0);
-        _scopeLabel.Text = "正在读取工作目录和扫描目录";
-        _scopeLabel.TextAlign = ContentAlignment.MiddleLeft;
-        _scopeLabel.AutoEllipsis = true;
-        _scopeLabel.ForeColor = Color.FromArgb(52, 61, 69);
-        _scopeLabel.AccessibleName = "当前扫描范围";
-
-        ConfigureCommandButton(_settingsButton, "设置", Color.FromArgb(236, 239, 242), Color.FromArgb(31, 37, 43));
-        ConfigureCommandButton(_scanButton, "开始扫描", Color.FromArgb(24, 121, 78), Color.White);
-        ConfigureCommandButton(_taskCenterButton, "任务中心", Color.FromArgb(236, 239, 242), Color.FromArgb(31, 37, 43));
-        var scanCommand = ConfigureScanCommand();
-
-        ConfigureCommandButton(_cancelButton, "取消", Color.FromArgb(236, 239, 242), Color.FromArgb(137, 49, 49));
-        _cancelButton.Enabled = false;
-
-        _settingsButton.Click += SettingsButton_Click;
-        _scanButton.Click += ScanButton_Click;
-        _taskCenterButton.Click += (_, _) => ShowTaskCenter();
-        _cancelButton.Click += (_, _) => _scanCancellation?.Cancel();
-
-        commandPanel.Controls.Add(_scopeLabel, 0, 0);
-        commandPanel.Controls.Add(_settingsButton, 1, 0);
-        commandPanel.Controls.Add(_taskCenterButton, 2, 0);
-        commandPanel.Controls.Add(scanCommand, 3, 0);
-        commandPanel.Controls.Add(_cancelButton, 4, 0);
-        mainLayout.Controls.Add(commandPanel, 0, 2);
 
         var progressPanel = new TableLayoutPanel
         {
@@ -327,11 +278,10 @@ public sealed partial class MainForm : Form
         mainLayout.RowStyles.Clear();
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        mainLayout.Controls.Add(content, 0, 3);
-        mainLayout.Controls.Add(progress, 0, 4);
+        mainLayout.Controls.Add(content, 0, 2);
+        mainLayout.Controls.Add(progress, 0, 3);
     }
 
     internal static void ConfigureMainTabs(
@@ -348,7 +298,7 @@ public sealed partial class MainForm : Form
 
     private void MainForm_KeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.KeyCode != Keys.Escape || !_cancelButton.Enabled)
+        if (e.KeyCode != Keys.Escape || !_canCancelCurrentTask)
         {
             return;
         }
@@ -356,22 +306,6 @@ public sealed partial class MainForm : Form
         _scanCancellation?.Cancel();
         e.Handled = true;
         e.SuppressKeyPress = true;
-    }
-
-    private static void ConfigureCommandButton(
-        Button button,
-        string text,
-        Color background,
-        Color foreground)
-    {
-        button.Dock = DockStyle.Fill;
-        button.Margin = new Padding(4, 0, 4, 0);
-        button.Text = text;
-        button.BackColor = background;
-        button.ForeColor = foreground;
-        button.FlatStyle = FlatStyle.Flat;
-        button.FlatAppearance.BorderSize = 0;
-        button.Cursor = Cursors.Hand;
     }
 
     internal static TableLayoutPanel CreateStatisticsPanel(
@@ -790,7 +724,6 @@ public sealed partial class MainForm : Form
 
             var volumeResult = await _volumeReconciliationService.ReconcileAsync();
             EnableLocalVolumeMonitoring();
-            await RefreshScanScopeAsync();
             await RefreshAssetsAsync();
             _statusLabel.Text = volumeResult.HasChanges
                 ? FormatVolumeReconciliationStatus(volumeResult)
@@ -807,11 +740,6 @@ public sealed partial class MainForm : Form
         }
     }
 
-    private async void SettingsButton_Click(object? sender, EventArgs e)
-    {
-        await OpenSettingsAsync();
-    }
-
     private async Task OpenSettingsAsync()
     {
         using var settingsForm = new SettingsForm(
@@ -821,7 +749,6 @@ public sealed partial class MainForm : Form
             _openWebSettingsService);
         var settingsResult = settingsForm.ShowDialog(this);
         await _volumeReconciliationService.ReconcileAsync();
-        await RefreshScanScopeAsync();
         if (settingsResult == DialogResult.OK &&
             settingsForm.InitialScanRootIds.Count > 0)
         {
@@ -830,30 +757,6 @@ public sealed partial class MainForm : Form
                 isInitialScan: true,
                 fingerprintMode: FingerprintMode.DuplicateCandidates);
         }
-    }
-
-    private async Task RefreshScanScopeAsync()
-    {
-        var workspaceTask = _workspaceService.GetAsync();
-        var rootsTask = _scanRootService.ListAllAsync();
-        await Task.WhenAll(workspaceTask, rootsTask);
-
-        var workspace = await workspaceTask;
-        var roots = await rootsTask;
-        var enabledRoots = roots.Count(root => root.Enabled);
-        var externalRoots = roots.Count(root => root.Mode == ScanRootMode.Readonly);
-        var offlineRoots = roots.Count(root => root.Status == ScanRootStatus.Offline);
-        var offlineText = offlineRoots > 0
-            ? $" · 离线 {offlineRoots:N0}"
-            : string.Empty;
-        _scopeLabel.Text = workspace is null
-            ? $"未配置工作目录 · 外部目录 {externalRoots:N0}{offlineText}"
-            : $"工作目录: {workspace.Path} · 已启用 {enabledRoots:N0} · 外部目录 {externalRoots:N0}{offlineText}";
-    }
-
-    private async void ScanButton_Click(object? sender, EventArgs e)
-    {
-        await StartConfiguredScanAsync(FingerprintMode.DuplicateCandidates);
     }
 
     private async Task StartConfiguredScanAsync(FingerprintMode fingerprintMode)
@@ -912,7 +815,6 @@ public sealed partial class MainForm : Form
                 _scanCancellation.Token);
 
             await RefreshAssetsAsync();
-            await RefreshScanScopeAsync();
             if (scanSummary.Cancelled)
             {
                 _statusLabel.Text = isInitialScan
@@ -1184,11 +1086,7 @@ public sealed partial class MainForm : Form
     private void SetBusy(bool busy, bool allowCancel = true)
     {
         _isBusy = busy;
-        _scopeLabel.Enabled = !busy;
-        _settingsButton.Enabled = !busy;
-        _scanButton.Enabled = !busy;
-        _scanOptionsButton.Enabled = !busy;
-        _cancelButton.Enabled = busy && allowCancel;
+        _canCancelCurrentTask = ShouldAllowTaskCancellation(busy, allowCancel);
         _assetGrid.Enabled = !busy;
         _assetContextMenu.Enabled = !busy;
         UpdateAssetPaginationControls(_assetTotalItems);
@@ -1201,6 +1099,11 @@ public sealed partial class MainForm : Form
         UpdateAssetFilterControlState();
         UpdateMainMenuState();
         UseWaitCursor = busy && !allowCancel;
+    }
+
+    internal static bool ShouldAllowTaskCancellation(bool busy, bool allowCancel)
+    {
+        return busy && allowCancel;
     }
 
     private static string FormatStatus(AssetListItem asset)

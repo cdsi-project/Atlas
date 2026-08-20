@@ -8,7 +8,6 @@ namespace CDSI.Agent.WinForms;
 public sealed partial class MainForm
 {
     private readonly MenuStrip _mainMenuStrip = new();
-    private readonly ToolTip _mainToolTip = new();
     private readonly ToolStripMenuItem _startStandardScanMenuItem = new();
     private readonly ToolStripMenuItem _startFullScanMenuItem = new();
     private readonly ToolStripMenuItem _cancelScanMenuItem = new();
@@ -238,47 +237,6 @@ public sealed partial class MainForm
         return item;
     }
 
-    private Control ConfigureScanCommand()
-    {
-        var panel = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 1,
-            Margin = new Padding(4, 0, 4, 0),
-            Padding = Padding.Empty,
-            BackColor = Color.White
-        };
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 30));
-
-        _scanButton.Margin = Padding.Empty;
-        _scanOptionsButton.Dock = DockStyle.Fill;
-        _scanOptionsButton.Margin = new Padding(1, 0, 0, 0);
-        _scanOptionsButton.Text = "▼";
-        _scanOptionsButton.BackColor = Color.FromArgb(20, 105, 68);
-        _scanOptionsButton.ForeColor = Color.White;
-        _scanOptionsButton.FlatStyle = FlatStyle.Flat;
-        _scanOptionsButton.FlatAppearance.BorderSize = 0;
-        _scanOptionsButton.Cursor = Cursors.Hand;
-        _scanOptionsButton.AccessibleName = "扫描选项";
-        _mainToolTip.SetToolTip(_scanOptionsButton, "选择扫描方式");
-        _scanOptionsButton.Click += (_, _) => _scanOptionsMenu.Show(
-            _scanOptionsButton,
-            new Point(0, _scanOptionsButton.Height));
-
-        var standardItem = new ToolStripMenuItem("常规扫描");
-        standardItem.Click += async (_, _) =>
-            await StartConfiguredScanAsync(FingerprintMode.DuplicateCandidates);
-        var completeItem = new ToolStripMenuItem("完整校验扫描");
-        completeItem.Click += async (_, _) =>
-            await StartConfiguredScanAsync(FingerprintMode.Complete);
-        _scanOptionsMenu.Items.AddRange([standardItem, completeItem]);
-        panel.Controls.Add(_scanButton, 0, 0);
-        panel.Controls.Add(_scanOptionsButton, 1, 0);
-        return panel;
-    }
-
     private async Task OpenWorkspaceDirectoryAsync()
     {
         try
@@ -381,7 +339,7 @@ public sealed partial class MainForm
             _currentPathLabel.Text ?? string.Empty,
             progressPercent,
             _progressBar.Style == ProgressBarStyle.Marquee,
-            _cancelButton.Enabled,
+            _canCancelCurrentTask,
             _databaseStatusLabel.Text ?? string.Empty);
     }
 
@@ -389,7 +347,7 @@ public sealed partial class MainForm
     {
         _startStandardScanMenuItem.Enabled = !_isBusy;
         _startFullScanMenuItem.Enabled = !_isBusy;
-        _cancelScanMenuItem.Enabled = _isBusy && _cancelButton.Enabled;
+        _cancelScanMenuItem.Enabled = _canCancelCurrentTask;
         _refreshAssetsMenuItem.Enabled = !_isBusy;
         _fileSettingsMenuItem.Enabled = !_isBusy;
         _toolsSettingsMenuItem.Enabled = !_isBusy;

@@ -77,7 +77,6 @@ public sealed partial class MainForm
                 return;
             }
 
-            await RefreshScanScopeAsync();
             await RefreshAssetsAsync();
             _statusLabel.Text = FormatVolumeReconciliationStatus(result);
         }

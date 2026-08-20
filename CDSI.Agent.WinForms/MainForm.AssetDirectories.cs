@@ -244,7 +244,6 @@ public sealed partial class MainForm
         try
         {
             var result = await _scanRootService.ExcludeAssetDirectoryAsync(directory.Path);
-            await RefreshScanScopeAsync();
             await RefreshAssetsAsync();
             _statusLabel.Text =
                 $"已移除资产目录，排除 {result.ExcludedLocationCount:N0} 个资产位置，本地文件未删除";

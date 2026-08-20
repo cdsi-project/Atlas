@@ -65,25 +65,39 @@ public sealed class MainFormLayoutTests
     }
 
     [Fact]
-    public void ConfigureMainContentLayout_PlacesProgressAtTheBottom()
+    public void ConfigureMainContentLayout_UsesNoDuplicateCommandRow()
     {
         using var mainLayout = new TableLayoutPanel
         {
             ColumnCount = 1,
-            RowCount = 5
+            RowCount = 4
         };
         using var content = new Panel();
         using var progress = new Panel();
 
         MainForm.ConfigureMainContentLayout(mainLayout, content, progress);
 
-        Assert.Equal(3, mainLayout.GetRow(content));
-        Assert.Equal(4, mainLayout.GetRow(progress));
-        Assert.Equal(5, mainLayout.RowStyles.Count);
-        Assert.Equal(SizeType.Percent, mainLayout.RowStyles[3].SizeType);
-        Assert.Equal(100, mainLayout.RowStyles[3].Height);
-        Assert.Equal(SizeType.Absolute, mainLayout.RowStyles[4].SizeType);
-        Assert.Equal(58, mainLayout.RowStyles[4].Height);
+        Assert.Equal(2, mainLayout.GetRow(content));
+        Assert.Equal(3, mainLayout.GetRow(progress));
+        Assert.Equal(4, mainLayout.RowStyles.Count);
+        Assert.Equal(SizeType.Percent, mainLayout.RowStyles[2].SizeType);
+        Assert.Equal(100, mainLayout.RowStyles[2].Height);
+        Assert.Equal(SizeType.Absolute, mainLayout.RowStyles[3].SizeType);
+        Assert.Equal(58, mainLayout.RowStyles[3].Height);
+    }
+
+    [Theory]
+    [InlineData(true, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    public void ShouldAllowTaskCancellation_DoesNotDependOnAToolbarButton(
+        bool busy,
+        bool allowCancel,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            MainForm.ShouldAllowTaskCancellation(busy, allowCancel));
     }
 
     [Fact]
