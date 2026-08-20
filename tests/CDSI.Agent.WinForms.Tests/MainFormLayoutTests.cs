@@ -55,6 +55,30 @@ public sealed class MainFormLayoutTests
     }
 
     [Fact]
+    public void CreateAssetTabLayout_PlacesStatisticsAtTheBottom()
+    {
+        using var filterPanel = new Panel();
+        using var assetGrid = new DataGridView();
+        using var paginationPanel = new Panel();
+        using var detailsPanel = new Panel();
+        using var statisticsPanel = new Panel();
+        using var layout = MainForm.CreateAssetTabLayout(
+            filterPanel,
+            assetGrid,
+            paginationPanel,
+            detailsPanel,
+            statisticsPanel);
+
+        Assert.Equal(5, layout.RowCount);
+        Assert.Equal(0, layout.GetRow(filterPanel));
+        Assert.Equal(1, layout.GetRow(assetGrid));
+        Assert.Equal(2, layout.GetRow(paginationPanel));
+        Assert.Equal(3, layout.GetRow(detailsPanel));
+        Assert.Equal(4, layout.GetRow(statisticsPanel));
+        Assert.Equal(58, layout.RowStyles[4].Height);
+    }
+
+    [Fact]
     public void CreateAssetDetailsPanel_UsesTheFullAvailableWidth()
     {
         using var titleLabel = new Label();

@@ -238,36 +238,22 @@ public sealed partial class MainForm : Form
 
         _assetsTabPage.Padding = new Padding(0);
         _assetsTabPage.BackColor = Color.White;
-        var assetTabLayout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 5,
-            Margin = Padding.Empty,
-            Padding = Padding.Empty
-        };
-        assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
-        assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-        assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
-        assetTabLayout.Controls.Add(
+        var statisticsPanel =
             CreateStatisticsPanel(
                 _fileCountValueLabel,
                 _totalSizeValueLabel,
                 _videoCountValueLabel,
-                _videoDurationValueLabel),
-            0,
-            0);
-        assetTabLayout.Controls.Add(ConfigureAssetFilterPanel(), 0, 1);
-        assetTabLayout.Controls.Add(_assetGrid, 0, 2);
-        assetTabLayout.Controls.Add(ConfigureAssetPagination(), 0, 3);
-        assetTabLayout.Controls.Add(
+                _videoDurationValueLabel);
+        var detailsPanel =
             CreateAssetDetailsPanel(
                 _assetDetailTitleLabel,
-                _assetDetailSummaryLabel),
-            0,
-            4);
+                _assetDetailSummaryLabel);
+        var assetTabLayout = CreateAssetTabLayout(
+            ConfigureAssetFilterPanel(),
+            _assetGrid,
+            ConfigureAssetPagination(),
+            detailsPanel,
+            statisticsPanel);
         _assetsTabPage.Controls.Add(assetTabLayout);
         _duplicatesTabPage.Padding = new Padding(0);
         _duplicatesTabPage.BackColor = Color.White;
@@ -356,6 +342,35 @@ public sealed partial class MainForm : Form
         panel.Controls.Add(CreateStatisticItem("视频文件", videoCountValueLabel), 2, 0);
         panel.Controls.Add(CreateStatisticItem("视频总时长", videoDurationValueLabel), 3, 0);
         return panel;
+    }
+
+    internal static TableLayoutPanel CreateAssetTabLayout(
+        Control filterPanel,
+        DataGridView assetGrid,
+        Control paginationPanel,
+        Control detailsPanel,
+        Control statisticsPanel)
+    {
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 5,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        layout.Controls.Add(filterPanel, 0, 0);
+        layout.Controls.Add(assetGrid, 0, 1);
+        layout.Controls.Add(paginationPanel, 0, 2);
+        layout.Controls.Add(detailsPanel, 0, 3);
+        layout.Controls.Add(statisticsPanel, 0, 4);
+        return layout;
     }
 
     internal static TableLayoutPanel CreateAssetDetailsPanel(
