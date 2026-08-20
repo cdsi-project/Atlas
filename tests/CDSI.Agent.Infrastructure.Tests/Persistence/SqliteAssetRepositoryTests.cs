@@ -119,6 +119,85 @@ public sealed class SqliteAssetRepositoryTests
     }
 
     [Fact]
+    public async Task ListAssetsAsync_AppliesFileTypeAndCreationTimeFiltersInSqlite()
+    {
+        using var directory = new TestDirectory();
+        var repository = new SqliteAssetRepository(
+            Path.Combine(directory.Path, "cdsi.db"));
+        await repository.InitializeAsync();
+        var deviceId = await repository.GetOrCreateDeviceIdAsync();
+        var januaryFirst = DateTimeOffset.Parse("2026-01-01T08:00:00+08:00");
+        DiscoveredFile[] files =
+        [
+            CreateFile(Path.Combine(directory.Path, "video.mp4"), "video.mp4") with
+            {
+                MimeType = "video/mp4",
+                CreatedAt = januaryFirst
+            },
+            CreateFile(Path.Combine(directory.Path, "audio.mp3"), "audio.mp3") with
+            {
+                MimeType = "audio/mpeg",
+                CreatedAt = januaryFirst.AddDays(1)
+            },
+            CreateFile(Path.Combine(directory.Path, "image.png"), "image.png") with
+            {
+                MimeType = "image/png",
+                CreatedAt = januaryFirst.AddDays(2)
+            },
+            CreateFile(Path.Combine(directory.Path, "article.pdf"), "article.pdf") with
+            {
+                MimeType = "application/pdf",
+                CreatedAt = januaryFirst.AddDays(3)
+            },
+            CreateFile(Path.Combine(directory.Path, "archive.zip"), "archive.zip") with
+            {
+                MimeType = "application/zip",
+                CreatedAt = januaryFirst.AddDays(4)
+            }
+        ];
+        await repository.RegisterLocalFilesAsync(
+            deviceId,
+            files,
+            DateTimeOffset.UtcNow);
+
+        var videoFilter = new AssetListFilter(AssetFileTypeFilter.Video);
+        var documentFilter = new AssetListFilter(AssetFileTypeFilter.Document);
+        var otherFilter = new AssetListFilter(AssetFileTypeFilter.Other);
+        var dateFilter = new AssetListFilter(
+            createdFrom: januaryFirst.AddDays(2),
+            createdBefore: januaryFirst.AddDays(4));
+        var combinedFilter = new AssetListFilter(
+            AssetFileTypeFilter.Image,
+            januaryFirst.AddDays(2),
+            januaryFirst.AddDays(3));
+
+        Assert.Equal(
+            ["video.mp4"],
+            (await repository.ListAssetsAsync(videoFilter, 100))
+                .Select(asset => asset.OriginalFilename));
+        Assert.Equal(
+            ["article.pdf"],
+            (await repository.ListAssetsAsync(documentFilter, 100))
+                .Select(asset => asset.OriginalFilename));
+        Assert.Equal(
+            ["archive.zip"],
+            (await repository.ListAssetsAsync(otherFilter, 100))
+                .Select(asset => asset.OriginalFilename));
+        Assert.Equal(
+            ["article.pdf", "image.png"],
+            (await repository.ListAssetsAsync(dateFilter, 100))
+                .Select(asset => asset.OriginalFilename)
+                .Order());
+        Assert.Equal(1, await repository.GetAssetListCountAsync(combinedFilter));
+        Assert.Equal(
+            "image.png",
+            Assert.Single(await repository.ListAssetsAsync(combinedFilter, 100))
+                .OriginalFilename);
+
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
     public async Task ListAssetDirectoriesAsync_GroupsLocationsByTheirParentDirectory()
     {
         using var directory = new TestDirectory();
@@ -266,8 +345,13 @@ public sealed class SqliteAssetRepositoryTests
     {
         using var directory = new TestDirectory();
         var databasePath = Path.Combine(directory.Path, "cdsi.db");
+        var testConnectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+            Pooling = false
+        }.ToString();
 
-        await using (var connection = new SqliteConnection($"Data Source={databasePath}"))
+        await using (var connection = new SqliteConnection(testConnectionString))
         {
             await connection.OpenAsync();
             await using var command = connection.CreateCommand();
@@ -292,7 +376,30 @@ public sealed class SqliteAssetRepositoryTests
                     last_scanned_at TEXT NULL
                 );
                 CREATE TABLE assets (
-                    id TEXT NOT NULL PRIMARY KEY
+                    id TEXT NOT NULL PRIMARY KEY,
+                    original_filename TEXT NOT NULL,
+                    mime_type TEXT NULL,
+                    extension TEXT NOT NULL,
+                    size INTEGER NOT NULL,
+                    sha256 TEXT NULL,
+                    created_at TEXT NOT NULL,
+                    modified_at TEXT NOT NULL,
+                    discovered_at TEXT NOT NULL,
+                    status TEXT NOT NULL
+                );
+                CREATE TABLE asset_locations (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    asset_id TEXT NOT NULL,
+                    location_type TEXT NOT NULL,
+                    device_id TEXT NOT NULL,
+                    path TEXT NOT NULL,
+                    path_key TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    last_seen_at TEXT NOT NULL,
+                    last_verified_at TEXT NULL,
+                    FOREIGN KEY (asset_id) REFERENCES assets(id),
+                    FOREIGN KEY (device_id) REFERENCES devices(id),
+                    UNIQUE (device_id, path_key)
                 );
                 INSERT INTO schema_migrations(version, applied_at)
                 VALUES (1, $applied_at);
@@ -304,7 +411,7 @@ public sealed class SqliteAssetRepositoryTests
         var repository = new SqliteAssetRepository(databasePath);
         await repository.InitializeAsync();
 
-        await using (var connection = new SqliteConnection($"Data Source={databasePath}"))
+        await using (var connection = new SqliteConnection(testConnectionString))
         {
             await connection.OpenAsync();
             await using var versionCommand = connection.CreateCommand();
@@ -327,10 +434,26 @@ public sealed class SqliteAssetRepositoryTests
                 """;
             var tableCount = Convert.ToInt32(await tableCommand.ExecuteScalarAsync());
 
-            SqliteConnection.ClearAllPools();
-            Assert.Equal(10, version);
+            await using var indexCommand = connection.CreateCommand();
+            indexCommand.CommandText =
+                """
+                SELECT COUNT(*)
+                FROM sqlite_master
+                WHERE type = 'index' AND name IN (
+                    'ix_asset_locations_type_asset_id',
+                    'ix_assets_created_at_julian',
+                    'ix_assets_mime_type',
+                    'ix_assets_extension_lower');
+                """;
+            var filterIndexCount = Convert.ToInt32(
+                await indexCommand.ExecuteScalarAsync());
+
+            Assert.Equal(11, version);
             Assert.Equal(14, tableCount);
+            Assert.Equal(4, filterIndexCount);
         }
+
+        SqliteConnection.ClearAllPools();
     }
 
     [Fact]

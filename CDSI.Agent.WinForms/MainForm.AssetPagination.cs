@@ -202,6 +202,7 @@ public sealed partial class MainForm
 
         _refreshingAssetPage = true;
         UpdateAssetPaginationControls(_assetTotalItems);
+        UpdateAssetFilterControlState();
         try
         {
             await RefreshAssetsAsync();
@@ -215,6 +216,7 @@ public sealed partial class MainForm
         {
             _refreshingAssetPage = false;
             UpdateAssetPaginationControls(_assetTotalItems);
+            UpdateAssetFilterControlState();
         }
     }
 

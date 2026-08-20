@@ -43,10 +43,42 @@ public sealed class ScanApplicationService
         return _repository.ListAssetsAsync(limit, offset, cancellationToken);
     }
 
+    public Task<IReadOnlyList<AssetListItem>> ListAssetsAsync(
+        AssetListFilter filter,
+        int limit = 5_000,
+        long offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+        if (limit is < 1 or > 100_000)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit));
+        }
+
+        if (offset < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(offset));
+        }
+
+        return _repository.ListAssetsAsync(
+            filter,
+            limit,
+            offset,
+            cancellationToken);
+    }
+
     public Task<long> GetAssetListCountAsync(
         CancellationToken cancellationToken = default)
     {
         return _repository.GetAssetListCountAsync(cancellationToken);
+    }
+
+    public Task<long> GetAssetListCountAsync(
+        AssetListFilter filter,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+        return _repository.GetAssetListCountAsync(filter, cancellationToken);
     }
 
     public Task<AssetStatistics> GetLocalAssetStatisticsAsync(

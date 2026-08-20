@@ -89,6 +89,64 @@ public sealed class MainFormLayoutTests
     }
 
     [Fact]
+    public void CreateAssetFilterPanel_ContainsTypeDatesAndExplicitCommands()
+    {
+        using var fileTypeComboBox = new ComboBox();
+        using var createdFromDatePicker = new DateTimePicker();
+        using var createdToDatePicker = new DateTimePicker();
+        using var applyButton = new Button { Text = "应用" };
+        using var resetButton = new Button { Text = "重置" };
+        using var resultLabel = new Label();
+        using var panel = MainForm.CreateAssetFilterPanel(
+            fileTypeComboBox,
+            createdFromDatePicker,
+            createdToDatePicker,
+            applyButton,
+            resetButton,
+            resultLabel);
+
+        Assert.Contains(fileTypeComboBox, panel.Controls.Cast<Control>());
+        Assert.Contains(createdFromDatePicker, panel.Controls.Cast<Control>());
+        Assert.Contains(createdToDatePicker, panel.Controls.Cast<Control>());
+        Assert.Contains(applyButton, panel.Controls.Cast<Control>());
+        Assert.Contains(resetButton, panel.Controls.Cast<Control>());
+        Assert.Contains(resultLabel, panel.Controls.Cast<Control>());
+        Assert.Equal(
+            Enum.GetValues<CDSI.Agent.Core.Assets.AssetFileTypeFilter>(),
+            MainForm.AssetFileTypeFilterChoices.Select(choice => choice.Value));
+    }
+
+    [Fact]
+    public void BuildAssetListFilter_TreatsTheEndDateAsInclusive()
+    {
+        var from = new DateTime(2026, 8, 1);
+        var to = new DateTime(2026, 8, 20);
+
+        var filter = MainForm.BuildAssetListFilter(
+            CDSI.Agent.Core.Assets.AssetFileTypeFilter.Video,
+            createdFromEnabled: true,
+            from,
+            createdToEnabled: true,
+            to);
+
+        Assert.Equal(
+            from,
+            filter.CreatedFrom?.ToLocalTime().Date);
+        Assert.Equal(
+            to.AddDays(1),
+            filter.CreatedBefore?.ToLocalTime().Date);
+        Assert.Equal(
+            CDSI.Agent.Core.Assets.AssetFileTypeFilter.Video,
+            filter.FileType);
+        Assert.Throws<ArgumentException>(() => MainForm.BuildAssetListFilter(
+            CDSI.Agent.Core.Assets.AssetFileTypeFilter.All,
+            createdFromEnabled: true,
+            to,
+            createdToEnabled: true,
+            from));
+    }
+
+    [Fact]
     public void CalculateAssetPagination_ClampsToTheLastAvailablePage()
     {
         var state = MainForm.CalculateAssetPagination(

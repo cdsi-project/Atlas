@@ -489,6 +489,34 @@ internal static class DatabaseMigrator
             await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
+        if (currentVersion < 11)
+        {
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await using var migrationCommand = connection.CreateCommand();
+            migrationCommand.Transaction = (SqliteTransaction)transaction;
+            migrationCommand.CommandText =
+                """
+                CREATE INDEX ix_asset_locations_type_asset_id
+                ON asset_locations(location_type, asset_id);
+
+                CREATE INDEX ix_assets_created_at_julian
+                ON assets(julianday(created_at));
+
+                CREATE INDEX ix_assets_mime_type
+                ON assets(mime_type);
+
+                CREATE INDEX ix_assets_extension_lower
+                ON assets(lower(extension));
+
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (11, $applied_at);
+                """;
+            migrationCommand.Parameters.AddWithValue(
+                "$applied_at",
+                DateTimeOffset.UtcNow.ToString("O"));
+            await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     private static async Task<bool> TableExistsAsync(

@@ -708,17 +708,29 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             videoDurationMilliseconds);
     }
 
-    public async Task<long> GetAssetListCountAsync(
+    public Task<long> GetAssetListCountAsync(
         CancellationToken cancellationToken = default)
     {
+        return GetAssetListCountAsync(AssetListFilter.Empty, cancellationToken);
+    }
+
+    public async Task<long> GetAssetListCountAsync(
+        AssetListFilter filter,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
+        var filterSql = CreateAssetFilterSql(filter);
         command.CommandText =
-            """
+            $"""
             SELECT COUNT(*)
-            FROM asset_locations
-            WHERE location_type = 'Local';
+            FROM asset_locations l
+            INNER JOIN assets a ON a.id = l.asset_id
+            WHERE l.location_type = 'Local'
+              {filterSql};
             """;
+        AddAssetFilterParameters(command, filter);
         return Convert.ToInt64(
             await command.ExecuteScalarAsync(cancellationToken));
     }
@@ -768,11 +780,25 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             .ToArray();
     }
 
-    public async Task<IReadOnlyList<AssetListItem>> ListAssetsAsync(
+    public Task<IReadOnlyList<AssetListItem>> ListAssetsAsync(
         int limit,
         long offset = 0,
         CancellationToken cancellationToken = default)
     {
+        return ListAssetsAsync(
+            AssetListFilter.Empty,
+            limit,
+            offset,
+            cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<AssetListItem>> ListAssetsAsync(
+        AssetListFilter filter,
+        int limit,
+        long offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
         if (limit is < 1 or > 100_000)
         {
             throw new ArgumentOutOfRangeException(nameof(limit));
@@ -786,8 +812,9 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
         var assets = new List<AssetListItem>();
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
+        var filterSql = CreateAssetFilterSql(filter);
         command.CommandText =
-            """
+            $"""
             SELECT
                 a.id,
                 a.original_filename,
@@ -838,6 +865,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                AND t.source_size = a.size
                AND t.source_modified_at = a.modified_at
             WHERE l.location_type = 'Local'
+              {filterSql}
             ORDER BY
                 a.discovered_at DESC,
                 a.original_filename,
@@ -851,6 +879,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             "$metadata_pipeline_version",
             MetadataPipeline.CurrentVersion);
         command.Parameters.AddWithValue("$text_pipeline_version", TextPipeline.CurrentVersion);
+        AddAssetFilterParameters(command, filter);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -1230,6 +1259,80 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             CultureInfo.InvariantCulture,
             DateTimeStyles.RoundtripKind);
     }
+
+    private static string CreateAssetFilterSql(AssetListFilter filter)
+    {
+        var conditions = new List<string>();
+        var fileTypeCondition = filter.FileType switch
+        {
+            AssetFileTypeFilter.All => null,
+            AssetFileTypeFilter.Video => VideoAssetPredicate,
+            AssetFileTypeFilter.Audio => AudioAssetPredicate,
+            AssetFileTypeFilter.Image => ImageAssetPredicate,
+            AssetFileTypeFilter.Document => DocumentAssetPredicate,
+            AssetFileTypeFilter.Other =>
+                $"NOT ({VideoAssetPredicate} OR {AudioAssetPredicate} OR {ImageAssetPredicate} OR {DocumentAssetPredicate})",
+            _ => throw new ArgumentOutOfRangeException(nameof(filter))
+        };
+        if (fileTypeCondition is not null)
+        {
+            conditions.Add(fileTypeCondition);
+        }
+
+        if (filter.CreatedFrom is not null)
+        {
+            conditions.Add("julianday(a.created_at) >= julianday($created_from)");
+        }
+
+        if (filter.CreatedBefore is not null)
+        {
+            conditions.Add("julianday(a.created_at) < julianday($created_before)");
+        }
+
+        return conditions.Count == 0
+            ? string.Empty
+            : $"AND {string.Join(" AND ", conditions)}";
+    }
+
+    private static void AddAssetFilterParameters(
+        SqliteCommand command,
+        AssetListFilter filter)
+    {
+        if (filter.CreatedFrom is not null)
+        {
+            command.Parameters.AddWithValue(
+                "$created_from",
+                filter.CreatedFrom.Value.UtcDateTime.ToString("O"));
+        }
+
+        if (filter.CreatedBefore is not null)
+        {
+            command.Parameters.AddWithValue(
+                "$created_before",
+                filter.CreatedBefore.Value.UtcDateTime.ToString("O"));
+        }
+    }
+
+    private const string VideoAssetPredicate =
+        "COALESCE(a.mime_type, '') LIKE 'video/%'";
+
+    private const string AudioAssetPredicate =
+        "COALESCE(a.mime_type, '') LIKE 'audio/%'";
+
+    private const string ImageAssetPredicate =
+        "COALESCE(a.mime_type, '') LIKE 'image/%'";
+
+    private const string DocumentAssetPredicate =
+        """
+        (
+            COALESCE(a.mime_type, '') LIKE 'text/%'
+            OR lower(COALESCE(a.extension, '')) IN (
+                '.csv', '.doc', '.docx', '.htm', '.html', '.json', '.md',
+                '.odt', '.ods', '.odp', '.pdf', '.ppt', '.pptx', '.rtf',
+                '.srt', '.tsv', '.txt', '.xls', '.xlsx', '.xml'
+            )
+        )
+        """;
 
     private sealed record ExistingAsset(
         Guid Id,

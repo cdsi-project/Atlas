@@ -241,11 +241,12 @@ public sealed partial class MainForm : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 4,
+            RowCount = 5,
             Margin = Padding.Empty,
             Padding = Padding.Empty
         };
         assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
@@ -257,14 +258,15 @@ public sealed partial class MainForm : Form
                 _videoDurationValueLabel),
             0,
             0);
-        assetTabLayout.Controls.Add(_assetGrid, 0, 1);
-        assetTabLayout.Controls.Add(ConfigureAssetPagination(), 0, 2);
+        assetTabLayout.Controls.Add(ConfigureAssetFilterPanel(), 0, 1);
+        assetTabLayout.Controls.Add(_assetGrid, 0, 2);
+        assetTabLayout.Controls.Add(ConfigureAssetPagination(), 0, 3);
         assetTabLayout.Controls.Add(
             CreateAssetDetailsPanel(
                 _assetDetailTitleLabel,
                 _assetDetailSummaryLabel),
             0,
-            3);
+            4);
         _assetsTabPage.Controls.Add(assetTabLayout);
         _duplicatesTabPage.Padding = new Padding(0);
         _duplicatesTabPage.BackColor = Color.White;
@@ -902,23 +904,30 @@ public sealed partial class MainForm : Form
 
     private async Task RefreshAssetsAsync()
     {
-        var assetCountTask = _scanService.GetAssetListCountAsync();
+        var filter = _assetListFilter;
+        var assetCountTask = _scanService.GetAssetListCountAsync(filter);
+        var totalAssetCountTask = filter.IsEmpty
+            ? assetCountTask
+            : _scanService.GetAssetListCountAsync();
         var duplicateGroupsTask = _scanService.ListExactDuplicateGroupsAsync();
         var statisticsTask = _scanService.GetLocalAssetStatisticsAsync();
         var assetDirectoriesTask = _scanService.ListAssetDirectoriesAsync();
         await Task.WhenAll(
             assetCountTask,
+            totalAssetCountTask,
             duplicateGroupsTask,
             statisticsTask,
             assetDirectoriesTask);
 
         var assetCount = await assetCountTask;
+        var totalAssetCount = await totalAssetCountTask;
         var pagination = CalculateAssetPagination(
             assetCount,
             _assetPageSize,
             _assetPageIndex);
         _assetPageIndex = pagination.PageIndex;
         var assets = await _scanService.ListAssetsAsync(
+            filter,
             _assetPageSize,
             pagination.Offset);
         var duplicateGroups = await duplicateGroupsTask;
@@ -978,12 +987,18 @@ public sealed partial class MainForm : Form
             FormatTotalDuration(statistics.VideoDurationMilliseconds);
 
         UpdateAssetPaginationControls(assetCount);
+        UpdateAssetFilterResult(assetCount, totalAssetCount);
         RefreshAssetDirectories(assetDirectories);
-        _assetsTabPage.Text = $"资产 ({assetCount:N0})";
+        _assetsTabPage.Text = filter.IsEmpty
+            ? $"资产 ({assetCount:N0})"
+            : $"资产 ({assetCount:N0}/{totalAssetCount:N0})";
         await RefreshAssetCollectionsAsync();
         _duplicatesTabPage.Text = $"精确重复 ({duplicateGroups.Count:N0})";
+        var assetCountStatus = filter.IsEmpty
+            ? $"资产位置 {assetCount:N0}"
+            : $"筛选资产 {assetCount:N0}/{totalAssetCount:N0}";
         _statusLabel.Text =
-            $"资产位置 {assetCount:N0}  ·  当前页 {assets.Count:N0}  ·  可用文件 {statistics.FileCount:N0}  ·  重复组 {duplicateGroups.Count:N0}";
+            $"{assetCountStatus}  ·  当前页 {assets.Count:N0}  ·  可用文件 {statistics.FileCount:N0}  ·  重复组 {duplicateGroups.Count:N0}";
     }
 
     private void AssetGrid_SelectionChanged(object? sender, EventArgs e)
@@ -1063,6 +1078,7 @@ public sealed partial class MainForm : Form
         _assetDirectoryGrid.Enabled = !busy;
         UpdateCollectionActionState();
         UpdateAssetDirectoryActionState();
+        UpdateAssetFilterControlState();
         UseWaitCursor = busy && !allowCancel;
     }
 
