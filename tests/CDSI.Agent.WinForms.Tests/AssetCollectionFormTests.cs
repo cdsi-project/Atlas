@@ -22,14 +22,12 @@ public sealed class AssetCollectionFormTests
     {
         using var collectionGrid = new DataGridView();
         using var memberGrid = new DataGridView();
-        using var createButton = new Button();
-        using var removeButton = new Button();
-        using var syncButton = new Button();
+        using var createButton = new Button { Text = "新建项目" };
+        using var syncButton = new Button { Text = "同步到 OSS" };
         using var layout = MainForm.CreateAssetCollectionLayout(
             collectionGrid,
             memberGrid,
             createButton,
-            removeButton,
             syncButton);
         layout.Size = new Size(1100, 520);
         layout.CreateControl();
@@ -41,6 +39,11 @@ public sealed class AssetCollectionFormTests
         Assert.True(split.Panel2MinSize >= 420);
         Assert.Contains(collectionGrid, Descendants(split.Panel1));
         Assert.Contains(memberGrid, Descendants(split.Panel2));
+        var toolbar = Assert.Single(
+            layout.Controls.OfType<FlowLayoutPanel>());
+        Assert.Equal(
+            ["新建项目", "同步到 OSS"],
+            toolbar.Controls.OfType<Button>().Select(button => button.Text));
     }
 
     private static IEnumerable<Control> Descendants(Control parent)

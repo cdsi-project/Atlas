@@ -1,5 +1,4 @@
 using CDSI.Agent.Application.Collections;
-using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Collections;
 
 namespace CDSI.Agent.WinForms;
@@ -11,7 +10,6 @@ public sealed partial class MainForm
     private readonly DataGridView _collectionGrid = new();
     private readonly DataGridView _collectionMemberGrid = new();
     private readonly Button _createCollectionButton = new();
-    private readonly Button _removeCollectionMemberButton = new();
     private readonly Button _syncCollectionButton = new();
     private readonly ToolStripMenuItem _addToCollectionMenuItem = new();
     private bool _isBusy;
@@ -30,26 +28,18 @@ public sealed partial class MainForm
 
         ConfigureCollectionActionButton(
             _createCollectionButton,
-            "新建清单",
+            "新建项目",
             Color.FromArgb(24, 121, 78),
             Color.White);
         ConfigureCollectionActionButton(
-            _removeCollectionMemberButton,
-            "从清单移除",
-            Color.FromArgb(236, 239, 242),
-            Color.FromArgb(137, 49, 49));
-        ConfigureCollectionActionButton(
             _syncCollectionButton,
-            "同步全部到 OSS",
+            "同步到 OSS",
             Color.FromArgb(236, 239, 242),
             Color.FromArgb(31, 37, 43));
 
         _createCollectionButton.Click += async (_, _) => await CreateCollectionAsync();
-        _removeCollectionMemberButton.Click += async (_, _) =>
-            await RemoveSelectedCollectionMembersAsync();
         _syncCollectionButton.Click += async (_, _) => await SyncSelectedCollectionAsync();
         _collectionGrid.SelectionChanged += CollectionGrid_SelectionChanged;
-        _collectionMemberGrid.SelectionChanged += (_, _) => UpdateCollectionActionState();
 
         _collectionsTabPage.Padding = Padding.Empty;
         _collectionsTabPage.BackColor = Color.White;
@@ -57,7 +47,6 @@ public sealed partial class MainForm
             _collectionGrid,
             _collectionMemberGrid,
             _createCollectionButton,
-            _removeCollectionMemberButton,
             _syncCollectionButton));
         UpdateCollectionActionState();
     }
@@ -104,7 +93,6 @@ public sealed partial class MainForm
         DataGridView collectionGrid,
         DataGridView memberGrid,
         Button createButton,
-        Button removeButton,
         Button syncButton)
     {
         var layout = new TableLayoutPanel
@@ -128,7 +116,6 @@ public sealed partial class MainForm
             BackColor = Color.White
         };
         toolbar.Controls.Add(createButton);
-        toolbar.Controls.Add(removeButton);
         toolbar.Controls.Add(syncButton);
         layout.Controls.Add(toolbar, 0, 0);
 
@@ -270,41 +257,6 @@ public sealed partial class MainForm
         }
     }
 
-    private async Task RemoveSelectedCollectionMembersAsync()
-    {
-        var collection = GetSelectedCollection();
-        var members = GetSelectedCollectionMembers();
-        if (collection is null || members.Count == 0)
-        {
-            return;
-        }
-
-        var confirmation = MessageBox.Show(
-            this,
-            $"从“{collection.Name}”移除 {members.Count:N0} 个资产？\n\n只会移除清单关系，不会删除或移动本地文件。",
-            "CDSI Atlas",
-            MessageBoxButtons.OKCancel,
-            MessageBoxIcon.Warning,
-            MessageBoxDefaultButton.Button2);
-        if (confirmation != DialogResult.OK)
-        {
-            return;
-        }
-
-        try
-        {
-            var removed = await _assetCollectionService.RemoveAssetsAsync(
-                collection.Id,
-                members.Select(member => member.Asset.AssetId).ToArray());
-            await RefreshAssetCollectionsAsync(collection.Id);
-            _statusLabel.Text = $"已从清单移除 {removed:N0} 个资产，本地文件未更改";
-        }
-        catch (Exception exception)
-        {
-            ShowError("无法从清单移除资产", exception);
-        }
-    }
-
     private async Task SyncSelectedCollectionAsync()
     {
         var selected = GetSelectedCollection();
@@ -442,22 +394,9 @@ public sealed partial class MainForm
         return _collectionGrid.CurrentRow?.Tag as AssetCollectionSummary;
     }
 
-    private IReadOnlyList<AssetCollectionMember> GetSelectedCollectionMembers()
-    {
-        return _collectionMemberGrid.SelectedRows
-            .Cast<DataGridViewRow>()
-            .OrderBy(row => row.Index)
-            .Select(row => row.Tag as AssetCollectionMember)
-            .Where(member => member is not null)
-            .Cast<AssetCollectionMember>()
-            .ToArray();
-    }
-
     private void UpdateCollectionActionState()
     {
         var hasCollection = GetSelectedCollection() is not null;
-        _removeCollectionMemberButton.Enabled =
-            !_isBusy && hasCollection && GetSelectedCollectionMembers().Count > 0;
         _syncCollectionButton.Enabled = !_isBusy && hasCollection;
     }
 
