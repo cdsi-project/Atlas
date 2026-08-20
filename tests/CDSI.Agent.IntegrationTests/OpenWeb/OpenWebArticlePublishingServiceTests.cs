@@ -10,7 +10,7 @@ namespace CDSI.Agent.IntegrationTests.OpenWeb;
 public sealed class OpenWebArticlePublishingServiceTests
 {
     [Fact]
-    public async Task PublishAsync_UpdatesTheMappedWordPressPostOnRepeatedPublishing()
+    public async Task PublishAsync_UpdatesAndReplacesMissingMappedWordPressPosts()
     {
         using var directory = new TestDirectory();
         var databasePath = Path.Combine(directory.Path, "cdsi.db");
@@ -53,6 +53,8 @@ public sealed class OpenWebArticlePublishingServiceTests
         var created = await service.PublishAsync(request);
         var updated = await service.PublishAsync(
             request with { Status = OpenWebArticleStatus.Published });
+        publisher.FailNextMappedPost = true;
+        var recreated = await service.PublishAsync(request);
         var saved = await repository.GetOpenWebPublicationAsync(
             assetId,
             OpenWebPublisher.WordPress,
@@ -60,10 +62,11 @@ public sealed class OpenWebArticlePublishingServiceTests
 
         Assert.True(created.WasCreated);
         Assert.False(updated.WasCreated);
-        Assert.Equal([null, 42L], publisher.RemotePostIds);
+        Assert.True(recreated.WasCreated);
+        Assert.Equal([null, 42L, 42L, null], publisher.RemotePostIds);
         Assert.NotNull(saved);
-        Assert.Equal(42, saved.RemotePostId);
-        Assert.Equal(OpenWebArticleStatus.Published, saved.Status);
+        Assert.Equal(43, saved.RemotePostId);
+        Assert.Equal(OpenWebArticleStatus.Draft, saved.Status);
         Assert.Equal(64, saved.ContentSha256.Length);
         SqliteConnection.ClearAllPools();
     }
@@ -85,7 +88,11 @@ public sealed class OpenWebArticlePublishingServiceTests
 
     private sealed class RecordingPublisher : IOpenWebArticlePublisher
     {
+        private long _nextCreatedPostId = 42;
+
         public List<long?> RemotePostIds { get; } = [];
+
+        public bool FailNextMappedPost { get; set; }
 
         public OpenWebPublisher Publisher => OpenWebPublisher.WordPress;
 
@@ -96,9 +103,16 @@ public sealed class OpenWebArticlePublishingServiceTests
             CancellationToken cancellationToken = default)
         {
             RemotePostIds.Add(remotePostId);
+            if (remotePostId is not null && FailNextMappedPost)
+            {
+                FailNextMappedPost = false;
+                throw new OpenWebRemoteArticleNotFoundException(remotePostId.Value);
+            }
+
+            var postId = remotePostId ?? _nextCreatedPostId++;
             return Task.FromResult(new OpenWebRemoteArticle(
-                42,
-                "https://example.com/article",
+                postId,
+                $"https://example.com/article/{postId}",
                 article.Status));
         }
     }

@@ -58,13 +58,23 @@ public sealed class WordPressArticlePublisher : IOpenWebArticlePublisher
             cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            var remoteMessage = await ReadErrorMessageAsync(response, cancellationToken);
+            var remoteError = await ReadErrorAsync(response, cancellationToken);
+            if (remotePostId is not null &&
+                response.StatusCode == HttpStatusCode.NotFound &&
+                string.Equals(
+                    remoteError.Code,
+                    "rest_post_invalid_id",
+                    StringComparison.Ordinal))
+            {
+                throw new OpenWebRemoteArticleNotFoundException(remotePostId.Value);
+            }
+
             var message = response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
                 ? "WordPress 认证失败或当前账号没有文章发布权限。"
                 : $"WordPress 发布失败（HTTP {(int)response.StatusCode}）。";
-            if (!string.IsNullOrWhiteSpace(remoteMessage))
+            if (!string.IsNullOrWhiteSpace(remoteError.Message))
             {
-                message += $" {remoteMessage}";
+                message += $" {remoteError.Message}";
             }
 
             throw new InvalidOperationException(message);
@@ -164,7 +174,7 @@ public sealed class WordPressArticlePublisher : IOpenWebArticlePublisher
         }
     }
 
-    private static async Task<string?> ReadErrorMessageAsync(
+    private static async Task<WordPressErrorResponse> ReadErrorAsync(
         HttpResponseMessage response,
         CancellationToken cancellationToken)
     {
@@ -175,19 +185,23 @@ public sealed class WordPressArticlePublisher : IOpenWebArticlePublisher
         var length = await reader.ReadAsync(buffer.AsMemory(), cancellationToken);
         if (length == 0)
         {
-            return null;
+            return new WordPressErrorResponse(null, null);
         }
 
         try
         {
             using var document = JsonDocument.Parse(new string(buffer, 0, length));
-            return document.RootElement.TryGetProperty("message", out var message)
-                ? message.GetString()
+            var code = document.RootElement.TryGetProperty("code", out var codeElement)
+                ? codeElement.GetString()
                 : null;
+            var message = document.RootElement.TryGetProperty("message", out var messageElement)
+                ? messageElement.GetString()
+                : null;
+            return new WordPressErrorResponse(code, message);
         }
         catch (JsonException)
         {
-            return null;
+            return new WordPressErrorResponse(null, null);
         }
     }
 
@@ -200,4 +214,8 @@ public sealed class WordPressArticlePublisher : IOpenWebArticlePublisher
         [property: JsonPropertyName("id")] long Id,
         [property: JsonPropertyName("link")] string Link,
         [property: JsonPropertyName("status")] string Status);
+
+    private sealed record WordPressErrorResponse(
+        string? Code,
+        string? Message);
 }

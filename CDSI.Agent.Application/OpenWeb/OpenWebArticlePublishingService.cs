@@ -59,11 +59,28 @@ public sealed class OpenWebArticlePublishingService
             connection.OriginDomain,
             cancellationToken);
         var payload = new OpenWebArticlePayload(title, content.Html, request.Status);
-        var remote = await _publisher.PublishAsync(
-            connection,
-            payload,
-            existing?.RemotePostId,
-            cancellationToken);
+        var wasCreated = existing is null;
+        OpenWebRemoteArticle remote;
+        try
+        {
+            remote = await _publisher.PublishAsync(
+                connection,
+                payload,
+                existing?.RemotePostId,
+                cancellationToken);
+        }
+        catch (OpenWebRemoteArticleNotFoundException exception)
+            when (existing is not null &&
+                  exception.RemoteArticleId == existing.RemotePostId)
+        {
+            remote = await _publisher.PublishAsync(
+                connection,
+                payload,
+                remotePostId: null,
+                cancellationToken);
+            wasCreated = true;
+        }
+
         var synchronizedAt = DateTimeOffset.UtcNow;
         var publication = new OpenWebPublication(
             request.AssetId,
@@ -79,7 +96,7 @@ public sealed class OpenWebArticlePublishingService
             cancellationToken);
         return new OpenWebArticlePublishResult(
             publication,
-            WasCreated: existing is null);
+            wasCreated);
     }
 
     private static string NormalizeTitle(string value)

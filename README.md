@@ -36,6 +36,7 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 - 在设置页配置 OpenWeb 源站域名，规范化后持久化到本机 SQLite
 - 配置 WordPress 用户名和应用程序密码，将 Markdown/TXT 资产发布为草稿或正式文章
 - 保存资产与 WordPress 文章的映射，重复发布同一资产时更新原文章
+- 如果已映射文章在 WordPress 中被删除或失效，发布时会自动新建文章并用新文章 ID 更新本地映射
 - 按阿里云规则校验 Bucket，并规范化 Endpoint、地域和 HTTPS 设置
 - SQLite 只保存非敏感配置；AccessKey Secret 和 WordPress 应用程序密码保存到 Windows 凭据管理器
 - 在资产列表中显示稳定的资产 ID，资产身份不依赖文件名或存储位置
