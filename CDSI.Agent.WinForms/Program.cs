@@ -30,6 +30,13 @@ static class Program
             "CDSI");
         try
         {
+            using var singleInstance = new SingleInstanceCoordinator("CDSI.Atlas");
+            if (!singleInstance.IsPrimaryInstance)
+            {
+                singleInstance.SignalPrimaryInstance();
+                return;
+            }
+
             ApplicationConfiguration.Initialize();
 
             var repository = new SqliteAssetRepository(Path.Combine(dataDirectory, "cdsi.db"));
@@ -87,7 +94,7 @@ static class Program
                     new GenericMetadataExtractor()
                 ],
                 repository);
-            System.Windows.Forms.Application.Run(new MainForm(
+            using var mainForm = new MainForm(
                 scanService,
                 fingerprintService,
                 metadataService,
@@ -102,7 +109,10 @@ static class Program
                 assetCollectionService,
                 assetTagService,
                 transferService,
-                dataDirectory));
+                dataDirectory);
+            mainForm.Shown += (_, _) => singleInstance.StartListening(
+                () => MainWindowActivator.RequestActivation(mainForm));
+            System.Windows.Forms.Application.Run(mainForm);
         }
         catch (Exception exception)
         {
