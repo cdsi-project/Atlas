@@ -1,4 +1,6 @@
 using CDSI.Agent.WinForms;
+using CDSI.Agent.Core.Assets;
+using CDSI.Agent.Core.Duplicates;
 
 namespace CDSI.Agent.WinForms.Tests;
 
@@ -302,6 +304,24 @@ public sealed class MainFormLayoutTests
         Assert.Equal(
             ["/select,", Path.GetFullPath(filePath)],
             startInfo.ArgumentList.ToArray());
+    }
+
+    [Fact]
+    public void GetDuplicateFilePath_UsesTheAssetBoundToTheSelectedRow()
+    {
+        var filePath = Path.Combine(Path.GetTempPath(), "Creator Assets", "copy.mp4");
+        using var row = new DataGridViewRow
+        {
+            Tag = new DuplicateAssetItem(
+                Guid.NewGuid(),
+                "copy.mp4",
+                filePath,
+                DateTimeOffset.UtcNow,
+                AssetLocationStatus.Available)
+        };
+
+        Assert.Equal(filePath, MainForm.GetDuplicateFilePath(row));
+        Assert.Null(MainForm.GetDuplicateFilePath(null));
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using CDSI.Agent.Core.Assets;
+using CDSI.Agent.Core.Duplicates;
 using CDSI.Agent.Core.Transfers;
 
 namespace CDSI.Agent.WinForms;
@@ -7,6 +8,8 @@ namespace CDSI.Agent.WinForms;
 public sealed partial class MainForm
 {
     private readonly ToolStripMenuItem _openFileLocationMenuItem = new();
+    private readonly ContextMenuStrip _duplicateContextMenu = new();
+    private readonly ToolStripMenuItem _openDuplicateFileLocationMenuItem = new();
 
     private void ConfigureAssetContextMenu()
     {
@@ -85,6 +88,35 @@ public sealed partial class MainForm
             ModifierKeys);
     }
 
+    private void ConfigureDuplicateContextMenu()
+    {
+        _openDuplicateFileLocationMenuItem.Text = "打开文件位置";
+        _openDuplicateFileLocationMenuItem.Click += (_, _) =>
+            OpenCurrentDuplicateFileLocation();
+        _duplicateContextMenu.Items.Add(_openDuplicateFileLocationMenuItem);
+        _duplicateContextMenu.Opening += (_, args) =>
+            args.Cancel = GetDuplicateFilePath(_duplicateGrid.CurrentRow) is null;
+        _duplicateGrid.ContextMenuStrip = _duplicateContextMenu;
+        _duplicateGrid.CellMouseDown += (_, args) =>
+        {
+            if (args.Button == MouseButtons.Right && args.RowIndex >= 0)
+            {
+                ApplyAssetGridRightClickSelection(
+                    _duplicateGrid,
+                    args.RowIndex,
+                    args.ColumnIndex,
+                    Keys.None);
+            }
+        };
+        _duplicateGrid.CellDoubleClick += (_, args) =>
+        {
+            if (args.RowIndex >= 0)
+            {
+                OpenCurrentDuplicateFileLocation();
+            }
+        };
+    }
+
     internal static void ApplyAssetGridRightClickSelection(
         DataGridView grid,
         int rowIndex,
@@ -161,11 +193,30 @@ public sealed partial class MainForm
             return;
         }
 
-        if (!File.Exists(asset.Path))
+        OpenFileLocation(asset.Path);
+    }
+
+    private void OpenCurrentDuplicateFileLocation()
+    {
+        var path = GetDuplicateFilePath(_duplicateGrid.CurrentRow);
+        if (path is not null)
+        {
+            OpenFileLocation(path);
+        }
+    }
+
+    internal static string? GetDuplicateFilePath(DataGridViewRow? row)
+    {
+        return (row?.Tag as DuplicateAssetItem)?.Path;
+    }
+
+    private void OpenFileLocation(string path)
+    {
+        if (!File.Exists(path))
         {
             MessageBox.Show(
                 this,
-                $"文件当前位置不存在：{Environment.NewLine}{asset.Path}",
+                $"文件当前位置不存在：{Environment.NewLine}{path}",
                 "CDSI Atlas",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
@@ -174,7 +225,7 @@ public sealed partial class MainForm
 
         try
         {
-            using var process = Process.Start(CreateOpenFileLocationStartInfo(asset.Path));
+            using var process = Process.Start(CreateOpenFileLocationStartInfo(path));
         }
         catch (Exception exception)
         {

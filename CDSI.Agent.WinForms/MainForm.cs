@@ -48,7 +48,7 @@ public sealed partial class MainForm : Form
     private readonly ToolStripMenuItem _moveToWorkspaceMenuItem = new();
     private readonly ToolStripMenuItem _backupToOssMenuItem = new();
     private readonly TabPage _assetsTabPage = new("资产");
-    private readonly TabPage _duplicatesTabPage = new("精确重复");
+    private readonly TabPage _duplicatesTabPage = new("重复文件");
     private readonly ToolStripStatusLabel _statusLabel = new();
     private readonly ToolStripStatusLabel _databaseStatusLabel = new();
     private CancellationTokenSource? _scanCancellation;
@@ -539,6 +539,8 @@ public sealed partial class MainForm : Form
         _duplicateGrid.Columns.Add(CreateFileSizeColumn());
         _duplicateGrid.Columns.Add(CreateColumn("位置", 360, DataGridViewAutoSizeColumnMode.Fill, 48));
         _duplicateGrid.Columns.Add(CreateColumn("状态", 80));
+        EnableFreeColumnResizing(_duplicateGrid);
+        ConfigureDuplicateContextMenu();
     }
 
     private static void ConfigureGrid(DataGridView grid)
@@ -968,13 +970,14 @@ public sealed partial class MainForm : Form
             groupNumber++;
             foreach (var asset in group.Assets)
             {
-                _duplicateGrid.Rows.Add(
+                var rowIndex = _duplicateGrid.Rows.Add(
                     groupNumber,
                     group.Sha256[..12],
                     asset.OriginalFilename,
                     group.Size,
                     asset.Path,
                     FormatLocationStatus(asset.LocationStatus));
+                _duplicateGrid.Rows[rowIndex].Tag = asset;
             }
         }
 
@@ -1002,7 +1005,7 @@ public sealed partial class MainForm : Form
             ? $"资产 ({assetCount:N0})"
             : $"资产 ({assetCount:N0}/{totalAssetCount:N0})";
         await RefreshAssetCollectionsAsync();
-        _duplicatesTabPage.Text = $"精确重复 ({duplicateGroups.Count:N0})";
+        _duplicatesTabPage.Text = $"重复文件 ({duplicateGroups.Count:N0})";
         var assetCountStatus = filter.IsEmpty
             ? $"资产位置 {assetCount:N0}"
             : $"筛选资产 {assetCount:N0}/{totalAssetCount:N0}";
