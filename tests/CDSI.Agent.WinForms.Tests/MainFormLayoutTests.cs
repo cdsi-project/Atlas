@@ -68,6 +68,48 @@ public sealed class MainFormLayoutTests
     }
 
     [Fact]
+    public void CreateStatisticsDashboard_GroupsMetricsInAResponsiveGrid()
+    {
+        Label[] values = [new(), new(), new(), new(), new(), new(), new()];
+        using var dashboard = MainForm.CreateStatisticsDashboard(
+            [
+                new MainForm.StatisticsSection(
+                    "资产构成",
+                    [
+                        new("资产总数", values[0]),
+                        new("视频文件", values[1]),
+                        new("音频文件", values[2]),
+                        new("图片文件", values[3]),
+                        new("文本 / 文档", values[4]),
+                        new("其他类型", values[5])
+                    ]),
+                new MainForm.StatisticsSection(
+                    "媒体",
+                    [new("视频总时长", values[6])])
+            ]);
+        dashboard.Size = new Size(900, 480);
+        dashboard.CreateControl();
+        dashboard.PerformLayout();
+
+        Assert.True(dashboard.AutoScroll);
+        Assert.Equal(5, dashboard.RowCount);
+        Assert.Equal(
+            ["资产构成", "媒体"],
+            dashboard.Controls
+                .OfType<Label>()
+                .Select(label => label.Text));
+        Assert.All(values, value =>
+        {
+            Assert.Equal("0", value.Text);
+            Assert.False(string.IsNullOrWhiteSpace(value.AccessibleName));
+            Assert.Equal(ContentAlignment.MiddleLeft, value.TextAlign);
+        });
+        Assert.All(
+            dashboard.Controls.OfType<TableLayoutPanel>(),
+            metricGrid => Assert.Equal(3, metricGrid.ColumnCount));
+    }
+
+    [Fact]
     public void CreateAssetTabLayout_PlacesStatisticsAtTheBottom()
     {
         using var filterPanel = new Panel();

@@ -238,6 +238,7 @@ public sealed partial class MainForm : Form
         ConfigureDuplicateGrid();
         ConfigureAssetDirectoryTab();
         ConfigureAssetCollectionTab();
+        ConfigureStatisticsTab();
         _assetGrid.SelectionChanged += AssetGrid_SelectionChanged;
 
         _assetsTabPage.Padding = new Padding(0);
@@ -270,6 +271,7 @@ public sealed partial class MainForm : Form
         };
         tabs.TabPages.Add(_assetsTabPage);
         tabs.TabPages.Add(_assetDirectoriesTabPage);
+        tabs.TabPages.Add(_statisticsTabPage);
         tabs.TabPages.Add(_duplicatesTabPage);
         tabs.TabPages.Add(_collectionsTabPage);
 
@@ -1060,11 +1062,12 @@ public sealed partial class MainForm : Form
             }
         }
 
-        _fileCountValueLabel.Text = statistics.FileCount.ToString("N0");
+        _fileCountValueLabel.Text = statistics.AssetCount.ToString("N0");
         _totalSizeValueLabel.Text = FormatFileSize(statistics.TotalSizeBytes);
-        _videoCountValueLabel.Text = statistics.VideoFileCount.ToString("N0");
+        _videoCountValueLabel.Text = statistics.VideoAssetCount.ToString("N0");
         _videoDurationValueLabel.Text =
             FormatTotalDuration(statistics.VideoDurationMilliseconds);
+        UpdateStatisticsDashboard(statistics);
 
         UpdateAssetPaginationControls(assetCount);
         UpdateAssetFilterResult(assetCount, totalAssetCount);
@@ -1093,7 +1096,7 @@ public sealed partial class MainForm : Form
             ? $"资产位置 {assetCount:N0}"
             : $"筛选资产 {assetCount:N0}/{totalAssetCount:N0}";
         _statusLabel.Text =
-            $"{assetCountStatus}  ·  当前页 {assets.Count:N0}  ·  可用文件 {statistics.FileCount:N0}  ·  重复组 {duplicateGroups.Count:N0}";
+            $"{assetCountStatus}  ·  当前页 {assets.Count:N0}  ·  可用文件 {statistics.AvailableLocalFileCount:N0}  ·  重复组 {duplicateGroups.Count:N0}";
     }
 
     private void AssetGrid_SelectionChanged(object? sender, EventArgs e)

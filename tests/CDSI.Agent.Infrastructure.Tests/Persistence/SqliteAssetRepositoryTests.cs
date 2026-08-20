@@ -1,6 +1,7 @@
 using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Metadata;
 using CDSI.Agent.Core.Scanning;
+using CDSI.Agent.Core.Storage;
 using CDSI.Agent.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 
@@ -338,7 +339,8 @@ public sealed class SqliteAssetRepositoryTests
         Assert.Equal(0, repeated);
         Assert.Equal(1, await repository.GetAssetListCountAsync());
         Assert.Equal("visible.txt", Assert.Single(listedAssets).OriginalFilename);
-        Assert.Equal(2, statistics.FileCount);
+        Assert.Equal(1, statistics.AssetCount);
+        Assert.Equal(1, statistics.AvailableLocalFileCount);
         Assert.DoesNotContain(".mp4", extensions);
 
         var connectionString = new SqliteConnectionStringBuilder
@@ -824,7 +826,7 @@ public sealed class SqliteAssetRepositoryTests
     }
 
     [Fact]
-    public async Task GetLocalAssetStatisticsAsync_UsesAvailableFilesAndCurrentVideoMetadata()
+    public async Task GetLocalAssetStatisticsAsync_AggregatesAssetsStorageBackupsAndMedia()
     {
         using var directory = new TestDirectory();
         var repository = new SqliteAssetRepository(Path.Combine(directory.Path, "cdsi.db"));
@@ -843,6 +845,21 @@ public sealed class SqliteAssetRepositoryTests
         {
             Size = 40
         };
+        var audio = CreateFile(Path.Combine(root, "audio.wav"), "audio.wav") with
+        {
+            MimeType = "audio/wav",
+            Size = 20
+        };
+        var image = CreateFile(Path.Combine(root, "cover.png"), "cover.png") with
+        {
+            MimeType = "image/png",
+            Size = 30
+        };
+        var archive = CreateFile(Path.Combine(root, "source.zip"), "source.zip") with
+        {
+            MimeType = "application/zip",
+            Size = 50
+        };
         var missingVideo = CreateFile(
             Path.Combine(root, "missing.mp4"),
             "missing.mp4") with
@@ -857,7 +874,7 @@ public sealed class SqliteAssetRepositoryTests
             scanStartedAt.AddSeconds(-1));
         var currentRegistrations = await repository.RegisterLocalFilesAsync(
             deviceId,
-            [video, document],
+            [video, document, audio, image, archive],
             scanStartedAt.AddSeconds(1));
 
         await repository.SaveMetadataAsync(new AssetMetadata(
@@ -872,6 +889,31 @@ public sealed class SqliteAssetRepositoryTests
                 DurationMilliseconds: 3_723_000),
             DateTimeOffset.UtcNow,
             null));
+
+        var storageProfile = new ObjectStorageProfile(
+            Guid.NewGuid(),
+            "测试 OSS",
+            ObjectStorageProvider.AliyunOss,
+            "oss-cn-hangzhou.aliyuncs.com",
+            "test-assets",
+            "cn-hangzhou",
+            true,
+            "test-access-key-id",
+            scanStartedAt,
+            scanStartedAt);
+        await repository.SaveStorageProfileAsync(storageProfile);
+        await repository.SaveObjectStorageLocationAsync(new ObjectStorageLocation(
+            Guid.NewGuid(),
+            currentRegistrations[1].AssetId,
+            storageProfile.Id,
+            "assets/notes.txt",
+            StorageVerificationStatus.Healthy,
+            document.Size,
+            null,
+            "test-etag",
+            scanStartedAt,
+            scanStartedAt,
+            scanStartedAt));
         await repository.SaveMetadataAsync(new AssetMetadata(
             missingRegistration[0].AssetId,
             "test",
@@ -891,10 +933,18 @@ public sealed class SqliteAssetRepositoryTests
             scanStartedAt);
         var statistics = await repository.GetLocalAssetStatisticsAsync();
 
-        Assert.Equal(2, statistics.FileCount);
-        Assert.Equal(140, statistics.TotalSizeBytes);
-        Assert.Equal(1, statistics.VideoFileCount);
-        Assert.Equal(3_723_000, statistics.VideoDurationMilliseconds);
+        Assert.Equal(6, statistics.AssetCount);
+        Assert.Equal(5, statistics.AvailableLocalFileCount);
+        Assert.Equal(1, statistics.UnavailableAssetCount);
+        Assert.Equal(240, statistics.TotalSizeBytes);
+        Assert.Equal(2, statistics.VideoAssetCount);
+        Assert.Equal(1, statistics.AudioAssetCount);
+        Assert.Equal(1, statistics.ImageAssetCount);
+        Assert.Equal(1, statistics.DocumentAssetCount);
+        Assert.Equal(1, statistics.OtherAssetCount);
+        Assert.Equal(1, statistics.BackedUpAssetCount);
+        Assert.Equal(5, statistics.UnbackedUpAssetCount);
+        Assert.Equal(3_783_000, statistics.VideoDurationMilliseconds);
 
         var changedVideo = video with
         {
@@ -907,10 +957,12 @@ public sealed class SqliteAssetRepositoryTests
             scanStartedAt.AddSeconds(2));
         var statisticsAfterChange = await repository.GetLocalAssetStatisticsAsync();
 
-        Assert.Equal(2, statisticsAfterChange.FileCount);
-        Assert.Equal(141, statisticsAfterChange.TotalSizeBytes);
-        Assert.Equal(0, statisticsAfterChange.VideoFileCount);
-        Assert.Equal(0, statisticsAfterChange.VideoDurationMilliseconds);
+        Assert.Equal(6, statisticsAfterChange.AssetCount);
+        Assert.Equal(5, statisticsAfterChange.AvailableLocalFileCount);
+        Assert.Equal(241, statisticsAfterChange.TotalSizeBytes);
+        Assert.Equal(2, statisticsAfterChange.VideoAssetCount);
+        Assert.Equal(1, statisticsAfterChange.BackedUpAssetCount);
+        Assert.Equal(60_000, statisticsAfterChange.VideoDurationMilliseconds);
 
         SqliteConnection.ClearAllPools();
     }

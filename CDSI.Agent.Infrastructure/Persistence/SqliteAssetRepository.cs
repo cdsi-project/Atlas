@@ -656,19 +656,75 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
     public async Task<AssetStatistics> GetLocalAssetStatisticsAsync(
         CancellationToken cancellationToken = default)
     {
-        long fileCount;
-        long totalSizeBytes;
-
         await using var connection = await OpenConnectionAsync(cancellationToken);
+        long assetCount;
+        long availableLocalFileCount;
+        long unavailableAssetCount;
+        long totalSizeBytes;
+        long videoAssetCount;
+        long audioAssetCount;
+        long imageAssetCount;
+        long documentAssetCount;
+        long otherAssetCount;
+        long backedUpAssetCount;
         await using (var summaryCommand = connection.CreateCommand())
         {
             summaryCommand.CommandText =
-                """
-                SELECT COUNT(*), COALESCE(SUM(a.size), 0)
-                FROM asset_locations l
-                INNER JOIN assets a ON a.id = l.asset_id
-                WHERE l.location_type = 'Local'
-                  AND l.status = 'Available';
+                $"""
+                WITH scoped_assets AS (
+                    SELECT a.*
+                    FROM assets a
+                    WHERE a.hidden_from_asset_list = 0
+                      AND EXISTS (
+                          SELECT 1
+                          FROM asset_locations l
+                          WHERE l.asset_id = a.id
+                            AND l.location_type = 'Local'
+                      )
+                )
+                SELECT
+                    COUNT(*),
+                    COALESCE((
+                        SELECT COUNT(*)
+                        FROM asset_locations available_location
+                        INNER JOIN scoped_assets available_asset
+                            ON available_asset.id = available_location.asset_id
+                        WHERE available_location.location_type = 'Local'
+                          AND available_location.status = 'Available'
+                    ), 0),
+                    COALESCE(SUM(CASE
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM asset_locations available_location
+                            WHERE available_location.asset_id = a.id
+                              AND available_location.location_type = 'Local'
+                              AND available_location.status = 'Available'
+                        ) THEN 0 ELSE 1 END), 0),
+                    COALESCE((
+                        SELECT SUM(available_asset.size)
+                        FROM asset_locations available_location
+                        INNER JOIN scoped_assets available_asset
+                            ON available_asset.id = available_location.asset_id
+                        WHERE available_location.location_type = 'Local'
+                          AND available_location.status = 'Available'
+                    ), 0),
+                    COALESCE(SUM(CASE WHEN {VideoAssetPredicate} THEN 1 ELSE 0 END), 0),
+                    COALESCE(SUM(CASE WHEN {AudioAssetPredicate} THEN 1 ELSE 0 END), 0),
+                    COALESCE(SUM(CASE WHEN {ImageAssetPredicate} THEN 1 ELSE 0 END), 0),
+                    COALESCE(SUM(CASE WHEN {DocumentAssetPredicate} THEN 1 ELSE 0 END), 0),
+                    COALESCE(SUM(CASE WHEN NOT (
+                        {VideoAssetPredicate}
+                        OR {AudioAssetPredicate}
+                        OR {ImageAssetPredicate}
+                        OR {DocumentAssetPredicate}
+                    ) THEN 1 ELSE 0 END), 0),
+                    COALESCE(SUM(CASE WHEN EXISTS (
+                        SELECT 1
+                        FROM object_storage_locations osl
+                        WHERE osl.asset_id = a.id
+                          AND osl.status = 'Healthy'
+                    ) THEN 1 ELSE 0 END), 0)
+                FROM scoped_assets a;
                 """;
 
             await using var reader = await summaryCommand.ExecuteReaderAsync(cancellationToken);
@@ -677,11 +733,18 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                 throw new InvalidOperationException("Unable to calculate local asset statistics.");
             }
 
-            fileCount = reader.GetInt64(0);
-            totalSizeBytes = reader.GetInt64(1);
+            assetCount = reader.GetInt64(0);
+            availableLocalFileCount = reader.GetInt64(1);
+            unavailableAssetCount = reader.GetInt64(2);
+            totalSizeBytes = reader.GetInt64(3);
+            videoAssetCount = reader.GetInt64(4);
+            audioAssetCount = reader.GetInt64(5);
+            imageAssetCount = reader.GetInt64(6);
+            documentAssetCount = reader.GetInt64(7);
+            otherAssetCount = reader.GetInt64(8);
+            backedUpAssetCount = reader.GetInt64(9);
         }
 
-        long videoFileCount = 0;
         long videoDurationMilliseconds = 0;
         await using var metadataCommand = connection.CreateCommand();
         metadataCommand.CommandText =
@@ -696,15 +759,19 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                 m.metadata_json,
                 m.error_message,
                 m.extracted_at
-            FROM asset_locations l
-            INNER JOIN assets a ON a.id = l.asset_id
+            FROM assets a
             INNER JOIN asset_metadata m
                 ON m.asset_id = a.id
                AND m.pipeline_version = $pipeline_version
                AND m.source_size = a.size
                AND m.source_modified_at = a.modified_at
-            WHERE l.location_type = 'Local'
-              AND l.status = 'Available'
+            WHERE a.hidden_from_asset_list = 0
+              AND EXISTS (
+                  SELECT 1
+                  FROM asset_locations l
+                  WHERE l.asset_id = a.id
+                    AND l.location_type = 'Local'
+              )
               AND m.status = $metadata_status;
             """;
         metadataCommand.Parameters.AddWithValue(
@@ -727,7 +794,6 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                 continue;
             }
 
-            videoFileCount++;
             var duration = metadata.Content.DurationMilliseconds;
             if (duration is not > 0)
             {
@@ -741,9 +807,16 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
         }
 
         return new AssetStatistics(
-            fileCount,
+            assetCount,
+            availableLocalFileCount,
+            unavailableAssetCount,
             totalSizeBytes,
-            videoFileCount,
+            videoAssetCount,
+            audioAssetCount,
+            imageAssetCount,
+            documentAssetCount,
+            otherAssetCount,
+            backedUpAssetCount,
             videoDurationMilliseconds);
     }
 
