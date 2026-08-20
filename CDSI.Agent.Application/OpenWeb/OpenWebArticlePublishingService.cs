@@ -1,5 +1,5 @@
 using System.Security.Cryptography;
-using System.Text;
+using System.Text.Json;
 using CDSI.Agent.Core.Abstractions;
 using CDSI.Agent.Core.OpenWeb;
 
@@ -65,7 +65,13 @@ public sealed class OpenWebArticlePublishingService
             _publisher.Publisher,
             connection.OriginDomain,
             cancellationToken);
-        var payload = new OpenWebArticlePayload(title, content.Html, request.Status);
+        var payload = new OpenWebArticlePayload(
+            title,
+            content.Html,
+            request.Status,
+            content.Metadata?.Slug,
+            content.Metadata?.Categories,
+            content.Metadata?.Tags);
         var wasCreated = existing is null;
         OpenWebRemoteArticle remote;
         try
@@ -127,13 +133,9 @@ public sealed class OpenWebArticlePublishingService
 
     private static string CreateContentSha256(OpenWebArticlePayload article)
     {
-        var canonical = string.Join(
-            '\n',
-            article.Title,
-            article.Status.ToString(),
-            article.Html);
+        var canonical = JsonSerializer.SerializeToUtf8Bytes(article);
         return Convert.ToHexString(
-                SHA256.HashData(Encoding.UTF8.GetBytes(canonical)))
+                SHA256.HashData(canonical))
             .ToLowerInvariant();
     }
 }

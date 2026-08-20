@@ -79,15 +79,20 @@ public sealed class LocalOpenWebArticleContentReader : IOpenWebArticleContentRea
             source.Extension,
             ".txt",
             StringComparison.OrdinalIgnoreCase);
+        var markdown = decoded.Text;
+        OpenWebArticleMetadata? metadata = null;
         if (!isPlainText)
         {
-            RejectLocalImages(decoded.Text);
+            var parsed = MarkdownFrontMatterParser.Parse(decoded.Text);
+            markdown = parsed.Markdown;
+            metadata = parsed.Metadata;
+            RejectLocalImages(markdown);
         }
 
         var html = isPlainText
             ? RenderPlainText(decoded.Text)
-            : Markdown.ToHtml(decoded.Text, MarkdownPipeline);
-        return new OpenWebArticleContent(html.Trim());
+            : Markdown.ToHtml(markdown, MarkdownPipeline);
+        return new OpenWebArticleContent(html.Trim(), metadata);
     }
 
     private static void RejectLocalImages(string markdown)

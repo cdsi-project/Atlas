@@ -35,6 +35,7 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 - 在设置页添加、编辑和删除多个阿里云 OSS 配置
 - 在设置页添加、编辑和删除多个 OpenWeb 源站，并指定其中一个默认源站；域名规范化后持久化到本机 SQLite
 - 每个源站独立配置 WordPress 用户名和应用程序密码；发布 Markdown/TXT 资产时默认选中默认源站，也可临时切换目标源站
+- Markdown 发布支持 YAML Front Matter 中的 <code>slug</code>、<code>categories</code>、<code>category</code>、<code>tags</code> 和 <code>tag</code>；分类和标签按名称匹配，不存在时在用户明确发布文章的过程中创建
 - 保存资产与 WordPress 文章的映射，重复发布同一资产时更新原文章
 - 如果已映射文章在 WordPress 中被删除或失效，发布时会自动新建文章并用新文章 ID 更新本地映射
 - 按阿里云规则校验 Bucket，并规范化 Endpoint、地域和 HTTPS 设置
@@ -85,6 +86,24 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 4. 使用资产页顶部的搜索条件定位文件，或切换到“资产目录”“重复文件”“资产清单”等页签查看不同视图。
 5. 复制、移动、OSS 备份和 OpenWeb 发布都必须由用户从界面明确发起；发布文章时可确认或切换目标源站。单纯扫描或搜索不会修改、上传文件。
 
+### Markdown 发布元数据
+
+Markdown 文件可在正文前使用 YAML Front Matter 设置 WordPress slug、分类和标签：
+
+~~~yaml
+---
+slug: creator-tools
+categories:
+  - 创作工具
+  - 教程
+tags: [CDSI, 本地优先]
+---
+
+# 正文标题
+~~~
+
+Front Matter 不会进入文章正文。<code>categories</code> 和 <code>tags</code> 可使用 YAML 列表或逗号分隔文本，单数形式 <code>category</code>、<code>tag</code> 也受支持。未声明的字段不会清空 WordPress 文章中原有的 slug、分类或标签；显式空列表会请求清空对应分类或标签。WordPress 用户需要具备查询及分配分类和标签的权限；当指定名称不存在时，还需要创建分类或标签的权限。
+
 ## 数据安全
 
 CDSI Atlas 采用本地优先、默认非破坏性的处理方式，但不能替代操作系统权限管理和独立备份。以下说明适用于当前版本。
@@ -110,7 +129,7 @@ CDSI Atlas 采用本地优先、默认非破坏性的处理方式，但不能替
 
 - 本机 SQLite 位于 <code>%LOCALAPPDATA%\CDSI\cdsi.db</code>。其中包含文件名、绝对路径、大小、时间、SHA-256、媒体元数据、资产清单、远端对象键、操作审计和发布映射等隐私信息；能够访问该数据库的用户可能据此了解本机资产结构。
 - 当前扫描流程不提取或保存文件正文。由旧版本产生的 <code>asset_text</code> 历史表可能仍包含过去提取的文本，数据库迁移不会自动删除这些历史记录。
-- 当前版本不会因为扫描、搜索、创建清单或保存配置而发送文件。网络传输只在用户明确执行 OSS 备份或 OpenWeb 发布时发生。
+- 当前版本不会因为扫描、搜索、创建清单或保存配置而发送文件。网络传输只在用户明确执行 OSS 备份或 OpenWeb 发布时发生；发布过程中可能按 Markdown Front Matter 创建所声明但尚不存在的 WordPress 分类或标签。
 - OSS 备份将所选原始文件直接发送到用户配置的对象存储；OpenWeb 发布会读取所选 Markdown/TXT，并将文章标题和转换后的 HTML 发送到用户配置的 WordPress。对应服务商的访问控制、保留策略和合规责任由用户配置和管理。
 - 当前版本尚未接入 CDSI Server，也没有后台遥测上传。操作审计和错误信息保存在本机；向他人提供数据库、日志内容或错误截图前，应检查其中的文件路径、对象键和账号信息。
 

@@ -24,6 +24,54 @@ public sealed class LocalOpenWebArticleContentReaderTests
     }
 
     [Fact]
+    public async Task ReadAsync_ParsesAndRemovesYamlFrontMatter()
+    {
+        using var directory = new TestDirectory();
+        var path = Path.Combine(directory.Path, "article.md");
+        await File.WriteAllTextAsync(
+            path,
+            """
+            ---
+            slug: creator-tools
+            categories:
+              - 创作工具
+              - 教程
+            tags: [CDSI, 本地优先, cdsi]
+            ---
+            # 正文标题
+
+            文章正文。
+            """);
+        var reader = new LocalOpenWebArticleContentReader();
+
+        var content = await reader.ReadAsync(path);
+
+        Assert.NotNull(content.Metadata);
+        Assert.Equal("creator-tools", content.Metadata.Slug);
+        Assert.Equal(["创作工具", "教程"], content.Metadata.Categories);
+        Assert.Equal(["CDSI", "本地优先"], content.Metadata.Tags);
+        Assert.Contains("正文标题", content.Html);
+        Assert.DoesNotContain("creator-tools", content.Html);
+        Assert.DoesNotContain("categories", content.Html);
+    }
+
+    [Fact]
+    public async Task ReadAsync_RejectsMalformedYamlFrontMatter()
+    {
+        using var directory = new TestDirectory();
+        var path = Path.Combine(directory.Path, "article.md");
+        await File.WriteAllTextAsync(
+            path,
+            "---\nslug: [invalid\n---\n正文");
+        var reader = new LocalOpenWebArticleContentReader();
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => reader.ReadAsync(path));
+
+        Assert.Contains("Front Matter", exception.Message);
+    }
+
+    [Fact]
     public async Task ReadAsync_EncodesPlainTextAndPreservesParagraphs()
     {
         using var directory = new TestDirectory();

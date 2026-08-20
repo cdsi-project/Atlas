@@ -69,6 +69,12 @@ public sealed class OpenWebArticlePublishingServiceTests
         Assert.False(updated.WasCreated);
         Assert.True(recreated.WasCreated);
         Assert.Equal([null, 42L, 42L, null], publisher.RemotePostIds);
+        Assert.All(publisher.Articles, article =>
+        {
+            Assert.Equal("creator-tools", article.Slug);
+            Assert.Equal(["教程"], article.Categories);
+            Assert.Equal(["CDSI"], article.Tags);
+        });
         Assert.NotNull(saved);
         Assert.Equal(43, saved.RemotePostId);
         Assert.Equal(OpenWebArticleStatus.Draft, saved.Status);
@@ -87,7 +93,12 @@ public sealed class OpenWebArticlePublishingServiceTests
             string path,
             CancellationToken cancellationToken = default)
         {
-            return Task.FromResult(new OpenWebArticleContent("<p>Article</p>"));
+            return Task.FromResult(new OpenWebArticleContent(
+                "<p>Article</p>",
+                new OpenWebArticleMetadata(
+                    "creator-tools",
+                    ["教程"],
+                    ["CDSI"])));
         }
     }
 
@@ -96,6 +107,8 @@ public sealed class OpenWebArticlePublishingServiceTests
         private long _nextCreatedPostId = 42;
 
         public List<long?> RemotePostIds { get; } = [];
+
+        public List<OpenWebArticlePayload> Articles { get; } = [];
 
         public bool FailNextMappedPost { get; set; }
 
@@ -108,6 +121,7 @@ public sealed class OpenWebArticlePublishingServiceTests
             CancellationToken cancellationToken = default)
         {
             RemotePostIds.Add(remotePostId);
+            Articles.Add(article);
             if (remotePostId is not null && FailNextMappedPost)
             {
                 FailNextMappedPost = false;

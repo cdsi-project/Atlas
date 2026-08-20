@@ -41,6 +41,24 @@ public sealed class WordPressArticlePublisher : IOpenWebArticlePublisher
 
         var siteRoot = new Uri($"https://{connection.OriginDomain}/", UriKind.Absolute);
         var apiRoot = await DiscoverApiRootAsync(siteRoot, cancellationToken);
+        var categoryIds = article.Categories is null
+            ? null
+            : await ResolveTermIdsAsync(
+                apiRoot,
+                connection,
+                "categories",
+                "分类",
+                article.Categories,
+                cancellationToken);
+        var tagIds = article.Tags is null
+            ? null
+            : await ResolveTermIdsAsync(
+                apiRoot,
+                connection,
+                "tags",
+                "标签",
+                article.Tags,
+                cancellationToken);
         var requestUri = BuildPostsUri(apiRoot, remotePostId);
         using var request = new HttpRequestMessage(HttpMethod.Post, requestUri);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -48,9 +66,12 @@ public sealed class WordPressArticlePublisher : IOpenWebArticlePublisher
         request.Content = JsonContent.Create(new WordPressPostRequest(
             article.Title,
             article.Html,
-            article.Status == OpenWebArticleStatus.Published
-                ? "publish"
-                : "draft"));
+                article.Status == OpenWebArticleStatus.Published
+                    ? "publish"
+                    : "draft",
+                article.Slug,
+                categoryIds,
+                tagIds));
 
         using var response = await _httpClient.SendAsync(
             request,
@@ -140,11 +161,142 @@ public sealed class WordPressArticlePublisher : IOpenWebArticlePublisher
         var route = remotePostId is null
             ? "wp/v2/posts"
             : $"wp/v2/posts/{remotePostId.Value}";
+        return BuildApiUri(
+            apiRoot,
+            route,
+            [("_fields", "id,link,status")]);
+    }
+
+    private async Task<long[]> ResolveTermIdsAsync(
+        Uri apiRoot,
+        OpenWebConnection connection,
+        string route,
+        string displayName,
+        IReadOnlyList<string> names,
+        CancellationToken cancellationToken)
+    {
+        var ids = new long[names.Count];
+        for (var index = 0; index < names.Count; index++)
+        {
+            ids[index] = await ResolveTermIdAsync(
+                apiRoot,
+                connection,
+                route,
+                displayName,
+                names[index],
+                cancellationToken);
+        }
+
+        return ids;
+    }
+
+    private async Task<long> ResolveTermIdAsync(
+        Uri apiRoot,
+        OpenWebConnection connection,
+        string route,
+        string displayName,
+        string name,
+        CancellationToken cancellationToken)
+    {
+        var searchUri = BuildApiUri(
+            apiRoot,
+            $"wp/v2/{route}",
+            [
+                ("search", name),
+                ("per_page", "100"),
+                ("_fields", "id,name")
+            ]);
+        using (var searchRequest = new HttpRequestMessage(HttpMethod.Get, searchUri))
+        {
+            searchRequest.Headers.Accept.Add(
+                new MediaTypeWithQualityHeaderValue("application/json"));
+            searchRequest.Headers.Authorization = CreateAuthorizationHeader(connection);
+            using var searchResponse = await _httpClient.SendAsync(
+                searchRequest,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+            if (!searchResponse.IsSuccessStatusCode)
+            {
+                var error = await ReadErrorAsync(searchResponse, cancellationToken);
+                throw CreateTaxonomyException(
+                    searchResponse.StatusCode,
+                    displayName,
+                    name,
+                    "查询",
+                    error);
+            }
+
+            await using var stream =
+                await searchResponse.Content.ReadAsStreamAsync(cancellationToken);
+            var terms = await JsonSerializer.DeserializeAsync<WordPressTermResponse[]>(
+                stream,
+                cancellationToken: cancellationToken) ?? [];
+            var exact = terms.FirstOrDefault(term =>
+                string.Equals(term.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (exact is not null && exact.Id > 0)
+            {
+                return exact.Id;
+            }
+        }
+
+        var createUri = BuildApiUri(apiRoot, $"wp/v2/{route}", []);
+        using var createRequest = new HttpRequestMessage(HttpMethod.Post, createUri);
+        createRequest.Headers.Accept.Add(
+            new MediaTypeWithQualityHeaderValue("application/json"));
+        createRequest.Headers.Authorization = CreateAuthorizationHeader(connection);
+        createRequest.Content = JsonContent.Create(new WordPressTermRequest(name));
+        using var createResponse = await _httpClient.SendAsync(
+            createRequest,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        if (!createResponse.IsSuccessStatusCode)
+        {
+            var error = await ReadErrorAsync(createResponse, cancellationToken);
+            if (string.Equals(error.Code, "term_exists", StringComparison.Ordinal) &&
+                error.TermId is > 0)
+            {
+                return error.TermId.Value;
+            }
+
+            throw CreateTaxonomyException(
+                createResponse.StatusCode,
+                displayName,
+                name,
+                "创建",
+                error);
+        }
+
+        await using var responseStream =
+            await createResponse.Content.ReadAsStreamAsync(cancellationToken);
+        var created = await JsonSerializer.DeserializeAsync<WordPressTermResponse>(
+            responseStream,
+            cancellationToken: cancellationToken)
+            ?? throw new InvalidOperationException(
+                $"WordPress 返回了空的{displayName}结果。");
+        if (created.Id <= 0)
+        {
+            throw new InvalidOperationException(
+                $"WordPress 返回的{displayName} ID 无效。");
+        }
+
+        return created.Id;
+    }
+
+    private static Uri BuildApiUri(
+        Uri apiRoot,
+        string route,
+        IReadOnlyList<(string Key, string Value)> query)
+    {
+        var encodedQuery = string.Join(
+            "&",
+            query.Select(item =>
+                $"{Uri.EscapeDataString(item.Key)}={Uri.EscapeDataString(item.Value)}"));
         if (apiRoot.Query.Contains("rest_route=", StringComparison.OrdinalIgnoreCase))
         {
             var builder = new UriBuilder(apiRoot)
             {
-                Query = $"rest_route=/{route}&_fields=id,link,status"
+                Query = $"rest_route=/{route}" +
+                    (encodedQuery.Length == 0 ? string.Empty : $"&{encodedQuery}")
             };
             return builder.Uri;
         }
@@ -154,7 +306,26 @@ public sealed class WordPressArticlePublisher : IOpenWebArticlePublisher
             StringComparison.Ordinal)
             ? apiRoot
             : new Uri(apiRoot.AbsoluteUri + "/", UriKind.Absolute);
-        return new Uri(normalizedRoot, $"{route}?_fields=id,link,status");
+        return new Uri(
+            normalizedRoot,
+            route + (encodedQuery.Length == 0 ? string.Empty : $"?{encodedQuery}"));
+    }
+
+    private static InvalidOperationException CreateTaxonomyException(
+        HttpStatusCode statusCode,
+        string displayName,
+        string name,
+        string action,
+        WordPressErrorResponse error)
+    {
+        var message =
+            $"WordPress {displayName}“{name}”{action}失败（HTTP {(int)statusCode}）。";
+        if (!string.IsNullOrWhiteSpace(error.Message))
+        {
+            message += $" {error.Message}";
+        }
+
+        return new InvalidOperationException(message);
     }
 
     private static AuthenticationHeaderValue CreateAuthorizationHeader(
@@ -185,7 +356,7 @@ public sealed class WordPressArticlePublisher : IOpenWebArticlePublisher
         var length = await reader.ReadAsync(buffer.AsMemory(), cancellationToken);
         if (length == 0)
         {
-            return new WordPressErrorResponse(null, null);
+            return new WordPressErrorResponse(null, null, null);
         }
 
         try
@@ -197,18 +368,43 @@ public sealed class WordPressArticlePublisher : IOpenWebArticlePublisher
             var message = document.RootElement.TryGetProperty("message", out var messageElement)
                 ? messageElement.GetString()
                 : null;
-            return new WordPressErrorResponse(code, message);
+            long? termId = null;
+            if (document.RootElement.TryGetProperty("data", out var dataElement) &&
+                dataElement.ValueKind == JsonValueKind.Object &&
+                dataElement.TryGetProperty("term_id", out var termIdElement) &&
+                termIdElement.TryGetInt64(out var parsedTermId))
+            {
+                termId = parsedTermId;
+            }
+
+            return new WordPressErrorResponse(code, message, termId);
         }
         catch (JsonException)
         {
-            return new WordPressErrorResponse(null, null);
+            return new WordPressErrorResponse(null, null, null);
         }
     }
 
     private sealed record WordPressPostRequest(
         [property: JsonPropertyName("title")] string Title,
         [property: JsonPropertyName("content")] string Content,
-        [property: JsonPropertyName("status")] string Status);
+        [property: JsonPropertyName("status")] string Status,
+        [property: JsonPropertyName("slug")]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? Slug,
+        [property: JsonPropertyName("categories")]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        long[]? Categories,
+        [property: JsonPropertyName("tags")]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        long[]? Tags);
+
+    private sealed record WordPressTermRequest(
+        [property: JsonPropertyName("name")] string Name);
+
+    private sealed record WordPressTermResponse(
+        [property: JsonPropertyName("id")] long Id,
+        [property: JsonPropertyName("name")] string Name);
 
     private sealed record WordPressPostResponse(
         [property: JsonPropertyName("id")] long Id,
@@ -217,5 +413,6 @@ public sealed class WordPressArticlePublisher : IOpenWebArticlePublisher
 
     private sealed record WordPressErrorResponse(
         string? Code,
-        string? Message);
+        string? Message,
+        long? TermId);
 }

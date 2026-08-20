@@ -43,6 +43,9 @@ public sealed class WordPressArticlePublisherTests
         Assert.Equal("文章标题", body.RootElement.GetProperty("title").GetString());
         Assert.Equal("<p>正文</p>", body.RootElement.GetProperty("content").GetString());
         Assert.Equal("publish", body.RootElement.GetProperty("status").GetString());
+        Assert.False(body.RootElement.TryGetProperty("slug", out _));
+        Assert.False(body.RootElement.TryGetProperty("categories", out _));
+        Assert.False(body.RootElement.TryGetProperty("tags", out _));
     }
 
     [Fact]
@@ -64,6 +67,50 @@ public sealed class WordPressArticlePublisherTests
         Assert.Equal(42, exception.RemoteArticleId);
         Assert.Equal(2, handler.Requests.Count);
         Assert.Equal("/wp-json/wp/v2/posts/42", handler.Requests[1].Uri.AbsolutePath);
+    }
+
+    [Fact]
+    public async Task PublishAsync_ResolvesTaxonomiesAndPublishesTheSlug()
+    {
+        var handler = new TaxonomyHandler();
+        using var httpClient = new HttpClient(handler);
+        var publisher = new WordPressArticlePublisher(httpClient);
+
+        await publisher.PublishAsync(
+            new OpenWebConnection("example.com", "editor", "secret"),
+            new OpenWebArticlePayload(
+                "文章标题",
+                "<p>正文</p>",
+                OpenWebArticleStatus.Published,
+                "creator-tools",
+                ["教程"],
+                ["CDSI"]),
+            remotePostId: null);
+
+        Assert.Equal(5, handler.Requests.Count);
+        var categorySearch = handler.Requests[1];
+        Assert.Equal(HttpMethod.Get, categorySearch.Method);
+        Assert.Equal("/wp-json/wp/v2/categories", categorySearch.Uri.AbsolutePath);
+        Assert.Equal("教程", GetQueryValue(categorySearch.Uri, "search"));
+        var tagSearch = handler.Requests[2];
+        Assert.Equal(HttpMethod.Get, tagSearch.Method);
+        Assert.Equal("/wp-json/wp/v2/tags", tagSearch.Uri.AbsolutePath);
+        var tagCreate = handler.Requests[3];
+        Assert.Equal(HttpMethod.Post, tagCreate.Method);
+        Assert.Equal("/wp-json/wp/v2/tags", tagCreate.Uri.AbsolutePath);
+
+        using var postBody = JsonDocument.Parse(handler.Requests[4].Body!);
+        Assert.Equal("creator-tools", postBody.RootElement.GetProperty("slug").GetString());
+        Assert.Equal(
+            [7L],
+            postBody.RootElement.GetProperty("categories")
+                .EnumerateArray()
+                .Select(item => item.GetInt64()));
+        Assert.Equal(
+            [11L],
+            postBody.RootElement.GetProperty("tags")
+                .EnumerateArray()
+                .Select(item => item.GetInt64()));
     }
 
     [Fact]
@@ -147,6 +194,60 @@ public sealed class WordPressArticlePublisherTests
                     "{\"id\":42,\"link\":\"https://example.com/article\",\"status\":\"publish\"}",
                     Encoding.UTF8,
                     "application/json")
+            };
+        }
+    }
+
+    private sealed class TaxonomyHandler : HttpMessageHandler
+    {
+        public List<CapturedRequest> Requests { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            Requests.Add(new CapturedRequest(
+                request.Method,
+                request.RequestUri!,
+                request.Headers.Authorization?.Parameter,
+                request.Content is null
+                    ? null
+                    : await request.Content.ReadAsStringAsync(cancellationToken)));
+
+            if (request.Method == HttpMethod.Head)
+            {
+                var response = new HttpResponseMessage(HttpStatusCode.OK);
+                response.Headers.TryAddWithoutValidation(
+                    "Link",
+                    "<https://example.com/wp-json/>; rel=\"https://api.w.org/\"");
+                return response;
+            }
+
+            var path = request.RequestUri!.AbsolutePath;
+            if (request.Method == HttpMethod.Get && path.EndsWith("/categories"))
+            {
+                return JsonResponse("[{\"id\":7,\"name\":\"教程\"}]");
+            }
+
+            if (request.Method == HttpMethod.Get && path.EndsWith("/tags"))
+            {
+                return JsonResponse("[]");
+            }
+
+            if (request.Method == HttpMethod.Post && path.EndsWith("/tags"))
+            {
+                return JsonResponse("{\"id\":11,\"name\":\"CDSI\"}");
+            }
+
+            return JsonResponse(
+                "{\"id\":42,\"link\":\"https://example.com/article\",\"status\":\"publish\"}");
+        }
+
+        private static HttpResponseMessage JsonResponse(string json)
+        {
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
             };
         }
     }
