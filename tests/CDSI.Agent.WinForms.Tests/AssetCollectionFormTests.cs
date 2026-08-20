@@ -39,11 +39,58 @@ public sealed class AssetCollectionFormTests
         Assert.True(split.Panel2MinSize >= 420);
         Assert.Contains(collectionGrid, Descendants(split.Panel1));
         Assert.Contains(memberGrid, Descendants(split.Panel2));
+        Assert.Contains(
+            Descendants(split.Panel1).OfType<Label>(),
+            label => label.Text == "项目列表");
+        Assert.Contains(
+            Descendants(split.Panel2).OfType<Label>(),
+            label => label.Text == "项目内资产");
         var toolbar = Assert.Single(
             layout.Controls.OfType<FlowLayoutPanel>());
         Assert.Equal(
             ["新建项目", "同步到 OSS"],
             toolbar.Controls.OfType<Button>().Select(button => button.Text));
+    }
+
+    [Fact]
+    public void ProjectContextMenu_OffersSyncAndDeleteCommands()
+    {
+        using var contextMenu = new ContextMenuStrip();
+        using var syncItem = new ToolStripMenuItem();
+        using var deleteItem = new ToolStripMenuItem();
+
+        MainForm.ConfigureProjectContextMenu(
+            contextMenu,
+            syncItem,
+            deleteItem);
+
+        Assert.Equal(3, contextMenu.Items.Count);
+        Assert.Same(syncItem, contextMenu.Items[0]);
+        Assert.Equal("同步到 OSS", syncItem.Text);
+        Assert.IsType<ToolStripSeparator>(contextMenu.Items[1]);
+        Assert.Same(deleteItem, contextMenu.Items[2]);
+        Assert.Equal("删除项目", deleteItem.Text);
+    }
+
+    [Fact]
+    public void ProjectDeletionConfirmation_ListsTheScopeAndPreservesAssets()
+    {
+        var project = new AssetCollectionSummary(
+            Guid.NewGuid(),
+            "夏季视频",
+            AssetCollectionType.Video,
+            AssetCount: 12,
+            TotalSizeBytes: 1024,
+            BackedUpAssetCount: 5,
+            UpdatedAt: DateTimeOffset.UtcNow);
+
+        var message = MainForm.CreateProjectDeletionConfirmation(project);
+
+        Assert.Contains("夏季视频", message);
+        Assert.Contains("12 个资产", message);
+        Assert.Contains("不会删除、移动或修改资产文件", message);
+        Assert.Contains("不会删除已有 OSS 备份", message);
+        Assert.Contains("无法撤销", message);
     }
 
     private static IEnumerable<Control> Descendants(Control parent)

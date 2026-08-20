@@ -15,6 +15,11 @@ public interface IAssetCollectionRepository
     Task<IReadOnlyList<AssetCollectionSummary>> ListAssetCollectionsAsync(
         CancellationToken cancellationToken = default);
 
+    Task<bool> DeleteAssetCollectionAsync(
+        Guid collectionId,
+        DateTimeOffset deletedAt,
+        CancellationToken cancellationToken = default);
+
     Task<int> AddAssetsToCollectionAsync(
         Guid collectionId,
         IReadOnlyCollection<Guid> assetIds,

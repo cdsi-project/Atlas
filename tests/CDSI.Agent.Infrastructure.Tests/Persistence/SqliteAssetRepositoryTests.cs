@@ -701,7 +701,8 @@ public sealed class SqliteAssetRepositoryTests
                     'asset_collection_items', 'agent_settings',
                     'openweb_publications', 'local_volumes', 'openweb_sources',
                     'restore_jobs', 'restore_items', 'asset_tags',
-                    'asset_tag_links', 'asset_directory_exclusions');
+                    'asset_tag_links', 'asset_directory_exclusions',
+                    'asset_collection_deletion_audit');
                 """;
             var tableCount = Convert.ToInt32(await tableCommand.ExecuteScalarAsync());
 
@@ -717,7 +718,8 @@ public sealed class SqliteAssetRepositoryTests
                     'ix_assets_extension_lower',
                     'ix_scan_roots_volume_id',
                     'ix_asset_locations_volume_id',
-                    'ix_asset_tag_links_tag_id');
+                    'ix_asset_tag_links_tag_id',
+                    'ix_asset_collection_deletion_audit_collection_id');
                 """;
             var filterIndexCount = Convert.ToInt32(
                 await indexCommand.ExecuteScalarAsync());
@@ -765,9 +767,9 @@ public sealed class SqliteAssetRepositoryTests
             var locationVisibilityColumnCount = Convert.ToInt32(
                 await locationVisibilityColumnCommand.ExecuteScalarAsync());
 
-            Assert.Equal(19, version);
-            Assert.Equal(21, tableCount);
-            Assert.Equal(7, filterIndexCount);
+            Assert.Equal(20, version);
+            Assert.Equal(22, tableCount);
+            Assert.Equal(8, filterIndexCount);
             Assert.Equal(2, scanFilterColumnCount);
             Assert.Equal(2, assetVisibilityColumnCount);
             Assert.Equal(2, locationVisibilityColumnCount);

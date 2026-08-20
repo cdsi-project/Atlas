@@ -12,16 +12,19 @@ public sealed partial class MainForm
     private readonly Button _createCollectionButton = new();
     private readonly Button _syncCollectionButton = new();
     private readonly ToolStripMenuItem _addToCollectionMenuItem = new();
+    private readonly ContextMenuStrip _projectContextMenu = new();
+    private readonly ToolStripMenuItem _syncProjectContextMenuItem = new();
+    private readonly ToolStripMenuItem _deleteProjectContextMenuItem = new();
     private bool _isBusy;
     private bool _refreshingCollections;
 
     private void ConfigureAssetCollectionTab()
     {
         ConfigureGrid(_collectionGrid);
-        _collectionGrid.AccessibleName = "资产清单列表";
+        _collectionGrid.AccessibleName = "项目列表";
         ConfigureGrid(_collectionMemberGrid);
         EnableAssetMultiSelection(_collectionMemberGrid);
-        _collectionMemberGrid.AccessibleName = "资产清单成员列表";
+        _collectionMemberGrid.AccessibleName = "项目内资产列表";
         ConfigureProjectManagementGridColumns(
             _collectionGrid,
             _collectionMemberGrid);
@@ -40,6 +43,44 @@ public sealed partial class MainForm
         _createCollectionButton.Click += async (_, _) => await CreateCollectionAsync();
         _syncCollectionButton.Click += async (_, _) => await SyncSelectedCollectionAsync();
         _collectionGrid.SelectionChanged += CollectionGrid_SelectionChanged;
+        ConfigureProjectContextMenu(
+            _projectContextMenu,
+            _syncProjectContextMenuItem,
+            _deleteProjectContextMenuItem);
+        _syncProjectContextMenuItem.Click += async (_, _) =>
+            await SyncSelectedCollectionAsync();
+        _deleteProjectContextMenuItem.Click += async (_, _) =>
+            await DeleteSelectedProjectAsync();
+        _projectContextMenu.Opening += (_, args) =>
+        {
+            var hasProject = GetSelectedCollection() is not null;
+            args.Cancel = !hasProject;
+            _syncProjectContextMenuItem.Enabled = !_isBusy && hasProject;
+            _deleteProjectContextMenuItem.Enabled = !_isBusy && hasProject;
+        };
+        _collectionGrid.ContextMenuStrip = _projectContextMenu;
+        _collectionGrid.MouseDown += (_, args) =>
+        {
+            if (args.Button != MouseButtons.Right)
+            {
+                return;
+            }
+
+            var hit = _collectionGrid.HitTest(args.X, args.Y);
+            if (hit.RowIndex >= 0)
+            {
+                ApplyAssetGridRightClickSelection(
+                    _collectionGrid,
+                    hit.RowIndex,
+                    hit.ColumnIndex,
+                    Keys.None);
+            }
+            else
+            {
+                _collectionGrid.ClearSelection();
+                _collectionGrid.CurrentCell = null;
+            }
+        };
 
         _collectionsTabPage.Padding = Padding.Empty;
         _collectionsTabPage.BackColor = Color.White;
@@ -49,6 +90,22 @@ public sealed partial class MainForm
             _createCollectionButton,
             _syncCollectionButton));
         UpdateCollectionActionState();
+    }
+
+    internal static void ConfigureProjectContextMenu(
+        ContextMenuStrip contextMenu,
+        ToolStripMenuItem syncItem,
+        ToolStripMenuItem deleteItem)
+    {
+        ArgumentNullException.ThrowIfNull(contextMenu);
+        ArgumentNullException.ThrowIfNull(syncItem);
+        ArgumentNullException.ThrowIfNull(deleteItem);
+        syncItem.Text = "同步到 OSS";
+        deleteItem.Text = "删除项目";
+        contextMenu.Items.Clear();
+        contextMenu.Items.Add(syncItem);
+        contextMenu.Items.Add(new ToolStripSeparator());
+        contextMenu.Items.Add(deleteItem);
     }
 
     internal static void ConfigureProjectManagementGridColumns(
@@ -131,8 +188,8 @@ public sealed partial class MainForm
         split.Panel2MinSize = 420;
         split.Panel1.Padding = new Padding(0, 0, 6, 0);
         split.Panel2.Padding = new Padding(6, 0, 0, 0);
-        split.Panel1.Controls.Add(CreateCollectionPane("清单 / 项目", collectionGrid));
-        split.Panel2.Controls.Add(CreateCollectionPane("清单内资产", memberGrid));
+        split.Panel1.Controls.Add(CreateCollectionPane("项目列表", collectionGrid));
+        split.Panel2.Controls.Add(CreateCollectionPane("项目内资产", memberGrid));
         layout.Controls.Add(split, 0, 1);
         return layout;
     }
@@ -301,6 +358,50 @@ public sealed partial class MainForm
         }
     }
 
+    private async Task DeleteSelectedProjectAsync()
+    {
+        var selected = GetSelectedCollection();
+        if (selected is null)
+        {
+            return;
+        }
+
+        var confirmation = MessageBox.Show(
+            this,
+            CreateProjectDeletionConfirmation(selected),
+            "删除项目",
+            MessageBoxButtons.OKCancel,
+            MessageBoxIcon.Warning,
+            MessageBoxDefaultButton.Button2);
+        if (confirmation != DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            var deleted = await _assetCollectionService.DeleteAsync(selected.Id);
+            await RefreshAssetCollectionsAsync();
+            _statusLabel.Text = $"已删除项目：{deleted.Name}；资产文件和 OSS 备份未更改";
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法删除项目", exception);
+        }
+    }
+
+    internal static string CreateProjectDeletionConfirmation(
+        AssetCollectionSummary project)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        return
+            $"确定删除项目“{project.Name}”吗？{Environment.NewLine}{Environment.NewLine}" +
+            $"将移除该项目以及它与 {project.AssetCount:N0} 个资产的本地项目关系。" +
+            $"{Environment.NewLine}{Environment.NewLine}" +
+            "不会删除、移动或修改资产文件，也不会删除已有 OSS 备份。" +
+            $"{Environment.NewLine}此操作无法撤销。";
+    }
+
     private async void CollectionGrid_SelectionChanged(object? sender, EventArgs e)
     {
         if (_refreshingCollections)
@@ -398,6 +499,8 @@ public sealed partial class MainForm
     {
         var hasCollection = GetSelectedCollection() is not null;
         _syncCollectionButton.Enabled = !_isBusy && hasCollection;
+        _syncProjectContextMenuItem.Enabled = !_isBusy && hasCollection;
+        _deleteProjectContextMenuItem.Enabled = !_isBusy && hasCollection;
     }
 
     internal static string FormatCollectionType(AssetCollectionType type)

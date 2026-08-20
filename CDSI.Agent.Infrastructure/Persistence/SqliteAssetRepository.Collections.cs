@@ -93,6 +93,79 @@ public sealed partial class SqliteAssetRepository : IAssetCollectionRepository
         return collections;
     }
 
+    public async Task<bool> DeleteAssetCollectionAsync(
+        Guid collectionId,
+        DateTimeOffset deletedAt,
+        CancellationToken cancellationToken = default)
+    {
+        await using (var connection = await OpenConnectionAsync(cancellationToken))
+        {
+            await using (var transaction =
+                (Microsoft.Data.Sqlite.SqliteTransaction)await connection.BeginTransactionAsync(
+                    cancellationToken))
+            {
+                int audited;
+                await using (var auditCommand = connection.CreateCommand())
+                {
+                    auditCommand.Transaction = transaction;
+                    auditCommand.CommandText =
+                        """
+                        INSERT INTO asset_collection_deletion_audit (
+                            collection_id, name, type, asset_count, deleted_at)
+                        SELECT
+                            c.id,
+                            c.name,
+                            c.type,
+                            COUNT(ci.asset_id),
+                            $deleted_at
+                        FROM asset_collections c
+                        LEFT JOIN asset_collection_items ci ON ci.collection_id = c.id
+                        WHERE c.id = $id
+                        GROUP BY c.id, c.name, c.type;
+                        """;
+                    auditCommand.Parameters.AddWithValue(
+                        "$id",
+                        collectionId.ToString("D"));
+                    auditCommand.Parameters.AddWithValue(
+                        "$deleted_at",
+                        deletedAt.ToString("O"));
+                    audited = await auditCommand.ExecuteNonQueryAsync(cancellationToken);
+                }
+
+                if (audited == 0)
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                    return false;
+                }
+
+                bool deleted;
+                await using (var deleteCommand = connection.CreateCommand())
+                {
+                    deleteCommand.Transaction = transaction;
+                    deleteCommand.CommandText =
+                        """
+                        DELETE FROM asset_collections
+                        WHERE id = $id;
+                        """;
+                    deleteCommand.Parameters.AddWithValue(
+                        "$id",
+                        collectionId.ToString("D"));
+                    deleted = await deleteCommand.ExecuteNonQueryAsync(cancellationToken) == 1;
+                }
+
+                if (!deleted)
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                    return false;
+                }
+
+                await transaction.CommitAsync(cancellationToken);
+            }
+        }
+
+        return true;
+    }
+
     public async Task<int> AddAssetsToCollectionAsync(
         Guid collectionId,
         IReadOnlyCollection<Guid> assetIds,

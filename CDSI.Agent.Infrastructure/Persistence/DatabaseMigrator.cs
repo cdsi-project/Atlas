@@ -802,6 +802,34 @@ internal static class DatabaseMigrator
             await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
+        if (currentVersion < 20)
+        {
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await using var migrationCommand = connection.CreateCommand();
+            migrationCommand.Transaction = (SqliteTransaction)transaction;
+            migrationCommand.CommandText =
+                """
+                CREATE TABLE asset_collection_deletion_audit (
+                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    collection_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    asset_count INTEGER NOT NULL,
+                    deleted_at TEXT NOT NULL
+                );
+
+                CREATE INDEX ix_asset_collection_deletion_audit_collection_id
+                ON asset_collection_deletion_audit(collection_id);
+
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (20, $applied_at);
+                """;
+            migrationCommand.Parameters.AddWithValue(
+                "$applied_at",
+                DateTimeOffset.UtcNow.ToString("O"));
+            await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     private static async Task<bool> TableExistsAsync(

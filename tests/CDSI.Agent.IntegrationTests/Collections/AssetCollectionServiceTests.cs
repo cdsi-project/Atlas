@@ -9,7 +9,7 @@ namespace CDSI.Agent.IntegrationTests.Collections;
 public sealed class AssetCollectionServiceTests
 {
     [Fact]
-    public async Task CreateAddRemoveAndPrepareSync_PreservesLocalAsset()
+    public async Task CreateAddRemoveDeleteAndPrepareSync_PreservesLocalAsset()
     {
         using var directory = new TestDirectory();
         var repository = new SqliteAssetRepository(Path.Combine(directory.Path, "cdsi.db"));
@@ -46,7 +46,42 @@ public sealed class AssetCollectionServiceTests
             collection.Id,
             [registered.AssetId]));
         Assert.Empty(await service.GetMembersAsync(collection.Id));
+        Assert.Equal(1, await service.AddAssetsAsync(
+            collection.Id,
+            [registered.AssetId]));
+
+        var deleted = await service.DeleteAsync(collection.Id);
+
+        Assert.Equal(collection.Id, deleted.Id);
+        Assert.Equal(collection.Name, deleted.Name);
+        Assert.Equal(collection.Type, deleted.Type);
+        Assert.Empty(await service.ListAsync());
         Assert.Single(await repository.ListAssetsAsync(100));
+
+        await using (var auditConnection = new SqliteConnection(
+            $"Data Source={Path.Combine(directory.Path, "cdsi.db")};Pooling=False"))
+        {
+            await auditConnection.OpenAsync();
+            await using (var auditCommand = auditConnection.CreateCommand())
+            {
+                auditCommand.CommandText =
+                    """
+                    SELECT collection_id, name, asset_count
+                    FROM asset_collection_deletion_audit;
+                    """;
+                await using (var auditReader =
+                    await auditCommand.ExecuteReaderAsync())
+                {
+                    Assert.True(await auditReader.ReadAsync());
+                    Assert.Equal(collection.Id.ToString("D"), auditReader.GetString(0));
+                    Assert.Equal("Episode 01", auditReader.GetString(1));
+                    Assert.Equal(1, auditReader.GetInt32(2));
+                    Assert.False(await auditReader.ReadAsync());
+                }
+            }
+
+            await auditConnection.CloseAsync();
+        }
 
         SqliteConnection.ClearAllPools();
     }

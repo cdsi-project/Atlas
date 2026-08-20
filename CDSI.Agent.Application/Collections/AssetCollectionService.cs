@@ -53,6 +53,22 @@ public sealed class AssetCollectionService(IAssetCollectionRepository repository
         return repository.ListAssetCollectionsAsync(cancellationToken);
     }
 
+    public async Task<AssetCollection> DeleteAsync(
+        Guid collectionId,
+        CancellationToken cancellationToken = default)
+    {
+        var collection = await GetRequiredAsync(collectionId, cancellationToken);
+        if (!await repository.DeleteAssetCollectionAsync(
+                collectionId,
+                DateTimeOffset.UtcNow,
+                cancellationToken))
+        {
+            throw new KeyNotFoundException("资产清单不存在或已被移除。");
+        }
+
+        return collection;
+    }
+
     public async Task<IReadOnlyList<AssetCollectionMember>> GetMembersAsync(
         Guid collectionId,
         CancellationToken cancellationToken = default)
