@@ -125,11 +125,6 @@ public sealed partial class MainForm : Form
             Padding = new Padding(0),
             BackColor = BackColor
         };
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         mainLayout.Controls.Add(_mainMenuStrip, 0, 0);
 
         var header = new Panel
@@ -241,7 +236,6 @@ public sealed partial class MainForm : Form
         progressPanel.SetColumnSpan(_progressLabel, 2);
         progressPanel.Controls.Add(_progressBar, 0, 1);
         progressPanel.Controls.Add(_currentPathLabel, 1, 1);
-        mainLayout.Controls.Add(progressPanel, 0, 3);
 
         ConfigureAssetGrid();
         ConfigureDuplicateGrid();
@@ -290,7 +284,7 @@ public sealed partial class MainForm : Form
             BackColor = BackColor
         };
         gridHost.Controls.Add(_mainTabControl);
-        mainLayout.Controls.Add(gridHost, 0, 4);
+        ConfigureMainContentLayout(mainLayout, gridHost, progressPanel);
 
         var statusStrip = new StatusStrip
         {
@@ -320,6 +314,24 @@ public sealed partial class MainForm : Form
         form.MinimumSize = new Size(920, 600);
         form.Size = new Size(1180, 760);
         form.WindowState = FormWindowState.Maximized;
+    }
+
+    internal static void ConfigureMainContentLayout(
+        TableLayoutPanel mainLayout,
+        Control content,
+        Control progress)
+    {
+        ArgumentNullException.ThrowIfNull(mainLayout);
+        ArgumentNullException.ThrowIfNull(content);
+        ArgumentNullException.ThrowIfNull(progress);
+        mainLayout.RowStyles.Clear();
+        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
+        mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        mainLayout.Controls.Add(content, 0, 3);
+        mainLayout.Controls.Add(progress, 0, 4);
     }
 
     internal static void ConfigureMainTabs(

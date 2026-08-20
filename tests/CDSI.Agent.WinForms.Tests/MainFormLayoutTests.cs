@@ -65,6 +65,28 @@ public sealed class MainFormLayoutTests
     }
 
     [Fact]
+    public void ConfigureMainContentLayout_PlacesProgressAtTheBottom()
+    {
+        using var mainLayout = new TableLayoutPanel
+        {
+            ColumnCount = 1,
+            RowCount = 5
+        };
+        using var content = new Panel();
+        using var progress = new Panel();
+
+        MainForm.ConfigureMainContentLayout(mainLayout, content, progress);
+
+        Assert.Equal(3, mainLayout.GetRow(content));
+        Assert.Equal(4, mainLayout.GetRow(progress));
+        Assert.Equal(5, mainLayout.RowStyles.Count);
+        Assert.Equal(SizeType.Percent, mainLayout.RowStyles[3].SizeType);
+        Assert.Equal(100, mainLayout.RowStyles[3].Height);
+        Assert.Equal(SizeType.Absolute, mainLayout.RowStyles[4].SizeType);
+        Assert.Equal(58, mainLayout.RowStyles[4].Height);
+    }
+
+    [Fact]
     public void ConfigureEscapeShortcutDisplay_DoesNotAssignAnInvalidShortcutKey()
     {
         using var menuItem = new ToolStripMenuItem();
