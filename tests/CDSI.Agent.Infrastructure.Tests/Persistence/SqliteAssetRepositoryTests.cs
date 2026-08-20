@@ -295,6 +295,77 @@ public sealed class SqliteAssetRepositoryTests
     }
 
     [Fact]
+    public async Task HideAssetsFromListAsync_PersistsAcrossRescansWithoutDeletingAssets()
+    {
+        using var directory = new TestDirectory();
+        var databasePath = Path.Combine(directory.Path, "cdsi.db");
+        var repository = new SqliteAssetRepository(databasePath);
+        await repository.InitializeAsync();
+        var deviceId = await repository.GetOrCreateDeviceIdAsync();
+        var visible = CreateFile(
+            Path.Combine(directory.Path, "visible.txt"),
+            "visible.txt");
+        var hidden = CreateFile(
+            Path.Combine(directory.Path, "hidden.mp4"),
+            "hidden.mp4") with
+        {
+            MimeType = "video/mp4"
+        };
+        await repository.RegisterLocalFilesAsync(
+            deviceId,
+            [visible, hidden],
+            DateTimeOffset.UtcNow);
+        var hiddenAsset = (await repository.ListAssetsAsync(100))
+            .Single(asset => asset.OriginalFilename == hidden.OriginalFilename);
+        var hiddenAt = DateTimeOffset.UtcNow.AddMinutes(1);
+
+        var affected = await repository.HideAssetsFromListAsync(
+            [hiddenAsset.AssetId, hiddenAsset.AssetId],
+            hiddenAt);
+        var repeated = await repository.HideAssetsFromListAsync(
+            [hiddenAsset.AssetId],
+            hiddenAt.AddSeconds(1));
+        await repository.RegisterLocalFilesAsync(
+            deviceId,
+            [hidden],
+            hiddenAt.AddMinutes(1));
+
+        var listedAssets = await repository.ListAssetsAsync(100);
+        var statistics = await repository.GetLocalAssetStatisticsAsync();
+        var extensions = await repository.ListAssetExtensionsAsync();
+
+        Assert.Equal(1, affected);
+        Assert.Equal(0, repeated);
+        Assert.Equal(1, await repository.GetAssetListCountAsync());
+        Assert.Equal("visible.txt", Assert.Single(listedAssets).OriginalFilename);
+        Assert.Equal(2, statistics.FileCount);
+        Assert.DoesNotContain(".mp4", extensions);
+
+        var connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+            Pooling = false
+        }.ToString();
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT COUNT(*)
+            FROM assets a
+            INNER JOIN asset_locations l ON l.asset_id = a.id
+            WHERE a.id = $asset_id
+              AND a.hidden_from_asset_list = 1
+              AND a.hidden_from_asset_list_at = $hidden_at;
+            """;
+        command.Parameters.AddWithValue("$asset_id", hiddenAsset.AssetId.ToString("D"));
+        command.Parameters.AddWithValue("$hidden_at", hiddenAt.ToString("O"));
+        Assert.Equal(1L, (long)(await command.ExecuteScalarAsync())!);
+
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
     public async Task ListAssetsAsync_AppliesFileTypeAndCreationTimeFiltersInSqlite()
     {
         using var directory = new TestDirectory();
@@ -661,10 +732,25 @@ public sealed class SqliteAssetRepositoryTests
             var scanFilterColumnCount = Convert.ToInt32(
                 await scanFilterColumnCommand.ExecuteScalarAsync());
 
-            Assert.Equal(14, version);
+            await using var assetVisibilityColumnCommand = connection.CreateCommand();
+            assetVisibilityColumnCommand.CommandText =
+                """
+                SELECT COUNT(*)
+                FROM pragma_table_info('assets')
+                WHERE (name = 'hidden_from_asset_list'
+                  AND "notnull" = 1
+                  AND dflt_value = '0')
+                   OR (name = 'hidden_from_asset_list_at'
+                  AND "notnull" = 0);
+                """;
+            var assetVisibilityColumnCount = Convert.ToInt32(
+                await assetVisibilityColumnCommand.ExecuteScalarAsync());
+
+            Assert.Equal(15, version);
             Assert.Equal(15, tableCount);
             Assert.Equal(6, filterIndexCount);
             Assert.Equal(2, scanFilterColumnCount);
+            Assert.Equal(2, assetVisibilityColumnCount);
         }
 
         SqliteConnection.ClearAllPools();

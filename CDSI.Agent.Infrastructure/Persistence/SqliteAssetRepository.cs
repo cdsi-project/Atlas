@@ -767,11 +767,55 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             FROM asset_locations l
             INNER JOIN assets a ON a.id = l.asset_id
             WHERE l.location_type = 'Local'
+              AND a.hidden_from_asset_list = 0
               {filterSql};
             """;
         AddAssetFilterParameters(command, filter);
         return Convert.ToInt64(
             await command.ExecuteScalarAsync(cancellationToken));
+    }
+
+    public async Task<int> HideAssetsFromListAsync(
+        IReadOnlyCollection<Guid> assetIds,
+        DateTimeOffset hiddenAt,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(assetIds);
+        var uniqueAssetIds = assetIds.Distinct().ToArray();
+        if (uniqueAssetIds.Length == 0)
+        {
+            return 0;
+        }
+
+        if (uniqueAssetIds.Length > 1_000)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(assetIds),
+                "一次最多可从资产列表移除 1000 个资产。");
+        }
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        var idParameters = uniqueAssetIds
+            .Select((_, index) => $"$asset_id_{index}")
+            .ToArray();
+        command.CommandText =
+            $"""
+            UPDATE assets
+            SET hidden_from_asset_list = 1,
+                hidden_from_asset_list_at = $hidden_at
+            WHERE hidden_from_asset_list = 0
+              AND id IN ({string.Join(", ", idParameters)});
+            """;
+        command.Parameters.AddWithValue("$hidden_at", hiddenAt.ToString("O"));
+        for (var index = 0; index < uniqueAssetIds.Length; index++)
+        {
+            command.Parameters.AddWithValue(
+                idParameters[index],
+                uniqueAssetIds[index].ToString("D"));
+        }
+
+        return await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<AssetDirectorySummary>> ListAssetDirectoriesAsync(
@@ -832,6 +876,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             SELECT lower(a.extension)
             FROM assets a
             WHERE length(trim(a.extension)) > 0
+              AND a.hidden_from_asset_list = 0
               {(fileTypeCondition is null ? string.Empty : $"AND {fileTypeCondition}")}
               AND EXISTS (
                   SELECT 1
@@ -921,6 +966,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                AND m.source_size = a.size
                AND m.source_modified_at = a.modified_at
             WHERE l.location_type = 'Local'
+              AND a.hidden_from_asset_list = 0
               {filterSql}
             ORDER BY
                 a.discovered_at DESC,

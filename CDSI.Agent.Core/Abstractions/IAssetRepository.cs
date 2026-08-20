@@ -164,6 +164,11 @@ public interface IAssetRepository
         AssetListFilter filter,
         CancellationToken cancellationToken = default);
 
+    Task<int> HideAssetsFromListAsync(
+        IReadOnlyCollection<Guid> assetIds,
+        DateTimeOffset hiddenAt,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<AssetDirectorySummary>> ListAssetDirectoriesAsync(
         CancellationToken cancellationToken = default);
 

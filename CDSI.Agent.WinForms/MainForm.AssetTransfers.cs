@@ -8,6 +8,7 @@ namespace CDSI.Agent.WinForms;
 public sealed partial class MainForm
 {
     private readonly ToolStripMenuItem _openFileLocationMenuItem = new();
+    private readonly ToolStripMenuItem _hideAssetsFromListMenuItem = new();
     private readonly ContextMenuStrip _duplicateContextMenu = new();
     private readonly ToolStripMenuItem _openDuplicateFileLocationMenuItem = new();
 
@@ -19,6 +20,7 @@ public sealed partial class MainForm
         _moveToWorkspaceMenuItem.Text = "移动到 CDSI 工作目录";
         _backupToOssMenuItem.Text = "备份到 OSS";
         _publishToOpenWebMenuItem.Text = "发布到 OpenWeb";
+        _hideAssetsFromListMenuItem.Text = "从资产列表中移除（不删除）";
         _openFileLocationMenuItem.Click += (_, _) => OpenCurrentAssetFileLocation();
         _copyToWorkspaceMenuItem.Click += async (_, _) =>
             await TransferSelectedAssetsAsync(ManagedAssetTransferAction.Copy);
@@ -30,6 +32,8 @@ public sealed partial class MainForm
             await BackupSelectedAssetsAsync();
         _publishToOpenWebMenuItem.Click += async (_, _) =>
             await PublishSelectedArticleAsync();
+        _hideAssetsFromListMenuItem.Click += async (_, _) =>
+            await HideSelectedAssetsFromListAsync();
 
         _assetContextMenu.Items.AddRange(
             [
@@ -41,7 +45,9 @@ public sealed partial class MainForm
                 _copyToWorkspaceMenuItem,
                 _moveToWorkspaceMenuItem,
                 new ToolStripSeparator(),
-                _backupToOssMenuItem
+                _backupToOssMenuItem,
+                new ToolStripSeparator(),
+                _hideAssetsFromListMenuItem
             ]);
         _assetContextMenu.Opening += (_, args) =>
         {
@@ -55,6 +61,7 @@ public sealed partial class MainForm
             _copyToWorkspaceMenuItem.Enabled = canOperate;
             _moveToWorkspaceMenuItem.Enabled = canOperate;
             _backupToOssMenuItem.Enabled = canOperate;
+            _hideAssetsFromListMenuItem.Enabled = selected.Count > 0;
             _publishToOpenWebMenuItem.Enabled =
                 selected.Count == 1 &&
                 canOperate &&
@@ -67,6 +74,8 @@ public sealed partial class MainForm
                 $"移动到 CDSI 工作目录 ({selected.Count:N0})";
             _backupToOssMenuItem.Text =
                 $"备份到 OSS ({selected.Count:N0})";
+            _hideAssetsFromListMenuItem.Text =
+                $"从资产列表中移除（不删除，{selected.Count:N0} 个）";
         };
         _assetGrid.ContextMenuStrip = _assetContextMenu;
         _assetGrid.CellMouseDown += AssetGrid_CellMouseDown;
@@ -255,6 +264,52 @@ public sealed partial class MainForm
             .Where(asset => asset is not null)
             .Cast<AssetListItem>()
             .ToArray();
+    }
+
+    private async Task HideSelectedAssetsFromListAsync()
+    {
+        var selected = GetSelectedAssets();
+        if (selected.Count == 0 ||
+            MessageBox.Show(
+                this,
+                CreateAssetListRemovalConfirmation(selected),
+                "从资产列表中移除",
+                MessageBoxButtons.OKCancel,
+                MessageBoxIcon.Question) != DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            var hidden = await _scanService.HideAssetsFromListAsync(
+                selected.Select(asset => asset.AssetId).Distinct().ToArray());
+            await RefreshAssetPageAsync();
+            _statusLabel.Text = $"已从资产列表移除 {hidden:N0} 个资产，本地文件未删除";
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法从资产列表移除", exception);
+        }
+    }
+
+    internal static string CreateAssetListRemovalConfirmation(
+        IReadOnlyList<AssetListItem> assets)
+    {
+        ArgumentNullException.ThrowIfNull(assets);
+        if (assets.Count == 0)
+        {
+            throw new ArgumentException("至少需要一个资产。", nameof(assets));
+        }
+
+        var preview = string.Join(
+            Environment.NewLine,
+            assets.Take(8).Select(asset => asset.OriginalFilename));
+        var remaining = assets.Count - Math.Min(assets.Count, 8);
+        var remainingText = remaining > 0
+            ? $"{Environment.NewLine}……另有 {remaining:N0} 个"
+            : string.Empty;
+        return $"确定从资产列表中移除以下资产吗？{Environment.NewLine}{Environment.NewLine}{preview}{remainingText}{Environment.NewLine}{Environment.NewLine}本地文件、资产记录、OSS 备份和资产清单都不会被删除。";
     }
 
     private async Task TransferSelectedAssetsAsync(

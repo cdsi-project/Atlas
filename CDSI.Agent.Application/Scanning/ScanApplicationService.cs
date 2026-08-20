@@ -81,6 +81,17 @@ public sealed class ScanApplicationService
         return _repository.GetAssetListCountAsync(filter, cancellationToken);
     }
 
+    public Task<int> HideAssetsFromListAsync(
+        IReadOnlyCollection<Guid> assetIds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(assetIds);
+        return _repository.HideAssetsFromListAsync(
+            assetIds,
+            DateTimeOffset.UtcNow,
+            cancellationToken);
+    }
+
     public Task<AssetStatistics> GetLocalAssetStatisticsAsync(
         CancellationToken cancellationToken = default)
     {

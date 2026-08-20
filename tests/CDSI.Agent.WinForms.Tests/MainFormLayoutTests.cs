@@ -325,6 +325,32 @@ public sealed class MainFormLayoutTests
     }
 
     [Fact]
+    public void CreateAssetListRemovalConfirmation_StatesThatFilesAreNotDeleted()
+    {
+        var asset = new AssetListItem(
+            Guid.NewGuid(),
+            "creator-video.mp4",
+            ".mp4",
+            "video/mp4",
+            1024,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            Path.Combine(Path.GetTempPath(), "creator-video.mp4"),
+            AssetLocationOwnership.External,
+            AssetLocationStatus.Available,
+            AssetStatus.Indexed,
+            false);
+
+        var message = MainForm.CreateAssetListRemovalConfirmation([asset]);
+
+        Assert.Contains("creator-video.mp4", message);
+        Assert.Contains("本地文件", message);
+        Assert.Contains("不会被删除", message);
+        Assert.Throws<ArgumentException>(() =>
+            MainForm.CreateAssetListRemovalConfirmation([]));
+    }
+
+    [Fact]
     public void RightClickSelection_WithShift_SelectsTheAnchorRange()
     {
         using var grid = CreateSelectionGrid();
