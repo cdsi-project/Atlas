@@ -68,10 +68,10 @@ public sealed partial class MainForm
         var viewMenu = new ToolStripMenuItem("视图(&V)");
         viewMenu.DropDownItems.AddRange(
             [
-                CreateTabMenuItem("资产", _assetsTabPage, Keys.Control | Keys.D1),
+                CreateTabMenuItem("全部资产", _assetsTabPage, Keys.Control | Keys.D1),
                 CreateTabMenuItem("资产目录", _assetDirectoriesTabPage, Keys.Control | Keys.D2),
                 CreateTabMenuItem("重复文件", _duplicatesTabPage, Keys.Control | Keys.D3),
-                CreateTabMenuItem("资产清单", _collectionsTabPage, Keys.Control | Keys.D4),
+                CreateTabMenuItem("项目管理", _collectionsTabPage, Keys.Control | Keys.D4),
                 CreateTabMenuItem("统计", _statisticsTabPage, Keys.Control | Keys.D5),
                 new ToolStripSeparator(),
                 CreateMenuItem("重置资产列表列宽", (_, _) =>

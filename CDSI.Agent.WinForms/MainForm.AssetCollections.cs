@@ -7,7 +7,7 @@ namespace CDSI.Agent.WinForms;
 public sealed partial class MainForm
 {
     private readonly AssetCollectionService _assetCollectionService;
-    private readonly TabPage _collectionsTabPage = new("资产清单");
+    private readonly TabPage _collectionsTabPage = new("项目管理");
     private readonly DataGridView _collectionGrid = new();
     private readonly DataGridView _collectionMemberGrid = new();
     private readonly Button _createCollectionButton = new();
@@ -21,35 +21,12 @@ public sealed partial class MainForm
     {
         ConfigureGrid(_collectionGrid);
         _collectionGrid.AccessibleName = "资产清单列表";
-        _collectionGrid.Columns.Add(CreateColumn(
-            "名称",
-            160,
-            DataGridViewAutoSizeColumnMode.Fill,
-            45,
-            minimumWidth: 120));
-        _collectionGrid.Columns.Add(CreateColumn("类型", 64));
-        _collectionGrid.Columns.Add(CreateColumn("资产", 58));
-        _collectionGrid.Columns.Add(CreateFileSizeColumn());
-        _collectionGrid.Columns.Add(CreateColumn("已备份", 70));
-
         ConfigureGrid(_collectionMemberGrid);
         EnableAssetMultiSelection(_collectionMemberGrid);
         _collectionMemberGrid.AccessibleName = "资产清单成员列表";
-        _collectionMemberGrid.Columns.Add(CreateColumn(
-            "文件",
-            220,
-            DataGridViewAutoSizeColumnMode.Fill,
-            36,
-            minimumWidth: 160));
-        _collectionMemberGrid.Columns.Add(CreateColumn("类型", 110));
-        _collectionMemberGrid.Columns.Add(CreateFileSizeColumn());
-        _collectionMemberGrid.Columns.Add(CreateColumn(
-            "位置",
-            280,
-            DataGridViewAutoSizeColumnMode.Fill,
-            48,
-            minimumWidth: 200));
-        _collectionMemberGrid.Columns.Add(CreateObjectStorageStatusColumn());
+        ConfigureProjectManagementGridColumns(
+            _collectionGrid,
+            _collectionMemberGrid);
 
         ConfigureCollectionActionButton(
             _createCollectionButton,
@@ -83,6 +60,44 @@ public sealed partial class MainForm
             _removeCollectionMemberButton,
             _syncCollectionButton));
         UpdateCollectionActionState();
+    }
+
+    internal static void ConfigureProjectManagementGridColumns(
+        DataGridView projectGrid,
+        DataGridView memberGrid)
+    {
+        ArgumentNullException.ThrowIfNull(projectGrid);
+        ArgumentNullException.ThrowIfNull(memberGrid);
+
+        projectGrid.Columns.Add(CreateColumn(
+            "名称",
+            160,
+            DataGridViewAutoSizeColumnMode.Fill,
+            45,
+            minimumWidth: 120));
+        projectGrid.Columns.Add(CreateColumn("类型", 64));
+        projectGrid.Columns.Add(CreateColumn("资产", 58));
+        projectGrid.Columns.Add(CreateFileSizeColumn());
+        projectGrid.Columns.Add(CreateColumn("已备份", 70));
+
+        memberGrid.Columns.Add(CreateColumn(
+            "文件",
+            220,
+            DataGridViewAutoSizeColumnMode.Fill,
+            36,
+            minimumWidth: 160));
+        memberGrid.Columns.Add(CreateColumn("类型", 110));
+        memberGrid.Columns.Add(CreateFileSizeColumn());
+        memberGrid.Columns.Add(CreateColumn(
+            "位置",
+            280,
+            DataGridViewAutoSizeColumnMode.Fill,
+            48,
+            minimumWidth: 200));
+        memberGrid.Columns.Add(CreateObjectStorageStatusColumn());
+
+        EnableFreeColumnResizing(projectGrid);
+        EnableFreeColumnResizing(memberGrid);
     }
 
     internal static Control CreateAssetCollectionLayout(
@@ -386,7 +401,7 @@ public sealed partial class MainForm
             _refreshingCollections = false;
         }
 
-        _collectionsTabPage.Text = $"资产清单 ({collections.Count:N0})";
+        _collectionsTabPage.Text = $"项目管理 ({collections.Count:N0})";
         await RefreshSelectedCollectionMembersAsync();
     }
 

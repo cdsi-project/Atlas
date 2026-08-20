@@ -18,6 +18,7 @@ public sealed partial class MainForm
     private readonly Label _statisticsStorageValueLabel = new();
     private readonly Label _statisticsBackupCoverageValueLabel = new();
     private readonly Label _statisticsVideoDurationValueLabel = new();
+    private readonly AssetCompositionPieChart _statisticsAssetCompositionChart = new();
 
     private void ConfigureStatisticsTab()
     {
@@ -50,11 +51,13 @@ public sealed partial class MainForm
                     [
                         new("视频总时长", _statisticsVideoDurationValueLabel)
                     ])
-            ]));
+            ],
+            _statisticsAssetCompositionChart));
     }
 
     internal static TableLayoutPanel CreateStatisticsDashboard(
-        IReadOnlyList<StatisticsSection> sections)
+        IReadOnlyList<StatisticsSection> sections,
+        Control? assetCompositionChart = null)
     {
         ArgumentNullException.ThrowIfNull(sections);
         var dashboard = new TableLayoutPanel
@@ -70,8 +73,9 @@ public sealed partial class MainForm
         dashboard.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         var row = 0;
-        foreach (var section in sections)
+        for (var sectionIndex = 0; sectionIndex < sections.Count; sectionIndex++)
         {
+            var section = sections[sectionIndex];
             dashboard.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
             dashboard.Controls.Add(new Label
             {
@@ -84,14 +88,54 @@ public sealed partial class MainForm
             }, 0, row++);
 
             var metricRows = Math.Max(1, (int)Math.Ceiling(section.Metrics.Count / 3d));
-            dashboard.RowStyles.Add(new RowStyle(
-                SizeType.Absolute,
-                metricRows * 76));
-            dashboard.Controls.Add(CreateStatisticsMetricGrid(section.Metrics), 0, row++);
+            var metricGrid = CreateStatisticsMetricGrid(section.Metrics);
+            if (sectionIndex == 0 && assetCompositionChart is not null)
+            {
+                dashboard.RowStyles.Add(new RowStyle(SizeType.Absolute, 236));
+                dashboard.Controls.Add(
+                    CreateAssetCompositionLayout(assetCompositionChart, metricGrid),
+                    0,
+                    row++);
+            }
+            else
+            {
+                dashboard.RowStyles.Add(new RowStyle(
+                    SizeType.Absolute,
+                    metricRows * 76));
+                dashboard.Controls.Add(metricGrid, 0, row++);
+            }
         }
 
         dashboard.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         return dashboard;
+    }
+
+    internal static TableLayoutPanel CreateAssetCompositionLayout(
+        Control chart,
+        Control metricGrid)
+    {
+        ArgumentNullException.ThrowIfNull(chart);
+        ArgumentNullException.ThrowIfNull(metricGrid);
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty,
+            BackColor = Color.White,
+            AccessibleName = "资产构成统计"
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 360));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        chart.Dock = DockStyle.Fill;
+        chart.Margin = new Padding(0, 0, 16, 0);
+        metricGrid.Dock = DockStyle.Fill;
+        layout.Controls.Add(chart, 0, 0);
+        layout.Controls.Add(metricGrid, 1, 0);
+        return layout;
     }
 
     private static TableLayoutPanel CreateStatisticsMetricGrid(
@@ -188,6 +232,13 @@ public sealed partial class MainForm
                 .ToString("P1");
         _statisticsVideoDurationValueLabel.Text =
             FormatTotalDuration(statistics.VideoDurationMilliseconds);
+        _statisticsAssetCompositionChart.SetValues(
+            statistics.AssetCount,
+            statistics.VideoAssetCount,
+            statistics.AudioAssetCount,
+            statistics.ImageAssetCount,
+            statistics.DocumentAssetCount,
+            statistics.OtherAssetCount);
     }
 
     internal sealed record StatisticsSection(

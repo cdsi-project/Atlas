@@ -48,17 +48,17 @@ public sealed class MainFormLayoutTests
         using var tabControl = new TabControl();
         TabPage[] tabPages =
         [
-            new("资产"),
+            new("全部资产"),
             new("资产目录"),
             new("重复文件"),
-            new("资产清单"),
+            new("项目管理"),
             new("统计")
         ];
 
         MainForm.ConfigureMainTabs(tabControl, tabPages);
 
         Assert.Equal(
-            ["资产", "资产目录", "重复文件", "资产清单", "统计"],
+            ["全部资产", "资产目录", "重复文件", "项目管理", "统计"],
             tabControl.TabPages.Cast<TabPage>().Select(page => page.Text));
         Assert.Equal(DockStyle.Fill, tabControl.Dock);
         Assert.Equal(new Point(12, 5), tabControl.Padding);
@@ -210,6 +210,106 @@ public sealed class MainFormLayoutTests
         Assert.All(
             dashboard.Controls.OfType<TableLayoutPanel>(),
             metricGrid => Assert.Equal(3, metricGrid.ColumnCount));
+    }
+
+    [Fact]
+    public void CreateStatisticsDashboard_PlacesTheAssetPieChartBesideMetrics()
+    {
+        using var chart = new AssetCompositionPieChart();
+        Label[] values = [new(), new(), new(), new(), new(), new()];
+        using var dashboard = MainForm.CreateStatisticsDashboard(
+            [
+                new MainForm.StatisticsSection(
+                    "资产构成",
+                    [
+                        new("资产总数", values[0]),
+                        new("视频文件", values[1]),
+                        new("音频文件", values[2]),
+                        new("图片文件", values[3]),
+                        new("文本 / 文档", values[4]),
+                        new("其他类型", values[5])
+                    ])
+            ],
+            chart);
+
+        var compositionLayout = Assert.Single(
+            dashboard.Controls.OfType<TableLayoutPanel>(),
+            control => control.AccessibleName == "资产构成统计");
+        Assert.Equal(2, compositionLayout.ColumnCount);
+        Assert.Same(chart, compositionLayout.GetControlFromPosition(0, 0));
+        Assert.IsType<TableLayoutPanel>(
+            compositionLayout.GetControlFromPosition(1, 0));
+        Assert.Equal(236, dashboard.RowStyles[1].Height);
+    }
+
+    [Fact]
+    public void AssetCompositionPieChart_StoresAndRendersTheTypeBreakdown()
+    {
+        using var chart = new AssetCompositionPieChart
+        {
+            Size = new Size(420, 236)
+        };
+        chart.SetValues(
+            totalAssetCount: 20,
+            videoCount: 8,
+            audioCount: 4,
+            imageCount: 3,
+            documentCount: 2,
+            otherCount: 3);
+
+        Assert.Equal(20, chart.TotalAssetCount);
+        Assert.Equal(
+            ["视频", "音频", "图片", "文本 / 文档", "其他"],
+            chart.Slices.Select(slice => slice.Name));
+        Assert.Equal([8L, 4L, 3L, 2L, 3L],
+            chart.Slices.Select(slice => slice.Count));
+        Assert.Contains("资产总数 20", chart.AccessibleDescription);
+        Assert.Contains("视频 8", chart.AccessibleDescription);
+
+        using var bitmap = new Bitmap(chart.Width, chart.Height);
+        chart.DrawToBitmap(bitmap, chart.ClientRectangle);
+        var sampledColors = new HashSet<Color>();
+        for (var x = 0; x < bitmap.Width; x += 12)
+        {
+            for (var y = 0; y < bitmap.Height; y += 12)
+            {
+                sampledColors.Add(bitmap.GetPixel(x, y));
+            }
+        }
+
+        Assert.True(sampledColors.Count >= 6);
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            chart.SetValues(-1, 0, 0, 0, 0, 0));
+    }
+
+    [Fact]
+    public void ProjectManagementGrids_AllowEveryColumnWidthToBeAdjusted()
+    {
+        using var projectGrid = new DataGridView();
+        using var memberGrid = new DataGridView();
+
+        MainForm.ConfigureProjectManagementGridColumns(projectGrid, memberGrid);
+
+        Assert.Equal(
+            ["名称", "类型", "资产", "大小", "已备份"],
+            projectGrid.Columns
+                .Cast<DataGridViewColumn>()
+                .Select(column => column.HeaderText));
+        Assert.Equal(
+            ["文件", "类型", "大小", "位置", "OSS"],
+            memberGrid.Columns
+                .Cast<DataGridViewColumn>()
+                .Select(column => column.HeaderText));
+        Assert.All(
+            projectGrid.Columns.Cast<DataGridViewColumn>()
+                .Concat(memberGrid.Columns.Cast<DataGridViewColumn>()),
+            column =>
+            {
+                Assert.Equal(DataGridViewAutoSizeColumnMode.None, column.AutoSizeMode);
+                Assert.Equal(DataGridViewTriState.True, column.Resizable);
+            });
+        Assert.Equal(ScrollBars.Both, projectGrid.ScrollBars);
+        Assert.Equal(ScrollBars.Both, memberGrid.ScrollBars);
     }
 
     [Fact]

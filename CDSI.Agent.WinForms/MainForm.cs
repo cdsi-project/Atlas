@@ -46,7 +46,7 @@ public sealed partial class MainForm : Form
     private readonly ToolStripMenuItem _copyToWorkspaceMenuItem = new();
     private readonly ToolStripMenuItem _moveToWorkspaceMenuItem = new();
     private readonly ToolStripMenuItem _backupToOssMenuItem = new();
-    private readonly TabPage _assetsTabPage = new("资产");
+    private readonly TabPage _assetsTabPage = new("全部资产");
     private readonly TabPage _duplicatesTabPage = new("重复文件");
     private readonly ToolStripStatusLabel _statusLabel = new();
     private readonly ToolStripStatusLabel _databaseStatusLabel = new();
@@ -1065,8 +1065,8 @@ public sealed partial class MainForm : Form
             filter.TagId);
         RefreshAssetDirectories(assetDirectories);
         _assetsTabPage.Text = filter.IsEmpty
-            ? $"资产 ({assetCount:N0})"
-            : $"资产 ({assetCount:N0}/{totalAssetCount:N0})";
+            ? $"全部资产 ({assetCount:N0})"
+            : $"全部资产 ({assetCount:N0}/{totalAssetCount:N0})";
         await RefreshAssetCollectionsAsync();
         _duplicatesTabPage.Text = $"重复文件 ({duplicateGroups.Count:N0})";
         var assetCountStatus = filter.IsEmpty
