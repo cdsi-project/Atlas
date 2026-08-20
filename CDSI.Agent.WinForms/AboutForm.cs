@@ -4,6 +4,8 @@ namespace CDSI.Agent.WinForms;
 
 internal sealed class AboutForm : Form
 {
+    internal const string RepositoryUrl = "https://github.com/cdsi-project/Atlas";
+
     public AboutForm(string version)
     {
         Text = "关于 CDSI Atlas";
@@ -55,19 +57,16 @@ internal sealed class AboutForm : Form
         var repositoryLink = new LinkLabel
         {
             Dock = DockStyle.Fill,
-            Text = "github.com/cdsi-project/Atlas",
+            Text = "GitHub: github.com/cdsi-project/Atlas",
             TextAlign = ContentAlignment.MiddleLeft,
-            LinkColor = Color.FromArgb(24, 121, 78)
+            LinkColor = Color.FromArgb(24, 121, 78),
+            AccessibleName = "CDSI Atlas GitHub 仓库"
         };
         repositoryLink.LinkClicked += (_, _) =>
         {
             try
             {
-                using var process = Process.Start(new ProcessStartInfo
-                {
-                    FileName = "https://github.com/cdsi-project/Atlas",
-                    UseShellExecute = true
-                });
+                using var process = Process.Start(CreateRepositoryStartInfo());
             }
             catch (Exception exception)
             {
@@ -91,5 +90,14 @@ internal sealed class AboutForm : Form
         AcceptButton = closeButton;
         CancelButton = closeButton;
         Controls.Add(layout);
+    }
+
+    internal static ProcessStartInfo CreateRepositoryStartInfo()
+    {
+        return new ProcessStartInfo
+        {
+            FileName = RepositoryUrl,
+            UseShellExecute = true
+        };
     }
 }
