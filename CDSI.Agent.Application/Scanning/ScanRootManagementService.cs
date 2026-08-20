@@ -66,7 +66,13 @@ public sealed class ScanRootManagementService
             ScanRootMode.Readonly,
             DateTimeOffset.UtcNow,
             cancellationToken);
-        return new ScanRootRegistrationResult(scanRoot, warnings);
+        var requiresInitialScan = exactRoot is null ||
+            !exactRoot.Enabled ||
+            exactRoot.LastScannedAt is null;
+        return new ScanRootRegistrationResult(
+            scanRoot,
+            warnings,
+            requiresInitialScan);
     }
 
     public async Task SetEnabledAsync(
@@ -141,4 +147,5 @@ public sealed class ScanRootManagementService
 
 public sealed record ScanRootRegistrationResult(
     ScanRoot Root,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    bool RequiresInitialScan);

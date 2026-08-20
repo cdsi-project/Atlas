@@ -120,14 +120,39 @@ public sealed class ScanApplicationService
             cancellationToken);
     }
 
-    public async Task<ScanBatchSummary> ScanConfiguredRootsAsync(
+    public Task<ScanBatchSummary> ScanConfiguredRootsAsync(
         IProgress<ScanProgress>? progress = null,
         CancellationToken cancellationToken = default)
+    {
+        return ScanRootsCoreAsync(
+            includedRootIds: null,
+            progress,
+            cancellationToken);
+    }
+
+    public Task<ScanBatchSummary> ScanRootsAsync(
+        IReadOnlyCollection<Guid> scanRootIds,
+        IProgress<ScanProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(scanRootIds);
+        return ScanRootsCoreAsync(
+            scanRootIds.ToHashSet(),
+            progress,
+            cancellationToken);
+    }
+
+    private async Task<ScanBatchSummary> ScanRootsCoreAsync(
+        IReadOnlySet<Guid>? includedRootIds,
+        IProgress<ScanProgress>? progress,
+        CancellationToken cancellationToken)
     {
         var roots = (await _repository.ListScanRootsAsync(
                 includeRemoved: false,
                 cancellationToken))
-            .Where(root => root.Enabled)
+            .Where(root =>
+                root.Enabled &&
+                (includedRootIds is null || includedRootIds.Contains(root.Id)))
             .ToArray();
         var rootsScanned = 0;
         var rootsUnavailable = 0;

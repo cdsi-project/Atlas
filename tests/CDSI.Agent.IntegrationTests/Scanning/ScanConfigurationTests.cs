@@ -67,6 +67,7 @@ public sealed class ScanConfigurationTests
         var childResult = await service.AddExternalAsync(child.FullName);
         var scanService = new ScanApplicationService(new FileSystemScanner(), repository);
         await scanService.ScanDirectoryAsync(parent.FullName);
+        var existingResult = await service.AddExternalAsync(parent.FullName);
         await service.SetEnabledAsync(parentResult.Root.Id, enabled: false);
         var disabled = Assert.Single(
             await service.ListExternalAsync(),
@@ -77,6 +78,9 @@ public sealed class ScanConfigurationTests
         var assets = await scanService.ListAssetsAsync();
 
         Assert.Empty(parentResult.Warnings);
+        Assert.True(parentResult.RequiresInitialScan);
+        Assert.True(childResult.RequiresInitialScan);
+        Assert.False(existingResult.RequiresInitialScan);
         Assert.Contains(parent.FullName, Assert.Single(childResult.Warnings));
         Assert.Equal(ScanRootStatus.Disabled, disabled.Status);
         Assert.DoesNotContain(visible, root => root.Id == parentResult.Root.Id);
@@ -86,6 +90,60 @@ public sealed class ScanConfigurationTests
             root =>
                 root.Id == parentResult.Root.Id &&
                 root.Status == ScanRootStatus.Removed);
+
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
+    public async Task ScanRootsAsync_OnlyTraversesTheRequestedNewRoot()
+    {
+        using var directory = new TestDirectory();
+        var existingDirectory = Directory.CreateDirectory(
+            Path.Combine(directory.Path, "Existing"));
+        var newDirectory = Directory.CreateDirectory(
+            Path.Combine(directory.Path, "New"));
+        await File.WriteAllTextAsync(
+            Path.Combine(existingDirectory.FullName, "existing.txt"),
+            "existing");
+        await File.WriteAllTextAsync(
+            Path.Combine(newDirectory.FullName, "new.txt"),
+            "new");
+
+        var repository = new SqliteAssetRepository(
+            Path.Combine(directory.Path, "State", "cdsi.db"));
+        await repository.InitializeAsync();
+        var rootService = new ScanRootManagementService(repository);
+        var existingRoot = await rootService.AddExternalAsync(
+            existingDirectory.FullName);
+        var newRoot = await rootService.AddExternalAsync(newDirectory.FullName);
+        var initialScanService = new ScanApplicationService(
+            new FileSystemScanner(),
+            repository);
+        await initialScanService.ScanDirectoryAsync(existingDirectory.FullName);
+        var existingLastScannedAt = (await rootService.ListExternalAsync())
+            .Single(root => root.Id == existingRoot.Root.Id)
+            .LastScannedAt;
+        var recordingScanner = new RecordingScanner(new FileSystemScanner());
+        var selectiveScanService = new ScanApplicationService(
+            recordingScanner,
+            repository);
+
+        var summary = await selectiveScanService.ScanRootsAsync(
+            [newRoot.Root.Id]);
+        var rootsAfterScan = await rootService.ListExternalAsync();
+        var assets = await selectiveScanService.ListAssetsAsync();
+
+        Assert.Equal(1, summary.RootsConfigured);
+        Assert.Equal(1, summary.RootsScanned);
+        Assert.Equal(1, summary.FilesIndexed);
+        Assert.Equal([newDirectory.FullName], recordingScanner.ScannedRoots);
+        Assert.Equal(
+            existingLastScannedAt,
+            rootsAfterScan
+                .Single(root => root.Id == existingRoot.Root.Id)
+                .LastScannedAt);
+        Assert.Contains(assets, asset => asset.OriginalFilename == "existing.txt");
+        Assert.Contains(assets, asset => asset.OriginalFilename == "new.txt");
 
         SqliteConnection.ClearAllPools();
     }
@@ -231,6 +289,32 @@ public sealed class ScanConfigurationTests
             CancellationToken cancellationToken)
         {
             throw new InvalidOperationException("离线卷不应调用文件扫描器。");
+        }
+    }
+
+    private sealed class RecordingScanner : IFileScanner
+    {
+        private readonly IFileScanner _inner;
+
+        public RecordingScanner(IFileScanner inner)
+        {
+            _inner = inner;
+        }
+
+        public List<string> ScannedRoots { get; } = [];
+
+        public async Task ScanAsync(
+            string rootPath,
+            Func<DiscoveredFile, CancellationToken, ValueTask> onFile,
+            Func<ScanError, CancellationToken, ValueTask> onError,
+            CancellationToken cancellationToken)
+        {
+            ScannedRoots.Add(rootPath);
+            await _inner.ScanAsync(
+                rootPath,
+                onFile,
+                onError,
+                cancellationToken);
         }
     }
 }

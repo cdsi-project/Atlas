@@ -19,6 +19,10 @@ public sealed partial class SettingsForm : Form
     private readonly DataGridView _storageGrid = new();
     private readonly Button _editStorageButton = new();
     private readonly Button _deleteStorageButton = new();
+    private readonly HashSet<Guid> _initialScanRootIds = [];
+
+    internal IReadOnlyCollection<Guid> InitialScanRootIds =>
+        _initialScanRootIds.ToArray();
 
     public SettingsForm(
         WorkspaceApplicationService workspaceService,
@@ -406,6 +410,11 @@ public sealed partial class SettingsForm : Form
         try
         {
             var result = await _scanRootService.AddExternalAsync(dialog.SelectedPath);
+            if (result.RequiresInitialScan)
+            {
+                _initialScanRootIds.Add(result.Root.Id);
+            }
+
             await RefreshRootsAsync();
             if (result.Warnings.Count > 0)
             {
@@ -432,7 +441,17 @@ public sealed partial class SettingsForm : Form
 
         try
         {
-            await _scanRootService.SetEnabledAsync(root.Id, !root.Enabled);
+            var enable = !root.Enabled;
+            await _scanRootService.SetEnabledAsync(root.Id, enable);
+            if (!enable)
+            {
+                _initialScanRootIds.Remove(root.Id);
+            }
+            else if (root.LastScannedAt is null)
+            {
+                _initialScanRootIds.Add(root.Id);
+            }
+
             await RefreshRootsAsync();
         }
         catch (Exception exception)
@@ -457,6 +476,7 @@ public sealed partial class SettingsForm : Form
         try
         {
             await _scanRootService.RemoveAsync(root.Id);
+            _initialScanRootIds.Remove(root.Id);
             await RefreshRootsAsync();
         }
         catch (Exception exception)
