@@ -46,7 +46,14 @@ public sealed class OpenWebArticlePublishingService
 
         ArgumentException.ThrowIfNullOrWhiteSpace(request.Path);
         var title = NormalizeTitle(request.Title);
-        var connection = await _settingsService.GetConnectionAsync(cancellationToken);
+        if (request.SourceId == Guid.Empty)
+        {
+            throw new ArgumentException("OpenWeb 源站 ID 无效。", nameof(request));
+        }
+
+        var connection = await _settingsService.GetConnectionAsync(
+            request.SourceId,
+            cancellationToken);
         var content = await _contentReader.ReadAsync(request.Path, cancellationToken);
         if (string.IsNullOrWhiteSpace(content.Html))
         {
@@ -133,6 +140,7 @@ public sealed class OpenWebArticlePublishingService
 
 public sealed record OpenWebArticlePublishRequest(
     Guid AssetId,
+    Guid SourceId,
     string Path,
     string Title,
     OpenWebArticleStatus Status);

@@ -1,5 +1,6 @@
 using CDSI.Agent.Application.OpenWeb;
 using CDSI.Agent.Core.Abstractions;
+using CDSI.Agent.Core.OpenWeb;
 using CDSI.Agent.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 
@@ -8,60 +9,105 @@ namespace CDSI.Agent.IntegrationTests.OpenWeb;
 public sealed class OpenWebSettingsServiceTests
 {
     [Fact]
-    public async Task SaveAsync_PersistsNormalizesAndClearsTheOriginDomain()
+    public async Task SaveAsync_ManagesMultipleSourcesAndExactlyOneDefault()
     {
         using var directory = new TestDirectory();
-        var repository = new SqliteAssetRepository(
-            Path.Combine(directory.Path, "cdsi.db"));
+        var databasePath = Path.Combine(directory.Path, "cdsi.db");
+        var repository = new SqliteAssetRepository(databasePath);
         await repository.InitializeAsync();
         var secretStore = new InMemorySecretStore();
         var service = new OpenWebSettingsService(repository, secretStore);
 
-        var initial = await service.GetAsync();
-        var saved = await service.SaveAsync(
+        var first = await service.SaveAsync(new SaveOpenWebSourceRequest(
+            null,
+            "主站",
             "ORIGIN.Example.COM.",
             " editor ",
-            "abcd efgh ijkl mnop");
-        var reloaded = await new OpenWebSettingsService(
-            repository,
-            secretStore).GetAsync();
-        var connection = await service.GetConnectionAsync();
+            "abcd efgh ijkl mnop",
+            IsDefault: false));
+        var second = await service.SaveAsync(new SaveOpenWebSourceRequest(
+            null,
+            "作品站",
+            "works.example.com",
+            "author",
+            "second-password",
+            IsDefault: true));
+        var sources = await service.ListAsync();
+        var firstConnection = await service.GetConnectionAsync(first.Source.Id);
+        var secondConnection = await service.GetConnectionAsync(second.Source.Id);
 
-        Assert.Null(initial.OriginDomain);
-        Assert.False(initial.HasApplicationPassword);
-        Assert.Equal("origin.example.com", saved.OriginDomain);
-        Assert.Equal("editor", saved.WordPressUsername);
-        Assert.True(saved.HasApplicationPassword);
-        Assert.Equal("origin.example.com", reloaded.OriginDomain);
-        Assert.Equal("editor", reloaded.WordPressUsername);
-        Assert.True(reloaded.HasApplicationPassword);
-        Assert.Equal("abcdefghijklmnop", connection.ApplicationPassword);
+        Assert.Equal(2, sources.Count);
+        Assert.Equal(second.Source.Id, Assert.Single(
+            sources,
+            source => source.Source.IsDefault).Source.Id);
+        Assert.Equal("origin.example.com", first.Source.OriginDomain);
+        Assert.Equal("editor", first.Source.WordPressUsername);
+        Assert.Equal("abcdefghijklmnop", firstConnection.ApplicationPassword);
+        Assert.Equal("second-password", secondConnection.ApplicationPassword);
         Assert.DoesNotContain(
-            connection.ApplicationPassword,
-            connection.ToString(),
+            firstConnection.ApplicationPassword,
+            firstConnection.ToString(),
             StringComparison.Ordinal);
-        Assert.NotNull(reloaded.UpdatedAt);
 
-        await using (var sqliteConnection = new SqliteConnection(
-                         $"Data Source={Path.Combine(directory.Path, "cdsi.db")}"))
+        await service.SetDefaultAsync(first.Source.Id);
+        await service.DeleteAsync(first.Source.Id);
+        sources = await service.ListAsync();
+
+        Assert.Equal(second.Source.Id, Assert.Single(sources).Source.Id);
+        Assert.True(sources[0].Source.IsDefault);
+
+        await using (var connection = new SqliteConnection($"Data Source={databasePath}"))
         {
-            await sqliteConnection.OpenAsync();
-            await using var command = sqliteConnection.CreateCommand();
-            command.CommandText = "SELECT group_concat(setting_value, '|') FROM agent_settings;";
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText =
+                "SELECT group_concat(display_name || origin_domain || wordpress_username, '|') FROM openweb_sources;";
             var storedValues = (string?)await command.ExecuteScalarAsync();
-            Assert.DoesNotContain(
-                "abcdefghijklmnop",
-                storedValues ?? string.Empty,
-                StringComparison.Ordinal);
+            Assert.DoesNotContain("second-password", storedValues ?? string.Empty);
         }
 
-        await service.SaveAsync(" ", " ", " ");
-        var cleared = await service.GetAsync();
+        SqliteConnection.ClearAllPools();
+    }
 
-        Assert.Null(cleared.OriginDomain);
-        Assert.Null(cleared.WordPressUsername);
-        Assert.False(cleared.HasApplicationPassword);
-        Assert.Null(cleared.UpdatedAt);
+    [Fact]
+    public async Task ListAsync_MigratesTheLegacySourceAndCredential()
+    {
+        using var directory = new TestDirectory();
+        var databasePath = Path.Combine(directory.Path, "cdsi.db");
+        var repository = new SqliteAssetRepository(databasePath);
+        await repository.InitializeAsync();
+
+        await using (var connection = new SqliteConnection($"Data Source={databasePath}"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText =
+                """
+                DROP TABLE openweb_sources;
+                DELETE FROM schema_migrations WHERE version = 16;
+                INSERT INTO agent_settings(setting_key, setting_value, updated_at)
+                VALUES
+                    ('openweb.origin_domain', 'legacy.example.com', $updated_at),
+                    ('openweb.wordpress_username', 'legacy-editor', $updated_at);
+                """;
+            command.Parameters.AddWithValue("$updated_at", DateTimeOffset.UtcNow.ToString("O"));
+            await command.ExecuteNonQueryAsync();
+        }
+
+        await repository.InitializeAsync();
+        var secretStore = new InMemorySecretStore();
+        await secretStore.StoreAsync("openweb-wordpress", "legacy-password");
+        var service = new OpenWebSettingsService(repository, secretStore);
+
+        var configured = Assert.Single(await service.ListAsync());
+        var connectionResult = await service.GetConnectionAsync(configured.Source.Id);
+
+        Assert.Equal(OpenWebSource.MigratedLegacySourceId, configured.Source.Id);
+        Assert.Equal("legacy.example.com", configured.Source.OriginDomain);
+        Assert.True(configured.Source.IsDefault);
+        Assert.True(configured.HasApplicationPassword);
+        Assert.Equal("legacy-password", connectionResult.ApplicationPassword);
+        Assert.False(await secretStore.ExistsAsync("openweb-wordpress"));
         SqliteConnection.ClearAllPools();
     }
 

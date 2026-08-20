@@ -2,12 +2,6 @@ using System.Globalization;
 
 namespace CDSI.Agent.Core.OpenWeb;
 
-public sealed record OpenWebSettings(
-    string? OriginDomain,
-    string? WordPressUsername,
-    bool HasApplicationPassword,
-    DateTimeOffset? UpdatedAt);
-
 public static class OpenWebOriginDomain
 {
     private const int MaximumDomainLength = 253;

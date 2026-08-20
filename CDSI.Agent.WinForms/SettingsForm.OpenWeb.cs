@@ -6,158 +6,207 @@ namespace CDSI.Agent.WinForms;
 public sealed partial class SettingsForm
 {
     private readonly OpenWebSettingsService _openWebSettingsService;
-    private readonly TextBox _openWebOriginDomainTextBox = new();
-    private readonly TextBox _openWebUsernameTextBox = new();
-    private readonly TextBox _openWebApplicationPasswordTextBox = new();
-    private readonly Label _openWebStatusLabel = new();
+    private readonly DataGridView _openWebSourcesGrid = new();
+    private readonly Button _editOpenWebSourceButton = new();
+    private readonly Button _defaultOpenWebSourceButton = new();
+    private readonly Button _deleteOpenWebSourceButton = new();
 
     private TabPage CreateOpenWebPage()
     {
         var page = new TabPage("OpenWeb")
         {
             BackColor = Color.White,
-            Padding = new Padding(24)
+            Padding = new Padding(16)
         };
-        var layout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Top,
-            Height = 292,
-            ColumnCount = 2,
-            RowCount = 8,
-            Margin = Padding.Empty,
-            Padding = Padding.Empty
-        };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+        ConfigureOpenWebSourcesGrid();
 
-        var titleLabel = new Label
-        {
-            Text = "OpenWeb",
-            Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI Semibold", 10F),
-            ForeColor = Color.FromArgb(31, 37, 43)
-        };
-        layout.Controls.Add(titleLabel, 0, 0);
-        layout.SetColumnSpan(titleLabel, 2);
-
-        var domainLabel = new Label
-        {
-            Text = "源站域名",
-            Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(72, 81, 89)
-        };
-        layout.Controls.Add(domainLabel, 0, 1);
-        layout.SetColumnSpan(domainLabel, 2);
-
-        _openWebOriginDomainTextBox.Dock = DockStyle.Fill;
-        _openWebOriginDomainTextBox.Margin = new Padding(0, 5, 8, 5);
-        _openWebOriginDomainTextBox.AccessibleName = "OpenWeb 源站域名";
-        layout.Controls.Add(_openWebOriginDomainTextBox, 0, 2);
-        layout.SetColumnSpan(_openWebOriginDomainTextBox, 2);
-
-        var usernameLabel = new Label
-        {
-            Text = "WordPress 用户名",
-            Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(72, 81, 89)
-        };
-        layout.Controls.Add(usernameLabel, 0, 3);
-        layout.SetColumnSpan(usernameLabel, 2);
-
-        _openWebUsernameTextBox.Dock = DockStyle.Fill;
-        _openWebUsernameTextBox.Margin = new Padding(0, 5, 8, 5);
-        _openWebUsernameTextBox.AccessibleName = "WordPress 用户名";
-        layout.Controls.Add(_openWebUsernameTextBox, 0, 4);
-        layout.SetColumnSpan(_openWebUsernameTextBox, 2);
-
-        var passwordLabel = new Label
-        {
-            Text = "应用程序密码",
-            Dock = DockStyle.Fill,
-            ForeColor = Color.FromArgb(72, 81, 89)
-        };
-        layout.Controls.Add(passwordLabel, 0, 5);
-        layout.SetColumnSpan(passwordLabel, 2);
-
-        _openWebApplicationPasswordTextBox.Dock = DockStyle.Fill;
-        _openWebApplicationPasswordTextBox.Margin = new Padding(0, 5, 8, 5);
-        _openWebApplicationPasswordTextBox.UseSystemPasswordChar = true;
-        _openWebApplicationPasswordTextBox.AccessibleName = "WordPress 应用程序密码";
-        layout.Controls.Add(_openWebApplicationPasswordTextBox, 0, 6);
-
-        var saveButton = CreateButton(
-            "应用",
+        var addButton = CreateButton(
+            "添加源站",
             Color.FromArgb(24, 121, 78),
             Color.White);
-        saveButton.Margin = new Padding(4, 5, 0, 5);
-        saveButton.AccessibleName = "保存 OpenWeb 设置";
-        saveButton.Click += OpenWebSaveButton_Click;
-        layout.Controls.Add(saveButton, 1, 6);
+        addButton.Size = new Size(104, 32);
+        addButton.AccessibleName = "添加 OpenWeb 源站";
+        addButton.Click += AddOpenWebSourceButton_Click;
 
-        _openWebStatusLabel.Dock = DockStyle.Fill;
-        _openWebStatusLabel.ForeColor = Color.FromArgb(88, 98, 106);
-        _openWebStatusLabel.Padding = new Padding(0, 8, 0, 0);
-        _openWebStatusLabel.AccessibleName = "OpenWeb 设置状态";
-        layout.Controls.Add(_openWebStatusLabel, 0, 7);
-        layout.SetColumnSpan(_openWebStatusLabel, 2);
+        _editOpenWebSourceButton.Text = "编辑";
+        _editOpenWebSourceButton.Size = new Size(88, 32);
+        _editOpenWebSourceButton.FlatStyle = FlatStyle.Flat;
+        _editOpenWebSourceButton.Click += EditOpenWebSourceButton_Click;
 
-        page.Controls.Add(layout);
+        _defaultOpenWebSourceButton.Text = "设为默认";
+        _defaultOpenWebSourceButton.Size = new Size(88, 32);
+        _defaultOpenWebSourceButton.FlatStyle = FlatStyle.Flat;
+        _defaultOpenWebSourceButton.Click += DefaultOpenWebSourceButton_Click;
+
+        _deleteOpenWebSourceButton.Text = "删除";
+        _deleteOpenWebSourceButton.Size = new Size(88, 32);
+        _deleteOpenWebSourceButton.FlatStyle = FlatStyle.Flat;
+        _deleteOpenWebSourceButton.ForeColor = Color.FromArgb(137, 49, 49);
+        _deleteOpenWebSourceButton.Click += DeleteOpenWebSourceButton_Click;
+
+        var commands = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 46,
+            FlowDirection = FlowDirection.LeftToRight,
+            Padding = new Padding(0, 4, 0, 8)
+        };
+        commands.Controls.Add(addButton);
+        commands.Controls.Add(_editOpenWebSourceButton);
+        commands.Controls.Add(_defaultOpenWebSourceButton);
+        commands.Controls.Add(_deleteOpenWebSourceButton);
+
+        page.Controls.Add(_openWebSourcesGrid);
+        page.Controls.Add(commands);
         return page;
+    }
+
+    private void ConfigureOpenWebSourcesGrid()
+    {
+        _openWebSourcesGrid.Dock = DockStyle.Fill;
+        _openWebSourcesGrid.BackgroundColor = Color.White;
+        _openWebSourcesGrid.BorderStyle = BorderStyle.FixedSingle;
+        _openWebSourcesGrid.ReadOnly = true;
+        _openWebSourcesGrid.AllowUserToAddRows = false;
+        _openWebSourcesGrid.AllowUserToDeleteRows = false;
+        _openWebSourcesGrid.AllowUserToResizeRows = false;
+        _openWebSourcesGrid.AutoGenerateColumns = false;
+        _openWebSourcesGrid.MultiSelect = false;
+        _openWebSourcesGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        _openWebSourcesGrid.RowHeadersVisible = false;
+        _openWebSourcesGrid.RowTemplate.Height = 30;
+        _openWebSourcesGrid.ColumnHeadersHeight = 36;
+        _openWebSourcesGrid.AccessibleName = "OpenWeb 源站列表";
+        _openWebSourcesGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "名称",
+            Width = 150
+        });
+        _openWebSourcesGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "源站域名",
+            AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
+            MinimumWidth = 220,
+            FillWeight = 100
+        });
+        _openWebSourcesGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "WordPress 用户名",
+            Width = 160
+        });
+        _openWebSourcesGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "默认",
+            Width = 72
+        });
+        _openWebSourcesGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "凭据",
+            Width = 82
+        });
+        _openWebSourcesGrid.SelectionChanged += (_, _) =>
+            UpdateOpenWebSourceCommands();
     }
 
     private async Task RefreshOpenWebAsync()
     {
-        var settings = await _openWebSettingsService.GetAsync();
-        _openWebOriginDomainTextBox.Text = settings.OriginDomain ?? string.Empty;
-        _openWebUsernameTextBox.Text = settings.WordPressUsername ?? string.Empty;
-        _openWebApplicationPasswordTextBox.Clear();
-        _openWebStatusLabel.Text = FormatOpenWebStatus(settings);
+        var sources = await _openWebSettingsService.ListAsync();
+        _openWebSourcesGrid.Rows.Clear();
+        foreach (var configured in sources)
+        {
+            var source = configured.Source;
+            var index = _openWebSourcesGrid.Rows.Add(
+                source.DisplayName,
+                source.OriginDomain,
+                source.WordPressUsername,
+                source.IsDefault ? "是" : string.Empty,
+                configured.HasApplicationPassword ? "已保存" : "缺失");
+            _openWebSourcesGrid.Rows[index].Tag = configured;
+        }
+
+        UpdateOpenWebSourceCommands();
     }
 
-    private async void OpenWebSaveButton_Click(object? sender, EventArgs e)
+    private async void AddOpenWebSourceButton_Click(object? sender, EventArgs e)
     {
+        await ShowOpenWebSourceDialogAsync(null);
+    }
+
+    private async void EditOpenWebSourceButton_Click(object? sender, EventArgs e)
+    {
+        if (_openWebSourcesGrid.CurrentRow?.Tag is ConfiguredOpenWebSource configured)
+        {
+            await ShowOpenWebSourceDialogAsync(configured.Source);
+        }
+    }
+
+    private async Task ShowOpenWebSourceDialogAsync(OpenWebSource? source)
+    {
+        using var dialog = new OpenWebSourceDialog(source);
+        while (dialog.ShowDialog(this) == DialogResult.OK)
+        {
+            try
+            {
+                await _openWebSettingsService.SaveAsync(dialog.CreateRequest());
+                await RefreshOpenWebAsync();
+                return;
+            }
+            catch (Exception exception)
+            {
+                ShowError("无法保存 OpenWeb 源站", exception);
+                dialog.DialogResult = DialogResult.None;
+            }
+        }
+    }
+
+    private async void DefaultOpenWebSourceButton_Click(object? sender, EventArgs e)
+    {
+        if (_openWebSourcesGrid.CurrentRow?.Tag is not ConfiguredOpenWebSource configured ||
+            configured.Source.IsDefault)
+        {
+            return;
+        }
+
         try
         {
-            var settings = await _openWebSettingsService.SaveAsync(
-                _openWebOriginDomainTextBox.Text,
-                _openWebUsernameTextBox.Text,
-                _openWebApplicationPasswordTextBox.Text);
-            _openWebOriginDomainTextBox.Text =
-                settings.OriginDomain ?? string.Empty;
-            _openWebUsernameTextBox.Text =
-                settings.WordPressUsername ?? string.Empty;
-            _openWebApplicationPasswordTextBox.Clear();
-            _openWebStatusLabel.Text = FormatOpenWebStatus(settings);
+            await _openWebSettingsService.SetDefaultAsync(configured.Source.Id);
+            await RefreshOpenWebAsync();
         }
         catch (Exception exception)
         {
-            ShowError("无法保存 OpenWeb 设置", exception);
+            ShowError("无法设置默认 OpenWeb 源站", exception);
         }
     }
 
-    private static string FormatOpenWebStatus(OpenWebSettings settings)
+    private async void DeleteOpenWebSourceButton_Click(object? sender, EventArgs e)
     {
-        if (settings.OriginDomain is null)
+        if (_openWebSourcesGrid.CurrentRow?.Tag is not ConfiguredOpenWebSource configured ||
+            MessageBox.Show(
+                this,
+                "将删除本机源站配置和对应的 Windows 凭据，不会删除 WordPress 中的文章。",
+                "删除 OpenWeb 源站",
+                MessageBoxButtons.OKCancel,
+                MessageBoxIcon.Warning) != DialogResult.OK)
         {
-            return "未配置";
+            return;
         }
 
-        if (settings.WordPressUsername is null ||
-            !settings.HasApplicationPassword)
+        try
         {
-            return "WordPress 凭据未配置";
+            await _openWebSettingsService.DeleteAsync(configured.Source.Id);
+            await RefreshOpenWebAsync();
         }
+        catch (Exception exception)
+        {
+            ShowError("无法删除 OpenWeb 源站", exception);
+        }
+    }
 
-        return settings.UpdatedAt is null
-            ? "WordPress 凭据已保存"
-            : $"WordPress 凭据已保存 · {settings.UpdatedAt.Value.ToLocalTime():yyyy-MM-dd HH:mm}";
+    private void UpdateOpenWebSourceCommands()
+    {
+        var source = (_openWebSourcesGrid.CurrentRow?.Tag as ConfiguredOpenWebSource)?.Source;
+        _editOpenWebSourceButton.Enabled = source is not null;
+        _defaultOpenWebSourceButton.Enabled = source is not null && !source.IsDefault;
+        _deleteOpenWebSourceButton.Enabled = source is not null;
     }
 }

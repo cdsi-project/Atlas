@@ -628,6 +628,61 @@ internal static class DatabaseMigrator
             await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
+        if (currentVersion < 16)
+        {
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await using var migrationCommand = connection.CreateCommand();
+            migrationCommand.Transaction = (SqliteTransaction)transaction;
+            migrationCommand.CommandText =
+                """
+                CREATE TABLE openweb_sources (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    display_name TEXT NOT NULL,
+                    origin_domain TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                    wordpress_username TEXT NOT NULL,
+                    is_default INTEGER NOT NULL CHECK(is_default IN (0, 1)),
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE UNIQUE INDEX ux_openweb_sources_default
+                ON openweb_sources(is_default)
+                WHERE is_default = 1;
+
+                INSERT INTO openweb_sources(
+                    id, display_name, origin_domain, wordpress_username,
+                    is_default, created_at, updated_at)
+                SELECT
+                    '00000000-0000-0000-0000-000000000001',
+                    origin.setting_value,
+                    origin.setting_value,
+                    username.setting_value,
+                    1,
+                    CASE WHEN origin.updated_at < username.updated_at
+                         THEN origin.updated_at ELSE username.updated_at END,
+                    CASE WHEN origin.updated_at > username.updated_at
+                         THEN origin.updated_at ELSE username.updated_at END
+                FROM agent_settings AS origin
+                JOIN agent_settings AS username
+                  ON username.setting_key = 'openweb.wordpress_username'
+                WHERE origin.setting_key = 'openweb.origin_domain'
+                  AND trim(origin.setting_value) <> ''
+                  AND trim(username.setting_value) <> '';
+
+                DELETE FROM agent_settings
+                WHERE setting_key IN (
+                    'openweb.origin_domain',
+                    'openweb.wordpress_username');
+
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (16, $applied_at);
+                """;
+            migrationCommand.Parameters.AddWithValue(
+                "$applied_at",
+                DateTimeOffset.UtcNow.ToString("O"));
+            await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     private static async Task<bool> TableExistsAsync(

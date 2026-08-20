@@ -55,17 +55,9 @@ public sealed class ConfigurationFormLayoutTests
             .OfType<DataGridView>()
             .Single(grid => grid.AccessibleName == "OSS 配置列表");
 
-        var openWebOriginDomainTextBox = Descendants(form)
-            .OfType<TextBox>()
-            .Single(control =>
-                control.AccessibleName == "OpenWeb 源站域名");
-        var openWebUsernameTextBox = Descendants(form)
-            .OfType<TextBox>()
-            .Single(control => control.AccessibleName == "WordPress 用户名");
-        var openWebPasswordTextBox = Descendants(form)
-            .OfType<TextBox>()
-            .Single(control =>
-                control.AccessibleName == "WordPress 应用程序密码");
+        var openWebSourcesGrid = Descendants(form)
+            .OfType<DataGridView>()
+            .Single(grid => grid.AccessibleName == "OpenWeb 源站列表");
         var startScanButton = Descendants(form)
             .OfType<Button>()
             .Single(button => button.Text == "开始扫描");
@@ -78,9 +70,13 @@ public sealed class ConfigurationFormLayoutTests
         Assert.Equal("扫描目录", tabs.TabPages[1].Text);
         Assert.Equal("OSS 配置", tabs.TabPages[2].Text);
         Assert.Equal("OpenWeb", tabs.TabPages[3].Text);
-        Assert.Equal(DockStyle.Fill, openWebOriginDomainTextBox.Dock);
-        Assert.Equal(DockStyle.Fill, openWebUsernameTextBox.Dock);
-        Assert.True(openWebPasswordTextBox.UseSystemPasswordChar);
+        Assert.Equal(5, openWebSourcesGrid.Columns.Count);
+        Assert.Equal(
+            ["名称", "源站域名", "WordPress 用户名", "默认", "凭据"],
+            openWebSourcesGrid.Columns
+                .Cast<DataGridViewColumn>()
+                .Select(column => column.HeaderText)
+                .ToArray());
         Assert.Equal(4, rootsGrid.Columns.Count);
         Assert.Equal(
             ["目录", "文件类型", "状态", "最近扫描"],
@@ -167,6 +163,30 @@ public sealed class ConfigurationFormLayoutTests
         Assert.True(secretTextBox.UseSystemPasswordChar);
         Assert.Empty(secretTextBox.Text);
         Assert.Null(form.CreateRequest().AccessKeySecret);
+    }
+
+    [Fact]
+    public void OpenWebSourceDialog_NeverPrefillsOrRevealsTheStoredSecret()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var source = new CDSI.Agent.Core.OpenWeb.OpenWebSource(
+            Guid.NewGuid(),
+            "主站",
+            "example.com",
+            "editor",
+            true,
+            now,
+            now);
+        using var form = new OpenWebSourceDialog(source);
+        form.CreateControl();
+
+        var secretTextBox = Descendants(form)
+            .OfType<TextBox>()
+            .Single(control => control.AccessibleName == "WordPress 应用程序密码");
+
+        Assert.True(secretTextBox.UseSystemPasswordChar);
+        Assert.Empty(secretTextBox.Text);
+        Assert.Null(form.CreateRequest().ApplicationPassword);
     }
 
     private static IEnumerable<Control> Descendants(Control parent)

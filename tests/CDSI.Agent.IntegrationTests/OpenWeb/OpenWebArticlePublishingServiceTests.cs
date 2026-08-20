@@ -34,10 +34,14 @@ public sealed class OpenWebArticlePublishingServiceTests
         var assetId = Assert.Single(registrations).AssetId;
         var secretStore = new InMemorySecretStore();
         var settingsService = new OpenWebSettingsService(repository, secretStore);
-        await settingsService.SaveAsync(
-            "example.com",
-            "editor",
-            "application-password");
+        var configuredSource = await settingsService.SaveAsync(
+            new SaveOpenWebSourceRequest(
+                null,
+                "主站",
+                "example.com",
+                "editor",
+                "application-password",
+                IsDefault: true));
         var publisher = new RecordingPublisher();
         var service = new OpenWebArticlePublishingService(
             settingsService,
@@ -46,6 +50,7 @@ public sealed class OpenWebArticlePublishingServiceTests
             publisher);
         var request = new OpenWebArticlePublishRequest(
             assetId,
+            configuredSource.Source.Id,
             sourcePath,
             "Article",
             OpenWebArticleStatus.Draft);

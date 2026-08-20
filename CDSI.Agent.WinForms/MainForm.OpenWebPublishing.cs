@@ -31,10 +31,32 @@ public sealed partial class MainForm
         }
 
         var defaultTitle = Path.GetFileNameWithoutExtension(asset.OriginalFilename);
+        IReadOnlyList<ConfiguredOpenWebSource> sources;
+        try
+        {
+            sources = await _openWebSettingsService.ListAsync();
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法读取 OpenWeb 源站", exception);
+            return;
+        }
+
+        if (sources.Count == 0)
+        {
+            MessageBox.Show(
+                this,
+                "尚未配置 OpenWeb 源站，请先在设置中添加。",
+                "CDSI Atlas",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
 
         using var confirmation = new OpenWebArticlePublishForm(
             defaultTitle,
-            asset.Path);
+            asset.Path,
+            sources);
         if (confirmation.ShowDialog(this) != DialogResult.OK)
         {
             return;
@@ -54,6 +76,7 @@ public sealed partial class MainForm
             var result = await _openWebPublishingService.PublishAsync(
                 new OpenWebArticlePublishRequest(
                     asset.AssetId,
+                    confirmation.SourceId,
                     asset.Path,
                     confirmation.ArticleTitle,
                     confirmation.ArticleStatus),

@@ -1,133 +1,189 @@
 using CDSI.Agent.Core.Abstractions;
 using CDSI.Agent.Core.OpenWeb;
+using Microsoft.Data.Sqlite;
 
 namespace CDSI.Agent.Infrastructure.Persistence;
 
 public sealed partial class SqliteAssetRepository : IOpenWebSettingsRepository
 {
-    private const string OpenWebOriginDomainKey = "openweb.origin_domain";
-    private const string OpenWebWordPressUsernameKey = "openweb.wordpress_username";
-
-    public async Task<OpenWebSettings> GetOpenWebSettingsAsync(
+    public async Task<IReadOnlyList<OpenWebSource>> ListOpenWebSourcesAsync(
         CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText =
             """
-            SELECT setting_key, setting_value, updated_at
-            FROM agent_settings
-            WHERE setting_key IN ($origin_domain_key, $username_key);
+            SELECT id, display_name, origin_domain, wordpress_username,
+                   is_default, created_at, updated_at
+            FROM openweb_sources
+            ORDER BY is_default DESC, display_name COLLATE NOCASE, created_at;
             """;
-        command.Parameters.AddWithValue(
-            "$origin_domain_key",
-            OpenWebOriginDomainKey);
-        command.Parameters.AddWithValue(
-            "$username_key",
-            OpenWebWordPressUsernameKey);
 
+        var sources = new List<OpenWebSource>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        string? originDomain = null;
-        string? username = null;
-        DateTimeOffset? updatedAt = null;
         while (await reader.ReadAsync(cancellationToken))
         {
-            var key = reader.GetString(0);
-            if (string.Equals(key, OpenWebOriginDomainKey, StringComparison.Ordinal))
-            {
-                originDomain = reader.GetString(1);
-            }
-            else if (string.Equals(
-                         key,
-                         OpenWebWordPressUsernameKey,
-                         StringComparison.Ordinal))
-            {
-                username = reader.GetString(1);
-            }
-
-            var itemUpdatedAt = ParseTimestamp(reader.GetString(2));
-            if (updatedAt is null || itemUpdatedAt > updatedAt)
-            {
-                updatedAt = itemUpdatedAt;
-            }
+            sources.Add(ReadOpenWebSource(reader));
         }
 
-        return new OpenWebSettings(
-            originDomain,
-            username,
-            HasApplicationPassword: false,
-            updatedAt);
+        return sources;
     }
 
-    public async Task SaveOpenWebSettingsAsync(
-        OpenWebSettings settings,
+    public async Task SaveOpenWebSourceAsync(
+        OpenWebSource source,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(settings);
-
+        ArgumentNullException.ThrowIfNull(source);
         await using var connection = await OpenConnectionAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        if (settings.OriginDomain is null)
+        await using var transaction = (SqliteTransaction)
+            await connection.BeginTransactionAsync(cancellationToken);
+
+        var makeDefault = source.IsDefault ||
+            !await HasOpenWebSourcesAsync(connection, transaction, cancellationToken);
+        if (makeDefault)
         {
-            await using var command = connection.CreateCommand();
-            command.Transaction = (Microsoft.Data.Sqlite.SqliteTransaction)transaction;
-            command.CommandText =
-                """
-                DELETE FROM agent_settings
-                WHERE setting_key IN ($origin_domain_key, $username_key);
-                """;
-            command.Parameters.AddWithValue(
-                "$origin_domain_key",
-                OpenWebOriginDomainKey);
-            command.Parameters.AddWithValue(
-                "$username_key",
-                OpenWebWordPressUsernameKey);
+            await SetAllOpenWebSourcesNonDefaultAsync(
+                connection,
+                transaction,
+                cancellationToken);
+        }
+
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText =
+            """
+            INSERT INTO openweb_sources(
+                id, display_name, origin_domain, wordpress_username,
+                is_default, created_at, updated_at)
+            VALUES(
+                $id, $display_name, $origin_domain, $wordpress_username,
+                $is_default, $created_at, $updated_at)
+            ON CONFLICT(id) DO UPDATE SET
+                display_name = excluded.display_name,
+                origin_domain = excluded.origin_domain,
+                wordpress_username = excluded.wordpress_username,
+                is_default = excluded.is_default,
+                updated_at = excluded.updated_at;
+            """;
+        command.Parameters.AddWithValue("$id", source.Id.ToString());
+        command.Parameters.AddWithValue("$display_name", source.DisplayName);
+        command.Parameters.AddWithValue("$origin_domain", source.OriginDomain);
+        command.Parameters.AddWithValue("$wordpress_username", source.WordPressUsername);
+        command.Parameters.AddWithValue("$is_default", makeDefault ? 1 : 0);
+        command.Parameters.AddWithValue("$created_at", source.CreatedAt.ToString("O"));
+        command.Parameters.AddWithValue("$updated_at", source.UpdatedAt.ToString("O"));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task SetDefaultOpenWebSourceAsync(
+        Guid sourceId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)
+            await connection.BeginTransactionAsync(cancellationToken);
+
+        await using (var existsCommand = connection.CreateCommand())
+        {
+            existsCommand.Transaction = transaction;
+            existsCommand.CommandText =
+                "SELECT EXISTS(SELECT 1 FROM openweb_sources WHERE id = $id);";
+            existsCommand.Parameters.AddWithValue("$id", sourceId.ToString());
+            if (Convert.ToInt32(
+                    await existsCommand.ExecuteScalarAsync(cancellationToken)) == 0)
+            {
+                throw new InvalidOperationException("OpenWeb 源站不存在或已被删除。");
+            }
+        }
+
+        await SetAllOpenWebSourcesNonDefaultAsync(
+            connection,
+            transaction,
+            cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText =
+            """
+            UPDATE openweb_sources
+            SET is_default = 1, updated_at = $updated_at
+            WHERE id = $id;
+            """;
+        command.Parameters.AddWithValue("$id", sourceId.ToString());
+        command.Parameters.AddWithValue("$updated_at", DateTimeOffset.UtcNow.ToString("O"));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task DeleteOpenWebSourceAsync(
+        Guid sourceId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)
+            await connection.BeginTransactionAsync(cancellationToken);
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = "DELETE FROM openweb_sources WHERE id = $id;";
+            command.Parameters.AddWithValue("$id", sourceId.ToString());
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
-        else
+
+        await using (var command = connection.CreateCommand())
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(settings.WordPressUsername);
-            var updatedAt = (settings.UpdatedAt ?? DateTimeOffset.UtcNow).ToString("O");
-            await UpsertSettingAsync(
-                connection,
-                (Microsoft.Data.Sqlite.SqliteTransaction)transaction,
-                OpenWebOriginDomainKey,
-                settings.OriginDomain,
-                updatedAt,
-                cancellationToken);
-            await UpsertSettingAsync(
-                connection,
-                (Microsoft.Data.Sqlite.SqliteTransaction)transaction,
-                OpenWebWordPressUsernameKey,
-                settings.WordPressUsername,
-                updatedAt,
-                cancellationToken);
+            command.Transaction = transaction;
+            command.CommandText =
+                """
+                UPDATE openweb_sources
+                SET is_default = 1, updated_at = $updated_at
+                WHERE id = (
+                    SELECT id FROM openweb_sources
+                    ORDER BY created_at, display_name COLLATE NOCASE
+                    LIMIT 1)
+                  AND NOT EXISTS(
+                    SELECT 1 FROM openweb_sources WHERE is_default = 1);
+                """;
+            command.Parameters.AddWithValue("$updated_at", DateTimeOffset.UtcNow.ToString("O"));
+            await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
         await transaction.CommitAsync(cancellationToken);
     }
 
-    private static async Task UpsertSettingAsync(
-        Microsoft.Data.Sqlite.SqliteConnection connection,
-        Microsoft.Data.Sqlite.SqliteTransaction transaction,
-        string key,
-        string value,
-        string updatedAt,
+    private static OpenWebSource ReadOpenWebSource(SqliteDataReader reader)
+    {
+        return new OpenWebSource(
+            Guid.Parse(reader.GetString(0)),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetString(3),
+            reader.GetInt32(4) != 0,
+            ParseTimestamp(reader.GetString(5)),
+            ParseTimestamp(reader.GetString(6)));
+    }
+
+    private static async Task<bool> HasOpenWebSourcesAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
         CancellationToken cancellationToken)
     {
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText =
-            """
-            INSERT INTO agent_settings(setting_key, setting_value, updated_at)
-            VALUES($setting_key, $setting_value, $updated_at)
-            ON CONFLICT(setting_key) DO UPDATE SET
-                setting_value = excluded.setting_value,
-                updated_at = excluded.updated_at;
-            """;
-        command.Parameters.AddWithValue("$setting_key", key);
-        command.Parameters.AddWithValue("$setting_value", value);
-        command.Parameters.AddWithValue("$updated_at", updatedAt);
+        command.CommandText = "SELECT EXISTS(SELECT 1 FROM openweb_sources);";
+        return Convert.ToInt32(
+            await command.ExecuteScalarAsync(cancellationToken)) != 0;
+    }
+
+    private static async Task SetAllOpenWebSourcesNonDefaultAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "UPDATE openweb_sources SET is_default = 0;";
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 }

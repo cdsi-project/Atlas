@@ -33,12 +33,12 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 - 运行期间监听设备到达和移除通知；设备拔出后资产位置标记为“设备离线”而不是“位置缺失”，重新插入后进入待确认状态
 - 检测嵌套或重叠扫描目录并提示，位置身份仍按设备和规范化路径保持幂等
 - 在设置页添加、编辑和删除多个阿里云 OSS 配置
-- 在设置页配置 OpenWeb 源站域名，规范化后持久化到本机 SQLite
-- 配置 WordPress 用户名和应用程序密码，将 Markdown/TXT 资产发布为草稿或正式文章
+- 在设置页添加、编辑和删除多个 OpenWeb 源站，并指定其中一个默认源站；域名规范化后持久化到本机 SQLite
+- 每个源站独立配置 WordPress 用户名和应用程序密码；发布 Markdown/TXT 资产时默认选中默认源站，也可临时切换目标源站
 - 保存资产与 WordPress 文章的映射，重复发布同一资产时更新原文章
 - 如果已映射文章在 WordPress 中被删除或失效，发布时会自动新建文章并用新文章 ID 更新本地映射
 - 按阿里云规则校验 Bucket，并规范化 Endpoint、地域和 HTTPS 设置
-- SQLite 只保存非敏感配置；AccessKey Secret 和 WordPress 应用程序密码保存到 Windows 凭据管理器
+- SQLite 只保存非敏感配置；AccessKey Secret 和各源站的 WordPress 应用程序密码按配置独立保存到 Windows 凭据管理器
 - 在资产列表中显示稳定的资产 ID，资产身份不依赖文件名或存储位置
 - 在资产列表中显式单选或多选文件，在确认窗口逐项设置 OSS 文件名；默认与当前本地文件名一致
 - 远端对象使用 <code>storage_profile_id + assets/&lt;AssetId&gt;/&lt;OSS文件名&gt;</code> 标识，不把文件名或永久 URL 当作资产身份
@@ -83,7 +83,7 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 2. 在“设置”中添加需要索引的本地目录，并选择扫描策略，默认“全部类型”。如选择“自定义白名单”，添加需要扫描的扩展名，未列出的类型会被跳过。点击“开始扫描”只处理本次设置的目录；点击“关闭”只保存，不扫描。外部扫描目录保持只读。
 3. 如需刷新已有目录，再点击主界面的“扫描”执行全部已启用目录的重新扫描。扫描只索引各目录配置的文件类型，哈希和媒体元数据处理继续分阶段完成。
 4. 使用资产页顶部的搜索条件定位文件，或切换到“资产目录”“重复文件”“资产清单”等页签查看不同视图。
-5. 复制、移动、OSS 备份和 OpenWeb 发布都必须由用户从界面明确发起；单纯扫描或搜索不会修改、上传文件。
+5. 复制、移动、OSS 备份和 OpenWeb 发布都必须由用户从界面明确发起；发布文章时可确认或切换目标源站。单纯扫描或搜索不会修改、上传文件。
 
 ## 数据安全
 
@@ -100,8 +100,8 @@ CDSI Atlas 采用本地优先、默认非破坏性的处理方式，但不能替
 
 ### 密码与凭据
 
-- OSS AccessKey Secret 和 WordPress 应用程序密码保存在当前 Windows 用户的凭据管理器中，不写入 <code>cdsi.db</code>，编辑配置时也不会读取并回显已有密码。
-- SQLite 会保存连接所需的非密码信息，例如 AccessKey ID、Endpoint、Bucket、WordPress 域名和用户名。AccessKey ID 不是 Secret，但仍不建议公开。
+- OSS AccessKey Secret 和 WordPress 应用程序密码保存在当前 Windows 用户的凭据管理器中，不写入 <code>cdsi.db</code>；WordPress 密码按源站隔离保存，编辑配置时不会读取并回显已有密码。
+- SQLite 会保存连接所需的非密码信息，例如 AccessKey ID、Endpoint、Bucket、各 WordPress 源站域名和用户名。AccessKey ID 不是 Secret，但仍不建议公开。
 - 当前应用没有独立的主密码，也没有对 SQLite 数据库进行应用层加密；本机数据的访问控制依赖 Windows 账户权限。建议为 Windows 账户设置强密码，并对设备启用 BitLocker 或等效的磁盘加密。
 - WordPress 发布固定使用 HTTPS。OSS 配置允许选择 HTTP 或 HTTPS；为避免凭据和文件在传输中暴露，应始终启用 HTTPS。
 - 建议为 OSS 使用权限最小化、可轮换的专用凭据，为 WordPress 使用应用程序密码而不是账户主密码。凭据泄露后应立即在服务端撤销并重新生成。
