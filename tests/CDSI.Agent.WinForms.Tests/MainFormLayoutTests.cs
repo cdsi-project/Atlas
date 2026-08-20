@@ -42,6 +42,17 @@ public sealed class MainFormLayoutTests
         Assert.Equal("主菜单", menuStrip.AccessibleName);
     }
 
+    [Fact]
+    public void ConfigureEscapeShortcutDisplay_DoesNotAssignAnInvalidShortcutKey()
+    {
+        using var menuItem = new ToolStripMenuItem();
+
+        MainForm.ConfigureEscapeShortcutDisplay(menuItem);
+
+        Assert.Equal(Keys.None, menuItem.ShortcutKeys);
+        Assert.Equal("Esc", menuItem.ShortcutKeyDisplayString);
+    }
+
     [Theory]
     [InlineData(0x0007)]
     [InlineData(0x8000)]

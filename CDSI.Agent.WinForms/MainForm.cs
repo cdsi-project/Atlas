@@ -113,6 +113,8 @@ public sealed partial class MainForm : Form
         BackColor = Color.FromArgb(247, 248, 250);
         Font = new Font("Segoe UI", 9F);
         AutoScaleMode = AutoScaleMode.Dpi;
+        KeyPreview = true;
+        KeyDown += MainForm_KeyDown;
         ConfigureMainMenu();
 
         var mainLayout = new TableLayoutPanel
@@ -316,6 +318,18 @@ public sealed partial class MainForm : Form
         form.MinimumSize = new Size(920, 600);
         form.Size = new Size(1180, 760);
         form.WindowState = FormWindowState.Maximized;
+    }
+
+    private void MainForm_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.KeyCode != Keys.Escape || !_cancelButton.Enabled)
+        {
+            return;
+        }
+
+        _scanCancellation?.Cancel();
+        e.Handled = true;
+        e.SuppressKeyPress = true;
     }
 
     private static void ConfigureCommandButton(
@@ -1284,7 +1298,7 @@ public sealed partial class MainForm : Form
             : $"{minutes}:{seconds:00}";
     }
 
-    private static string GetApplicationVersion()
+    internal static string GetApplicationVersion()
     {
         var informationalVersion = typeof(MainForm).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()

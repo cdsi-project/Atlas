@@ -49,7 +49,7 @@ public sealed partial class MainForm
         _startFullScanMenuItem.Click += async (_, _) =>
             await StartConfiguredScanAsync(FingerprintMode.Complete);
         _cancelScanMenuItem.Text = "取消当前任务(&C)";
-        _cancelScanMenuItem.ShortcutKeys = Keys.Escape;
+        ConfigureEscapeShortcutDisplay(_cancelScanMenuItem);
         _cancelScanMenuItem.Click += (_, _) => _scanCancellation?.Cancel();
         _refreshAssetsMenuItem.Text = "刷新资产索引(&R)";
         _refreshAssetsMenuItem.ShortcutKeys = Keys.F5;
@@ -148,6 +148,13 @@ public sealed partial class MainForm
         menuStrip.BackColor = Color.White;
         menuStrip.ForeColor = Color.FromArgb(31, 37, 43);
         menuStrip.AccessibleName = "主菜单";
+    }
+
+    internal static void ConfigureEscapeShortcutDisplay(ToolStripMenuItem menuItem)
+    {
+        ArgumentNullException.ThrowIfNull(menuItem);
+        menuItem.ShortcutKeys = Keys.None;
+        menuItem.ShortcutKeyDisplayString = "Esc";
     }
 
     private void ConfigureMainAssetMenu()
