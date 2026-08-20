@@ -16,4 +16,7 @@ public sealed record AssetListItem(
     AssetLocationStatus LocationStatus,
     AssetStatus Status,
     bool HasHealthyObjectStorageBackup,
-    AssetMetadata? Metadata = null);
+    AssetMetadata? Metadata = null)
+{
+    public IReadOnlyList<string> Tags { get; init; } = [];
+}

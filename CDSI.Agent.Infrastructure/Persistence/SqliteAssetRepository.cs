@@ -958,7 +958,17 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                 m.source_modified_at,
                 m.metadata_json,
                 m.error_message,
-                m.extracted_at
+                m.extracted_at,
+                COALESCE((
+                    SELECT json_group_array(tag_name)
+                    FROM (
+                        SELECT t.name AS tag_name
+                        FROM asset_tag_links atl
+                        INNER JOIN asset_tags t ON t.id = atl.tag_id
+                        WHERE atl.asset_id = a.id
+                        ORDER BY t.name COLLATE NOCASE, t.id
+                    )
+                ), '[]') AS tags_json
             FROM assets a
             INNER JOIN asset_locations l ON l.asset_id = a.id
             LEFT JOIN asset_metadata m
@@ -1000,7 +1010,10 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                 Enum.Parse<AssetLocationStatus>(reader.GetString(10)),
                 Enum.Parse<AssetStatus>(reader.GetString(11)),
                 reader.GetInt64(12) != 0,
-                ReadMetadata(reader, Guid.Parse(reader.GetString(0)), 13)));
+                ReadMetadata(reader, Guid.Parse(reader.GetString(0)), 13))
+            {
+                Tags = ReadAssetTags(reader, 21)
+            });
         }
 
         return assets;
@@ -1401,6 +1414,19 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             conditions.Add("lower(a.extension) = $extension");
         }
 
+        if (filter.TagId is not null)
+        {
+            conditions.Add(
+                """
+                EXISTS (
+                    SELECT 1
+                    FROM asset_tag_links atl_filter
+                    WHERE atl_filter.asset_id = a.id
+                      AND atl_filter.tag_id = $tag_id
+                )
+                """);
+        }
+
         return conditions.Count == 0
             ? string.Empty
             : $"AND {string.Join(" AND ", conditions)}";
@@ -1456,6 +1482,20 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
         {
             command.Parameters.AddWithValue("$extension", filter.Extension);
         }
+
+        if (filter.TagId is not null)
+        {
+            command.Parameters.AddWithValue(
+                "$tag_id",
+                filter.TagId.Value.ToString("D"));
+        }
+    }
+
+    private static IReadOnlyList<string> ReadAssetTags(
+        SqliteDataReader reader,
+        int ordinal)
+    {
+        return JsonSerializer.Deserialize<string[]>(reader.GetString(ordinal)) ?? [];
     }
 
     private const string VideoAssetPredicate =

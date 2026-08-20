@@ -737,6 +737,42 @@ internal static class DatabaseMigrator
             await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
+        if (currentVersion < 18)
+        {
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await using var migrationCommand = connection.CreateCommand();
+            migrationCommand.Transaction = (SqliteTransaction)transaction;
+            migrationCommand.CommandText =
+                """
+                CREATE TABLE asset_tags (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    normalized_name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE asset_tag_links (
+                    asset_id TEXT NOT NULL,
+                    tag_id TEXT NOT NULL,
+                    tagged_at TEXT NOT NULL,
+                    PRIMARY KEY (asset_id, tag_id),
+                    FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE,
+                    FOREIGN KEY (tag_id) REFERENCES asset_tags(id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX ix_asset_tag_links_tag_id
+                ON asset_tag_links(tag_id);
+
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (18, $applied_at);
+                """;
+            migrationCommand.Parameters.AddWithValue(
+                "$applied_at",
+                DateTimeOffset.UtcNow.ToString("O"));
+            await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     private static async Task<bool> TableExistsAsync(

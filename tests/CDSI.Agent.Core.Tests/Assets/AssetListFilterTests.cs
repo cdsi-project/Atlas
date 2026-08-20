@@ -50,4 +50,15 @@ public sealed class AssetListFilterTests
         Assert.Throws<ArgumentException>(() =>
             new AssetListFilter(extension: "folder/file.txt"));
     }
+
+    [Fact]
+    public void Constructor_RecognizesATagCondition()
+    {
+        var tagId = Guid.NewGuid();
+
+        var filter = new AssetListFilter(tagId: tagId);
+
+        Assert.False(filter.IsEmpty);
+        Assert.Equal(tagId, filter.TagId);
+    }
 }

@@ -149,6 +149,7 @@ public sealed class MainFormLayoutTests
     {
         using var fileTypeComboBox = new ComboBox();
         using var extensionComboBox = new ComboBox();
+        using var tagComboBox = new ComboBox();
         using var createdFromDatePicker = new DateTimePicker();
         using var createdToDatePicker = new DateTimePicker();
         using var applyButton = new Button { Text = "搜索" };
@@ -157,6 +158,7 @@ public sealed class MainFormLayoutTests
         using var panel = MainForm.CreateAssetFilterPanel(
             fileTypeComboBox,
             extensionComboBox,
+            tagComboBox,
             createdFromDatePicker,
             createdToDatePicker,
             applyButton,
@@ -165,6 +167,7 @@ public sealed class MainFormLayoutTests
 
         Assert.Contains(fileTypeComboBox, panel.Controls.Cast<Control>());
         Assert.Contains(extensionComboBox, panel.Controls.Cast<Control>());
+        Assert.Contains(tagComboBox, panel.Controls.Cast<Control>());
         Assert.Contains(createdFromDatePicker, panel.Controls.Cast<Control>());
         Assert.Contains(createdToDatePicker, panel.Controls.Cast<Control>());
         Assert.Contains(applyButton, panel.Controls.Cast<Control>());
@@ -182,6 +185,7 @@ public sealed class MainFormLayoutTests
     {
         var from = new DateTime(2026, 8, 1);
         var to = new DateTime(2026, 8, 20);
+        var tagId = Guid.NewGuid();
 
         var filter = MainForm.BuildAssetListFilter(
             CDSI.Agent.Core.Assets.AssetFileTypeFilter.Video,
@@ -189,7 +193,8 @@ public sealed class MainFormLayoutTests
             from,
             createdToEnabled: true,
             to,
-            extension: "MP4");
+            extension: "MP4",
+            tagId: tagId);
 
         Assert.Equal(
             from,
@@ -201,6 +206,7 @@ public sealed class MainFormLayoutTests
             CDSI.Agent.Core.Assets.AssetFileTypeFilter.Video,
             filter.FileType);
         Assert.Equal(".mp4", filter.Extension);
+        Assert.Equal(tagId, filter.TagId);
         Assert.Throws<ArgumentException>(() => MainForm.BuildAssetListFilter(
             CDSI.Agent.Core.Assets.AssetFileTypeFilter.All,
             createdFromEnabled: true,
@@ -224,6 +230,29 @@ public sealed class MainFormLayoutTests
             [MainForm.AllAssetExtensionsLabel, ".jpg", ".mp4", ".zip"],
             comboBox.Items.Cast<string>());
         Assert.Equal(".mp4", comboBox.SelectedItem);
+    }
+
+    [Fact]
+    public void RefreshAssetTagChoices_SortsAndPreservesTheSelection()
+    {
+        var articleId = Guid.NewGuid();
+        using var comboBox = new ComboBox();
+
+        MainForm.RefreshAssetTagChoices(
+            comboBox,
+            [
+                new(articleId, "文章", 3),
+                new(Guid.NewGuid(), "素材", 5)
+            ],
+            articleId);
+
+        var choices = comboBox.Items
+            .Cast<MainForm.AssetTagFilterChoice>()
+            .ToArray();
+        Assert.Equal(MainForm.AllAssetTagsLabel, choices[0].Name);
+        Assert.Equal(articleId, Assert.IsType<MainForm.AssetTagFilterChoice>(
+            comboBox.SelectedItem).TagId);
+        Assert.Equal("文章 (3)", comboBox.SelectedItem?.ToString());
     }
 
     [Fact]
@@ -543,6 +572,7 @@ public sealed class MainFormLayoutTests
             .ToArray();
         Assert.Contains("索引时间", headers);
         Assert.Contains("文件校验值（SHA256）", headers);
+        Assert.Contains("标签", headers);
         Assert.DoesNotContain("文本", headers);
         Assert.Equal("IndexedAt", grid.Columns["IndexedAt"]?.Name);
         Assert.Equal("Sha256", grid.Columns["Sha256"]?.Name);

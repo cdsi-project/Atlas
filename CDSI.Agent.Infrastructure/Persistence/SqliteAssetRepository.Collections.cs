@@ -220,6 +220,16 @@ public sealed partial class SqliteAssetRepository : IAssetCollectionRepository
                 m.metadata_json,
                 m.error_message,
                 m.extracted_at,
+                COALESCE((
+                    SELECT json_group_array(tag_name)
+                    FROM (
+                        SELECT t.name AS tag_name
+                        FROM asset_tag_links atl
+                        INNER JOIN asset_tags t ON t.id = atl.tag_id
+                        WHERE atl.asset_id = a.id
+                        ORDER BY t.name COLLATE NOCASE, t.id
+                    )
+                ), '[]') AS tags_json,
                 ci.added_at
             FROM asset_collection_items ci
             INNER JOIN assets a ON a.id = ci.asset_id
@@ -268,11 +278,14 @@ public sealed partial class SqliteAssetRepository : IAssetCollectionRepository
                 Enum.Parse<AssetLocationStatus>(reader.GetString(10)),
                 Enum.Parse<AssetStatus>(reader.GetString(11)),
                 reader.GetInt64(12) != 0,
-                ReadMetadata(reader, assetId, 13));
+                ReadMetadata(reader, assetId, 13))
+            {
+                Tags = ReadAssetTags(reader, 21)
+            };
             members.Add(new AssetCollectionMember(
                 collectionId,
                 asset,
-                ParseTimestamp(reader.GetString(21))));
+                ParseTimestamp(reader.GetString(22))));
         }
 
         return members;

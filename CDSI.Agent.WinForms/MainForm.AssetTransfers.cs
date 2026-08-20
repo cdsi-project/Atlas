@@ -43,6 +43,7 @@ public sealed partial class MainForm
             [
                 _openFileLocationMenuItem,
                 new ToolStripSeparator(),
+                _assetTagsMenuItem,
                 _addToCollectionMenuItem,
                 _publishToOpenWebMenuItem,
                 new ToolStripSeparator(),
@@ -61,6 +62,7 @@ public sealed partial class MainForm
                 selected.All(asset =>
                     asset.LocationStatus == AssetLocationStatus.Available);
             args.Cancel = selected.Count == 0;
+            ConfigureAssetTagMenu(selected);
             _openFileLocationMenuItem.Enabled = _assetGrid.CurrentRow?.Tag is AssetListItem;
             _addToCollectionMenuItem.Enabled = selected.Count > 0;
             _copyToWorkspaceMenuItem.Enabled = canOperate;

@@ -8,7 +8,8 @@ public sealed record AssetListFilter
         AssetFileTypeFilter fileType = AssetFileTypeFilter.All,
         DateTimeOffset? createdFrom = null,
         DateTimeOffset? createdBefore = null,
-        string? extension = null)
+        string? extension = null,
+        Guid? tagId = null)
     {
         if (!Enum.IsDefined(fileType))
         {
@@ -26,6 +27,7 @@ public sealed record AssetListFilter
         CreatedFrom = createdFrom;
         CreatedBefore = createdBefore;
         Extension = NormalizeExtension(extension);
+        TagId = tagId;
     }
 
     public AssetFileTypeFilter FileType { get; }
@@ -36,11 +38,14 @@ public sealed record AssetListFilter
 
     public string? Extension { get; }
 
+    public Guid? TagId { get; }
+
     public bool IsEmpty =>
         FileType == AssetFileTypeFilter.All &&
         CreatedFrom is null &&
         CreatedBefore is null &&
-        Extension is null;
+        Extension is null &&
+        TagId is null;
 
     private static string? NormalizeExtension(string? extension)
     {

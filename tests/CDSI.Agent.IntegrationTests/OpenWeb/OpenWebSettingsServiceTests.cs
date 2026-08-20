@@ -83,6 +83,8 @@ public sealed class OpenWebSettingsServiceTests
             await using var command = connection.CreateCommand();
             command.CommandText =
                 """
+                DROP TABLE asset_tag_links;
+                DROP TABLE asset_tags;
                 DROP TABLE restore_items;
                 DROP TABLE restore_jobs;
                 DROP TABLE openweb_sources;

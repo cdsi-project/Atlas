@@ -5,6 +5,7 @@ namespace CDSI.Agent.WinForms;
 public sealed partial class MainForm
 {
     internal const string AllAssetExtensionsLabel = "全部扩展名";
+    internal const string AllAssetTagsLabel = "全部标签";
 
     internal static readonly IReadOnlyList<AssetFileTypeFilterChoice>
         AssetFileTypeFilterChoices =
@@ -19,6 +20,7 @@ public sealed partial class MainForm
 
     private readonly ComboBox _assetFileTypeFilterComboBox = new();
     private readonly ComboBox _assetExtensionFilterComboBox = new();
+    private readonly ComboBox _assetTagFilterComboBox = new();
     private readonly DateTimePicker _assetCreatedFromDatePicker = new();
     private readonly DateTimePicker _assetCreatedToDatePicker = new();
     private readonly Button _applyAssetFilterButton = new();
@@ -44,6 +46,13 @@ public sealed partial class MainForm
         _assetFileTypeFilterComboBox.SelectionChangeCommitted += async (_, _) =>
             await RefreshAssetExtensionsForSelectedTypeAsync(
                 includeUnavailableSelection: false);
+
+        _assetTagFilterComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+        _assetTagFilterComboBox.Width = 128;
+        _assetTagFilterComboBox.AccessibleName = "资产标签过滤";
+        _assetTagFilterComboBox.Items.Add(
+            new AssetTagFilterChoice(null, AllAssetTagsLabel, 0));
+        _assetTagFilterComboBox.SelectedIndex = 0;
 
         ConfigureFilterDatePicker(
             _assetCreatedFromDatePicker,
@@ -78,6 +87,7 @@ public sealed partial class MainForm
         return CreateAssetFilterPanel(
             _assetFileTypeFilterComboBox,
             _assetExtensionFilterComboBox,
+            _assetTagFilterComboBox,
             _assetCreatedFromDatePicker,
             _assetCreatedToDatePicker,
             _applyAssetFilterButton,
@@ -88,6 +98,7 @@ public sealed partial class MainForm
     internal static Control CreateAssetFilterPanel(
         ComboBox fileTypeComboBox,
         ComboBox extensionComboBox,
+        ComboBox tagComboBox,
         DateTimePicker createdFromDatePicker,
         DateTimePicker createdToDatePicker,
         Button applyButton,
@@ -107,6 +118,8 @@ public sealed partial class MainForm
         panel.Controls.Add(fileTypeComboBox);
         panel.Controls.Add(CreateFilterLabel("扩展名", leftMargin: 14));
         panel.Controls.Add(extensionComboBox);
+        panel.Controls.Add(CreateFilterLabel("标签", leftMargin: 14));
+        panel.Controls.Add(tagComboBox);
         panel.Controls.Add(CreateFilterLabel("创建时间", leftMargin: 14));
         panel.Controls.Add(createdFromDatePicker);
         panel.Controls.Add(CreateFilterLabel("至", leftMargin: 6));
@@ -123,7 +136,8 @@ public sealed partial class MainForm
         DateTime createdFrom,
         bool createdToEnabled,
         DateTime createdTo,
-        string? extension = null)
+        string? extension = null,
+        Guid? tagId = null)
     {
         if (createdFromEnabled &&
             createdToEnabled &&
@@ -142,7 +156,8 @@ public sealed partial class MainForm
             fileType,
             createdFromBoundary,
             createdBeforeBoundary,
-            extension);
+            extension,
+            tagId);
     }
 
     private static DateTimeOffset StartOfLocalDay(DateTime value)
@@ -211,7 +226,8 @@ public sealed partial class MainForm
                 _assetCreatedToDatePicker.Value,
                 _assetExtensionFilterComboBox.SelectedIndex > 0
                     ? _assetExtensionFilterComboBox.SelectedItem as string
-                    : null);
+                    : null,
+                (_assetTagFilterComboBox.SelectedItem as AssetTagFilterChoice)?.TagId);
         }
         catch (ArgumentException exception)
         {
@@ -232,6 +248,7 @@ public sealed partial class MainForm
     {
         _assetFileTypeFilterComboBox.SelectedIndex = 0;
         _assetExtensionFilterComboBox.SelectedIndex = 0;
+        _assetTagFilterComboBox.SelectedIndex = 0;
         _assetCreatedFromDatePicker.Checked = false;
         _assetCreatedToDatePicker.Checked = false;
         _assetListFilter = AssetListFilter.Empty;
@@ -253,6 +270,7 @@ public sealed partial class MainForm
         var enabled = !_isBusy && !_refreshingAssetPage;
         _assetFileTypeFilterComboBox.Enabled = enabled;
         _assetExtensionFilterComboBox.Enabled = enabled;
+        _assetTagFilterComboBox.Enabled = enabled;
         _assetCreatedFromDatePicker.Enabled = enabled;
         _assetCreatedToDatePicker.Enabled = enabled;
         _applyAssetFilterButton.Enabled = enabled;
@@ -292,6 +310,34 @@ public sealed partial class MainForm
             {
                 comboBox.SelectedIndex = 0;
             }
+        }
+        finally
+        {
+            comboBox.EndUpdate();
+        }
+    }
+
+    internal static void RefreshAssetTagChoices(
+        ComboBox comboBox,
+        IReadOnlyList<AssetTagSummary> tags,
+        Guid? selectedTagId = null)
+    {
+        selectedTagId ??= (comboBox.SelectedItem as AssetTagFilterChoice)?.TagId;
+        var choices = tags
+            .OrderBy(tag => tag.Name, StringComparer.CurrentCultureIgnoreCase)
+            .Select(tag => new AssetTagFilterChoice(tag.Id, tag.Name, tag.AssetCount))
+            .ToArray();
+
+        comboBox.BeginUpdate();
+        try
+        {
+            comboBox.Items.Clear();
+            comboBox.Items.Add(new AssetTagFilterChoice(null, AllAssetTagsLabel, 0));
+            comboBox.Items.AddRange(choices.Cast<object>().ToArray());
+            comboBox.SelectedItem = comboBox.Items
+                .Cast<AssetTagFilterChoice>()
+                .FirstOrDefault(choice => choice.TagId == selectedTagId)
+                ?? comboBox.Items[0];
         }
         finally
         {
@@ -344,6 +390,17 @@ public sealed partial class MainForm
         public override string ToString()
         {
             return Label;
+        }
+    }
+
+    internal sealed record AssetTagFilterChoice(
+        Guid? TagId,
+        string Name,
+        int AssetCount)
+    {
+        public override string ToString()
+        {
+            return TagId is null ? Name : $"{Name} ({AssetCount:N0})";
         }
     }
 }

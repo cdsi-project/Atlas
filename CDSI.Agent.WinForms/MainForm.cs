@@ -1,4 +1,5 @@
 using System.Reflection;
+using CDSI.Agent.Application.Assets;
 using CDSI.Agent.Application.Collections;
 using CDSI.Agent.Application.Metadata;
 using CDSI.Agent.Application.OpenWeb;
@@ -67,6 +68,7 @@ public sealed partial class MainForm : Form
         ObjectStorageBackupService objectStorageBackupService,
         ObjectStorageRestoreService objectStorageRestoreService,
         AssetCollectionService assetCollectionService,
+        AssetTagService assetTagService,
         ManagedAssetTransferService transferService,
         string dataDirectory)
     {
@@ -82,6 +84,7 @@ public sealed partial class MainForm : Form
         _objectStorageBackupService = objectStorageBackupService;
         _objectStorageRestoreService = objectStorageRestoreService;
         _assetCollectionService = assetCollectionService;
+        _assetTagService = assetTagService;
         _transferService = transferService;
         InitializeLayout(dataDirectory);
 
@@ -510,6 +513,7 @@ public sealed partial class MainForm : Form
         grid.Columns.Add(CreateRowNumberColumn());
         grid.Columns.Add(CreateAssetIdColumn());
         grid.Columns.Add(CreateColumn("文件", 220, DataGridViewAutoSizeColumnMode.Fill, 24));
+        grid.Columns.Add(CreateColumn("标签", 180));
         grid.Columns.Add(CreateColumn("类型", 125));
         grid.Columns.Add(CreateFileSizeColumn());
         grid.Columns.Add(CreateSha256Column());
@@ -980,13 +984,15 @@ public sealed partial class MainForm : Form
                 : filter.FileType;
         var assetExtensionsTask = _scanService.ListAssetExtensionsAsync(
             selectedFileType);
+        var assetTagsTask = _assetTagService.ListAsync();
         await Task.WhenAll(
             assetCountTask,
             totalAssetCountTask,
             duplicateGroupsTask,
             statisticsTask,
             assetDirectoriesTask,
-            assetExtensionsTask);
+            assetExtensionsTask,
+            assetTagsTask);
 
         var assetCount = await assetCountTask;
         var totalAssetCount = await totalAssetCountTask;
@@ -1003,6 +1009,7 @@ public sealed partial class MainForm : Form
         var statistics = await statisticsTask;
         var assetDirectories = await assetDirectoriesTask;
         var assetExtensions = await assetExtensionsTask;
+        _knownAssetTags = await assetTagsTask;
         _assetGrid.Rows.Clear();
         _duplicateGrid.Rows.Clear();
 
@@ -1012,6 +1019,7 @@ public sealed partial class MainForm : Form
                 pagination.FirstItem + _assetGrid.Rows.Count,
                 asset.AssetId.ToString("D"),
                 asset.OriginalFilename,
+                string.Join("、", asset.Tags),
                 asset.MimeType ?? "未知",
                 asset.Size,
                 asset.Sha256 ?? "未计算",
@@ -1071,6 +1079,10 @@ public sealed partial class MainForm : Form
                     selectedFileType == filter.FileType &&
                     filter.Extension is not null);
         }
+        RefreshAssetTagChoices(
+            _assetTagFilterComboBox,
+            _knownAssetTags,
+            filter.TagId);
         RefreshAssetDirectories(assetDirectories);
         _assetsTabPage.Text = filter.IsEmpty
             ? $"资产 ({assetCount:N0})"
@@ -1099,9 +1111,13 @@ public sealed partial class MainForm : Form
         }
 
         _assetDetailTitleLabel.Text = asset.OriginalFilename;
+        var tagSummary = asset.Tags.Count == 0
+            ? "无标签"
+            : $"标签：{string.Join("、", asset.Tags)}";
         _assetDetailSummaryLabel.Text = string.Join(
             Environment.NewLine,
             $"{asset.MimeType ?? "未知类型"} · {FormatFileSize(asset.Size)} · 修改 {asset.ModifiedAt.ToLocalTime():yyyy-MM-dd HH:mm} · 索引 {asset.DiscoveredAt.ToLocalTime():yyyy-MM-dd HH:mm}",
+            tagSummary,
             asset.Path);
     }
     private void SetBusy(bool busy, bool allowCancel = true)

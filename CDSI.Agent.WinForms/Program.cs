@@ -1,3 +1,4 @@
+using CDSI.Agent.Application.Assets;
 using CDSI.Agent.Application.Collections;
 using CDSI.Agent.Application.Fingerprints;
 using CDSI.Agent.Application.Metadata;
@@ -76,6 +77,7 @@ static class Program
             workspaceProvisioner,
             new VerifiedManagedFileTransfer());
         var assetCollectionService = new AssetCollectionService(repository);
+        var assetTagService = new AssetTagService(repository);
         var fingerprintService = new FingerprintApplicationService(
             fingerprintEngine,
             repository);
@@ -98,6 +100,7 @@ static class Program
             objectStorageBackupService,
             objectStorageRestoreService,
             assetCollectionService,
+            assetTagService,
             transferService,
             dataDirectory));
     }
