@@ -57,12 +57,20 @@ static class Program
             {
                 Timeout = TimeSpan.FromSeconds(60)
             }));
+        var objectStorageAdapters = new[] { new AliyunOssStorageAdapter() };
         var objectStorageBackupService = new ObjectStorageBackupService(
             repository,
             repository,
             storageService,
             fingerprintEngine,
-            [new AliyunOssStorageAdapter()]);
+            objectStorageAdapters);
+        var objectStorageRestoreService = new ObjectStorageRestoreService(
+            repository,
+            repository,
+            repository,
+            storageService,
+            workspaceProvisioner,
+            objectStorageAdapters);
         var transferService = new ManagedAssetTransferService(
             repository,
             workspaceProvisioner,
@@ -88,6 +96,7 @@ static class Program
             openWebSettingsService,
             openWebPublishingService,
             objectStorageBackupService,
+            objectStorageRestoreService,
             assetCollectionService,
             transferService,
             dataDirectory));

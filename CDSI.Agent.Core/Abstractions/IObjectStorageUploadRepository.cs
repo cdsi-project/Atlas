@@ -44,4 +44,8 @@ public interface IObjectStorageUploadRepository
         Guid storageProfileId,
         string objectKey,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ObjectStorageRestoreSource>> ListObjectStorageRestoreSourcesAsync(
+        Guid assetId,
+        CancellationToken cancellationToken = default);
 }

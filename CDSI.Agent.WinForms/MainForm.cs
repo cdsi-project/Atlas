@@ -24,6 +24,7 @@ public sealed partial class MainForm : Form
     private readonly OpenWebSettingsService _openWebSettingsService;
     private readonly OpenWebArticlePublishingService _openWebPublishingService;
     private readonly ObjectStorageBackupService _objectStorageBackupService;
+    private readonly ObjectStorageRestoreService _objectStorageRestoreService;
     private readonly ManagedAssetTransferService _transferService;
     private readonly Label _scopeLabel = new();
     private readonly FingerprintApplicationService _fingerprintService;
@@ -64,6 +65,7 @@ public sealed partial class MainForm : Form
         OpenWebSettingsService openWebSettingsService,
         OpenWebArticlePublishingService openWebPublishingService,
         ObjectStorageBackupService objectStorageBackupService,
+        ObjectStorageRestoreService objectStorageRestoreService,
         AssetCollectionService assetCollectionService,
         ManagedAssetTransferService transferService,
         string dataDirectory)
@@ -78,6 +80,7 @@ public sealed partial class MainForm : Form
         _openWebSettingsService = openWebSettingsService;
         _openWebPublishingService = openWebPublishingService;
         _objectStorageBackupService = objectStorageBackupService;
+        _objectStorageRestoreService = objectStorageRestoreService;
         _assetCollectionService = assetCollectionService;
         _transferService = transferService;
         InitializeLayout(dataDirectory);

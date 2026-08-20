@@ -61,6 +61,29 @@ public sealed partial class SqliteAssetRepository
         DateTimeOffset verifiedAt,
         CancellationToken cancellationToken = default)
     {
+        await RegisterLocalLocationAsync(
+            assetId,
+            deviceId,
+            path,
+            AssetLocationOwnership.Managed,
+            verifiedAt,
+            cancellationToken);
+    }
+
+    public async Task RegisterLocalLocationAsync(
+        Guid assetId,
+        string deviceId,
+        string path,
+        AssetLocationOwnership ownership,
+        DateTimeOffset verifiedAt,
+        CancellationToken cancellationToken = default)
+    {
+        if (ownership is not (AssetLocationOwnership.External or
+            AssetLocationOwnership.Managed))
+        {
+            throw new ArgumentOutOfRangeException(nameof(ownership));
+        }
+
         var normalizedPath = NormalizePath(path);
         var pathKey = CreatePathKey(normalizedPath);
         await using var connection = await OpenConnectionAsync(cancellationToken);
@@ -105,12 +128,12 @@ public sealed partial class SqliteAssetRepository
                 status, last_seen_at, last_verified_at,
                 volume_id, volume_relative_path)
             VALUES (
-                $id, $asset_id, 'Local', 'Managed', $device_id, $path, $path_key,
+                $id, $asset_id, 'Local', $ownership, $device_id, $path, $path_key,
                 'Available', $verified_at, $verified_at,
                 $volume_id, $volume_relative_path)
             ON CONFLICT(device_id, path_key) DO UPDATE SET
                 path = excluded.path,
-                ownership = 'Managed',
+                ownership = excluded.ownership,
                 status = 'Available',
                 last_seen_at = excluded.last_seen_at,
                 last_verified_at = excluded.last_verified_at,
@@ -126,6 +149,7 @@ public sealed partial class SqliteAssetRepository
         command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("D"));
         command.Parameters.AddWithValue("$asset_id", assetId.ToString("D"));
         command.Parameters.AddWithValue("$device_id", deviceId);
+        command.Parameters.AddWithValue("$ownership", ownership.ToString());
         command.Parameters.AddWithValue("$path", normalizedPath);
         command.Parameters.AddWithValue("$path_key", pathKey);
         AddVolumeBindingParameters(command, volumeBinding);

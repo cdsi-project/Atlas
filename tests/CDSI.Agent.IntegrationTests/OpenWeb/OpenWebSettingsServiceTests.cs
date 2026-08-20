@@ -83,8 +83,10 @@ public sealed class OpenWebSettingsServiceTests
             await using var command = connection.CreateCommand();
             command.CommandText =
                 """
+                DROP TABLE restore_items;
+                DROP TABLE restore_jobs;
                 DROP TABLE openweb_sources;
-                DELETE FROM schema_migrations WHERE version = 16;
+                DELETE FROM schema_migrations WHERE version >= 16;
                 INSERT INTO agent_settings(setting_key, setting_value, updated_at)
                 VALUES
                     ('openweb.origin_domain', 'legacy.example.com', $updated_at),

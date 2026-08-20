@@ -17,6 +17,13 @@ public interface IObjectStorageAdapter
         IProgress<ObjectStorageTransferProgress>? progress = null,
         CancellationToken cancellationToken = default);
 
+    Task<ObjectStorageDownloadResult> DownloadAsync(
+        ObjectStorageConnection connection,
+        string objectKey,
+        Stream destination,
+        IProgress<ObjectStorageDownloadProgress>? progress = null,
+        CancellationToken cancellationToken = default);
+
     Task AbortMultipartUploadAsync(
         ObjectStorageConnection connection,
         MultipartUploadSession session,

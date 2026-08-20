@@ -9,6 +9,7 @@ public sealed partial class MainForm
 {
     private readonly ToolStripMenuItem _openFileLocationMenuItem = new();
     private readonly ToolStripMenuItem _hideAssetsFromListMenuItem = new();
+    private readonly ToolStripMenuItem _restoreFromOssMenuItem = new();
     private readonly ContextMenuStrip _duplicateContextMenu = new();
     private readonly ToolStripMenuItem _openDuplicateFileLocationMenuItem = new();
 
@@ -19,6 +20,7 @@ public sealed partial class MainForm
         _copyToWorkspaceMenuItem.Text = "复制到 CDSI 工作目录";
         _moveToWorkspaceMenuItem.Text = "移动到 CDSI 工作目录";
         _backupToOssMenuItem.Text = "备份到 OSS";
+        _restoreFromOssMenuItem.Text = "从 OSS 取回";
         _publishToOpenWebMenuItem.Text = "发布到 OpenWeb";
         _hideAssetsFromListMenuItem.Text = "从资产列表中移除（不删除）";
         _openFileLocationMenuItem.Click += (_, _) => OpenCurrentAssetFileLocation();
@@ -30,6 +32,8 @@ public sealed partial class MainForm
             await AddSelectedAssetsToCollectionAsync();
         _backupToOssMenuItem.Click += async (_, _) =>
             await BackupSelectedAssetsAsync();
+        _restoreFromOssMenuItem.Click += async (_, _) =>
+            await RestoreSelectedAssetsFromOssAsync();
         _publishToOpenWebMenuItem.Click += async (_, _) =>
             await PublishSelectedArticleAsync();
         _hideAssetsFromListMenuItem.Click += async (_, _) =>
@@ -46,6 +50,7 @@ public sealed partial class MainForm
                 _moveToWorkspaceMenuItem,
                 new ToolStripSeparator(),
                 _backupToOssMenuItem,
+                _restoreFromOssMenuItem,
                 new ToolStripSeparator(),
                 _hideAssetsFromListMenuItem
             ]);
@@ -61,6 +66,8 @@ public sealed partial class MainForm
             _copyToWorkspaceMenuItem.Enabled = canOperate;
             _moveToWorkspaceMenuItem.Enabled = canOperate;
             _backupToOssMenuItem.Enabled = canOperate;
+            _restoreFromOssMenuItem.Enabled = selected.Count > 0 &&
+                selected.All(asset => asset.HasHealthyObjectStorageBackup);
             _hideAssetsFromListMenuItem.Enabled = selected.Count > 0;
             _publishToOpenWebMenuItem.Enabled =
                 selected.Count == 1 &&
@@ -74,6 +81,8 @@ public sealed partial class MainForm
                 $"移动到 CDSI 工作目录 ({selected.Count:N0})";
             _backupToOssMenuItem.Text =
                 $"备份到 OSS ({selected.Count:N0})";
+            _restoreFromOssMenuItem.Text =
+                $"从 OSS 取回 ({selected.Count:N0})";
             _hideAssetsFromListMenuItem.Text =
                 $"从资产列表中移除（不删除，{selected.Count:N0} 个）";
         };

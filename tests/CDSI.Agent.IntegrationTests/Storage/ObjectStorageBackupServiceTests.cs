@@ -349,6 +349,16 @@ public sealed class ObjectStorageBackupServiceTests
             return new ObjectStorageTransferResult(StoredObject, Uploaded: true);
         }
 
+        public Task<ObjectStorageDownloadResult> DownloadAsync(
+            ObjectStorageConnection connection,
+            string objectKey,
+            Stream destination,
+            IProgress<ObjectStorageDownloadProgress>? progress = null,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
         public Task AbortMultipartUploadAsync(
             ObjectStorageConnection connection,
             MultipartUploadSession session,

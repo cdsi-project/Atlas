@@ -72,6 +72,73 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
         return new ObjectStorageTransferResult(uploaded, Uploaded: true);
     }
 
+    public async Task<ObjectStorageDownloadResult> DownloadAsync(
+        ObjectStorageConnection connection,
+        string objectKey,
+        Stream destination,
+        IProgress<ObjectStorageDownloadProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentException.ThrowIfNullOrWhiteSpace(objectKey);
+        ArgumentNullException.ThrowIfNull(destination);
+        if (!destination.CanWrite)
+        {
+            throw new ArgumentException("下载目标流不可写。", nameof(destination));
+        }
+
+        using var client = CreateClient(connection);
+        var result = await client.GetObjectAsync(
+            new GetObjectRequest
+            {
+                Bucket = connection.Profile.BucketName,
+                Key = objectKey,
+                ProgressFn = (_, transferred, total) =>
+                    progress?.Report(new ObjectStorageDownloadProgress(
+                        transferred,
+                        total,
+                        "正在下载"))
+            },
+            cancellationToken: cancellationToken);
+        if (result.Body is null)
+        {
+            throw new IOException("OSS 下载响应缺少对象数据流。");
+        }
+
+        await using (result.Body)
+        {
+            await result.Body.CopyToAsync(
+                destination,
+                1024 * 1024,
+                cancellationToken);
+        }
+
+        var size = result.ContentLength
+            ?? throw new IOException("OSS 下载响应缺少 Content-Length。");
+        DateTimeOffset? lastModified = null;
+        if (DateTimeOffset.TryParse(
+                result.LastModified,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal,
+                out var parsed))
+        {
+            lastModified = parsed;
+        }
+
+        progress?.Report(new ObjectStorageDownloadProgress(
+            size,
+            size,
+            "下载完成"));
+        return new ObjectStorageDownloadResult(
+            new ObjectStorageObjectInfo(
+                objectKey,
+                size,
+                ReadMetadata(result.Metadata, Sha256MetadataKey),
+                result.ETag,
+                lastModified),
+            size);
+    }
+
     public async Task AbortMultipartUploadAsync(
         ObjectStorageConnection connection,
         MultipartUploadSession session,

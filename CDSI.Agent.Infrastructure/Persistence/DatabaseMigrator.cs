@@ -683,6 +683,60 @@ internal static class DatabaseMigrator
             await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
+        if (currentVersion < 17)
+        {
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await using var migrationCommand = connection.CreateCommand();
+            migrationCommand.Transaction = (SqliteTransaction)transaction;
+            migrationCommand.CommandText =
+                """
+                CREATE TABLE restore_jobs (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    status TEXT NOT NULL,
+                    destination_kind TEXT NOT NULL,
+                    target_directory TEXT NOT NULL,
+                    started_at TEXT NOT NULL,
+                    finished_at TEXT NULL,
+                    total_items INTEGER NOT NULL,
+                    completed_items INTEGER NOT NULL,
+                    failed_items INTEGER NOT NULL,
+                    total_bytes INTEGER NOT NULL,
+                    downloaded_bytes INTEGER NOT NULL,
+                    error_message TEXT NULL
+                );
+
+                CREATE TABLE restore_items (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    job_id TEXT NOT NULL,
+                    asset_id TEXT NOT NULL,
+                    storage_profile_id TEXT NOT NULL,
+                    object_key TEXT NOT NULL,
+                    target_path TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    size INTEGER NOT NULL,
+                    downloaded_bytes INTEGER NOT NULL,
+                    sha256 TEXT NULL,
+                    error_message TEXT NULL,
+                    finished_at TEXT NULL,
+                    FOREIGN KEY (job_id) REFERENCES restore_jobs(id) ON DELETE CASCADE,
+                    FOREIGN KEY (asset_id) REFERENCES assets(id)
+                );
+
+                CREATE INDEX ix_restore_items_job_id
+                ON restore_items(job_id);
+
+                CREATE INDEX ix_restore_items_asset_id
+                ON restore_items(asset_id);
+
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (17, $applied_at);
+                """;
+            migrationCommand.Parameters.AddWithValue(
+                "$applied_at",
+                DateTimeOffset.UtcNow.ToString("O"));
+            await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     private static async Task<bool> TableExistsAsync(

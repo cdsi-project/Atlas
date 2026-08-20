@@ -327,6 +327,56 @@ public sealed partial class SqliteAssetRepository : IObjectStorageUploadReposito
             : null;
     }
 
+    public async Task<IReadOnlyList<ObjectStorageRestoreSource>>
+        ListObjectStorageRestoreSourcesAsync(
+            Guid assetId,
+            CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT
+                a.id, a.original_filename, a.size, a.modified_at, a.sha256,
+                l.id, l.asset_id, l.storage_profile_id, l.object_key, l.status,
+                l.size, l.sha256, l.etag, l.created_at, l.updated_at,
+                l.last_verified_at
+            FROM assets a
+            INNER JOIN object_storage_locations l ON l.asset_id = a.id
+            WHERE a.id = $asset_id
+            ORDER BY
+                CASE l.status WHEN 'Healthy' THEN 0 ELSE 1 END,
+                l.updated_at DESC;
+            """;
+        command.Parameters.AddWithValue("$asset_id", assetId.ToString("D"));
+        var result = new List<ObjectStorageRestoreSource>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var location = new ObjectStorageLocation(
+                Guid.Parse(reader.GetString(5)),
+                Guid.Parse(reader.GetString(6)),
+                Guid.Parse(reader.GetString(7)),
+                reader.GetString(8),
+                Enum.Parse<StorageVerificationStatus>(reader.GetString(9)),
+                reader.GetInt64(10),
+                reader.IsDBNull(11) ? null : reader.GetString(11),
+                reader.IsDBNull(12) ? null : reader.GetString(12),
+                ParseTimestamp(reader.GetString(13)),
+                ParseTimestamp(reader.GetString(14)),
+                reader.IsDBNull(15) ? null : ParseTimestamp(reader.GetString(15)));
+            result.Add(new ObjectStorageRestoreSource(
+                Guid.Parse(reader.GetString(0)),
+                reader.GetString(1),
+                reader.GetInt64(2),
+                ParseTimestamp(reader.GetString(3)),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                location));
+        }
+
+        return result;
+    }
+
     private static void AddUploadJobParameters(
         SqliteCommand command,
         ObjectStorageUploadJob job)

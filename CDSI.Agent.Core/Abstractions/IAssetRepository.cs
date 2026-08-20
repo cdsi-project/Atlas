@@ -97,6 +97,14 @@ public interface IAssetRepository
         DateTimeOffset verifiedAt,
         CancellationToken cancellationToken = default);
 
+    Task RegisterLocalLocationAsync(
+        Guid assetId,
+        string deviceId,
+        string path,
+        AssetLocationOwnership ownership,
+        DateTimeOffset verifiedAt,
+        CancellationToken cancellationToken = default);
+
     Task MarkLocalLocationMissingAsync(
         string deviceId,
         string path,
