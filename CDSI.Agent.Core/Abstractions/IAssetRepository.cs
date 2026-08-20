@@ -155,6 +155,9 @@ public interface IAssetRepository
     Task<IReadOnlyList<AssetDirectorySummary>> ListAssetDirectoriesAsync(
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<string>> ListAssetExtensionsAsync(
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<AssetListItem>> ListAssetsAsync(
         int limit,
         long offset = 0,

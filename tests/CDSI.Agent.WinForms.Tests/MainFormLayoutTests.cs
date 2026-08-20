@@ -92,13 +92,15 @@ public sealed class MainFormLayoutTests
     public void CreateAssetFilterPanel_ContainsTypeDatesAndExplicitCommands()
     {
         using var fileTypeComboBox = new ComboBox();
+        using var extensionComboBox = new ComboBox();
         using var createdFromDatePicker = new DateTimePicker();
         using var createdToDatePicker = new DateTimePicker();
-        using var applyButton = new Button { Text = "应用" };
+        using var applyButton = new Button { Text = "搜索" };
         using var resetButton = new Button { Text = "重置" };
         using var resultLabel = new Label();
         using var panel = MainForm.CreateAssetFilterPanel(
             fileTypeComboBox,
+            extensionComboBox,
             createdFromDatePicker,
             createdToDatePicker,
             applyButton,
@@ -106,11 +108,14 @@ public sealed class MainFormLayoutTests
             resultLabel);
 
         Assert.Contains(fileTypeComboBox, panel.Controls.Cast<Control>());
+        Assert.Contains(extensionComboBox, panel.Controls.Cast<Control>());
         Assert.Contains(createdFromDatePicker, panel.Controls.Cast<Control>());
         Assert.Contains(createdToDatePicker, panel.Controls.Cast<Control>());
         Assert.Contains(applyButton, panel.Controls.Cast<Control>());
         Assert.Contains(resetButton, panel.Controls.Cast<Control>());
         Assert.Contains(resultLabel, panel.Controls.Cast<Control>());
+        Assert.True(Assert.IsType<FlowLayoutPanel>(panel).WrapContents);
+        Assert.Equal("搜索", applyButton.Text);
         Assert.Equal(
             Enum.GetValues<CDSI.Agent.Core.Assets.AssetFileTypeFilter>(),
             MainForm.AssetFileTypeFilterChoices.Select(choice => choice.Value));
@@ -127,7 +132,8 @@ public sealed class MainFormLayoutTests
             createdFromEnabled: true,
             from,
             createdToEnabled: true,
-            to);
+            to,
+            extension: "MP4");
 
         Assert.Equal(
             from,
@@ -138,12 +144,30 @@ public sealed class MainFormLayoutTests
         Assert.Equal(
             CDSI.Agent.Core.Assets.AssetFileTypeFilter.Video,
             filter.FileType);
+        Assert.Equal(".mp4", filter.Extension);
         Assert.Throws<ArgumentException>(() => MainForm.BuildAssetListFilter(
             CDSI.Agent.Core.Assets.AssetFileTypeFilter.All,
             createdFromEnabled: true,
             to,
             createdToEnabled: true,
             from));
+    }
+
+    [Fact]
+    public void RefreshAssetExtensionChoices_SortsAndPreservesTheSelection()
+    {
+        using var comboBox = new ComboBox();
+        comboBox.Items.AddRange([MainForm.AllAssetExtensionsLabel, ".mp4"]);
+        comboBox.SelectedItem = ".mp4";
+
+        MainForm.RefreshAssetExtensionChoices(
+            comboBox,
+            [".ZIP", ".jpg", ".zip"]);
+
+        Assert.Equal(
+            [MainForm.AllAssetExtensionsLabel, ".jpg", ".mp4", ".zip"],
+            comboBox.Items.Cast<string>());
+        Assert.Equal(".mp4", comboBox.SelectedItem);
     }
 
     [Fact]

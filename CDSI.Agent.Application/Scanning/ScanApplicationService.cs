@@ -93,6 +93,12 @@ public sealed class ScanApplicationService
         return _repository.ListAssetDirectoriesAsync(cancellationToken);
     }
 
+    public Task<IReadOnlyList<string>> ListAssetExtensionsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return _repository.ListAssetExtensionsAsync(cancellationToken);
+    }
+
     public Task<IReadOnlyList<ExactDuplicateGroup>> ListExactDuplicateGroupsAsync(
         int limit = 500,
         CancellationToken cancellationToken = default)

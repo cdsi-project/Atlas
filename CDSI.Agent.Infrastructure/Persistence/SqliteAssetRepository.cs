@@ -779,6 +779,36 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             .ToArray();
     }
 
+    public async Task<IReadOnlyList<string>> ListAssetExtensionsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var extensions = new List<string>();
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT lower(a.extension)
+            FROM assets a
+            WHERE length(trim(a.extension)) > 0
+              AND EXISTS (
+                  SELECT 1
+                  FROM asset_locations l
+                  WHERE l.asset_id = a.id
+                    AND l.location_type = 'Local'
+              )
+            GROUP BY lower(a.extension)
+            ORDER BY lower(a.extension);
+            """;
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            extensions.Add(reader.GetString(0));
+        }
+
+        return extensions;
+    }
+
     public Task<IReadOnlyList<AssetListItem>> ListAssetsAsync(
         int limit,
         long offset = 0,
@@ -1271,6 +1301,11 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             conditions.Add("julianday(a.created_at) < julianday($created_before)");
         }
 
+        if (filter.Extension is not null)
+        {
+            conditions.Add("lower(a.extension) = $extension");
+        }
+
         return conditions.Count == 0
             ? string.Empty
             : $"AND {string.Join(" AND ", conditions)}";
@@ -1292,6 +1327,11 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             command.Parameters.AddWithValue(
                 "$created_before",
                 filter.CreatedBefore.Value.UtcDateTime.ToString("O"));
+        }
+
+        if (filter.Extension is not null)
+        {
+            command.Parameters.AddWithValue("$extension", filter.Extension);
         }
     }
 

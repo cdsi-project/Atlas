@@ -7,7 +7,8 @@ public sealed record AssetListFilter
     public AssetListFilter(
         AssetFileTypeFilter fileType = AssetFileTypeFilter.All,
         DateTimeOffset? createdFrom = null,
-        DateTimeOffset? createdBefore = null)
+        DateTimeOffset? createdBefore = null,
+        string? extension = null)
     {
         if (!Enum.IsDefined(fileType))
         {
@@ -24,6 +25,7 @@ public sealed record AssetListFilter
         FileType = fileType;
         CreatedFrom = createdFrom;
         CreatedBefore = createdBefore;
+        Extension = NormalizeExtension(extension);
     }
 
     public AssetFileTypeFilter FileType { get; }
@@ -32,10 +34,39 @@ public sealed record AssetListFilter
 
     public DateTimeOffset? CreatedBefore { get; }
 
+    public string? Extension { get; }
+
     public bool IsEmpty =>
         FileType == AssetFileTypeFilter.All &&
         CreatedFrom is null &&
-        CreatedBefore is null;
+        CreatedBefore is null &&
+        Extension is null;
+
+    private static string? NormalizeExtension(string? extension)
+    {
+        if (string.IsNullOrWhiteSpace(extension))
+        {
+            return null;
+        }
+
+        var normalized = extension.Trim();
+        if (normalized.Contains('/') || normalized.Contains('\\'))
+        {
+            throw new ArgumentException("扩展名不能包含路径分隔符。", nameof(extension));
+        }
+
+        if (!normalized.StartsWith('.'))
+        {
+            normalized = $".{normalized}";
+        }
+
+        if (normalized.Length == 1)
+        {
+            throw new ArgumentException("扩展名不能为空。", nameof(extension));
+        }
+
+        return normalized.ToLowerInvariant();
+    }
 }
 
 public enum AssetFileTypeFilter

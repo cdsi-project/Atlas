@@ -32,4 +32,22 @@ public sealed class AssetListFilterTests
         Assert.False(filter.IsEmpty);
         Assert.Equal(AssetFileTypeFilter.Video, filter.FileType);
     }
+
+    [Theory]
+    [InlineData("MP4", ".mp4")]
+    [InlineData(" .JPG ", ".jpg")]
+    public void Constructor_NormalizesExtension(string input, string expected)
+    {
+        var filter = new AssetListFilter(extension: input);
+
+        Assert.Equal(expected, filter.Extension);
+        Assert.False(filter.IsEmpty);
+    }
+
+    [Fact]
+    public void Constructor_RejectsAnExtensionContainingAPath()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new AssetListFilter(extension: "folder/file.txt"));
+    }
 }

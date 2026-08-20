@@ -241,7 +241,7 @@ public sealed partial class MainForm : Form
             Padding = Padding.Empty
         };
         assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-        assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+        assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
         assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
         assetTabLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
@@ -887,12 +887,14 @@ public sealed partial class MainForm : Form
         var duplicateGroupsTask = _scanService.ListExactDuplicateGroupsAsync();
         var statisticsTask = _scanService.GetLocalAssetStatisticsAsync();
         var assetDirectoriesTask = _scanService.ListAssetDirectoriesAsync();
+        var assetExtensionsTask = _scanService.ListAssetExtensionsAsync();
         await Task.WhenAll(
             assetCountTask,
             totalAssetCountTask,
             duplicateGroupsTask,
             statisticsTask,
-            assetDirectoriesTask);
+            assetDirectoriesTask,
+            assetExtensionsTask);
 
         var assetCount = await assetCountTask;
         var totalAssetCount = await totalAssetCountTask;
@@ -908,6 +910,7 @@ public sealed partial class MainForm : Form
         var duplicateGroups = await duplicateGroupsTask;
         var statistics = await statisticsTask;
         var assetDirectories = await assetDirectoriesTask;
+        var assetExtensions = await assetExtensionsTask;
         _assetGrid.Rows.Clear();
         _duplicateGrid.Rows.Clear();
 
@@ -963,6 +966,9 @@ public sealed partial class MainForm : Form
 
         UpdateAssetPaginationControls(assetCount);
         UpdateAssetFilterResult(assetCount, totalAssetCount);
+        RefreshAssetExtensionChoices(
+            _assetExtensionFilterComboBox,
+            assetExtensions);
         RefreshAssetDirectories(assetDirectories);
         _assetsTabPage.Text = filter.IsEmpty
             ? $"资产 ({assetCount:N0})"

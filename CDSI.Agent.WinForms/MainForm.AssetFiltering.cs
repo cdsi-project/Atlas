@@ -4,6 +4,8 @@ namespace CDSI.Agent.WinForms;
 
 public sealed partial class MainForm
 {
+    internal const string AllAssetExtensionsLabel = "全部扩展名";
+
     internal static readonly IReadOnlyList<AssetFileTypeFilterChoice>
         AssetFileTypeFilterChoices =
         [
@@ -16,6 +18,7 @@ public sealed partial class MainForm
         ];
 
     private readonly ComboBox _assetFileTypeFilterComboBox = new();
+    private readonly ComboBox _assetExtensionFilterComboBox = new();
     private readonly DateTimePicker _assetCreatedFromDatePicker = new();
     private readonly DateTimePicker _assetCreatedToDatePicker = new();
     private readonly Button _applyAssetFilterButton = new();
@@ -32,6 +35,12 @@ public sealed partial class MainForm
             AssetFileTypeFilterChoices.Cast<object>().ToArray());
         _assetFileTypeFilterComboBox.SelectedIndex = 0;
 
+        _assetExtensionFilterComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+        _assetExtensionFilterComboBox.Width = 108;
+        _assetExtensionFilterComboBox.AccessibleName = "扩展名过滤";
+        _assetExtensionFilterComboBox.Items.Add(AllAssetExtensionsLabel);
+        _assetExtensionFilterComboBox.SelectedIndex = 0;
+
         ConfigureFilterDatePicker(
             _assetCreatedFromDatePicker,
             "创建时间开始",
@@ -43,7 +52,7 @@ public sealed partial class MainForm
 
         ConfigureFilterButton(
             _applyAssetFilterButton,
-            "应用",
+            "搜索",
             Color.FromArgb(24, 121, 78),
             Color.White);
         ConfigureFilterButton(
@@ -64,6 +73,7 @@ public sealed partial class MainForm
 
         return CreateAssetFilterPanel(
             _assetFileTypeFilterComboBox,
+            _assetExtensionFilterComboBox,
             _assetCreatedFromDatePicker,
             _assetCreatedToDatePicker,
             _applyAssetFilterButton,
@@ -73,6 +83,7 @@ public sealed partial class MainForm
 
     internal static Control CreateAssetFilterPanel(
         ComboBox fileTypeComboBox,
+        ComboBox extensionComboBox,
         DateTimePicker createdFromDatePicker,
         DateTimePicker createdToDatePicker,
         Button applyButton,
@@ -83,13 +94,15 @@ public sealed partial class MainForm
         {
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
+            WrapContents = true,
             Margin = Padding.Empty,
             Padding = new Padding(8, 8, 8, 6),
             BackColor = Color.FromArgb(247, 248, 250)
         };
         panel.Controls.Add(CreateFilterLabel("文件类型"));
         panel.Controls.Add(fileTypeComboBox);
+        panel.Controls.Add(CreateFilterLabel("扩展名", leftMargin: 14));
+        panel.Controls.Add(extensionComboBox);
         panel.Controls.Add(CreateFilterLabel("创建时间", leftMargin: 14));
         panel.Controls.Add(createdFromDatePicker);
         panel.Controls.Add(CreateFilterLabel("至", leftMargin: 6));
@@ -105,7 +118,8 @@ public sealed partial class MainForm
         bool createdFromEnabled,
         DateTime createdFrom,
         bool createdToEnabled,
-        DateTime createdTo)
+        DateTime createdTo,
+        string? extension = null)
     {
         if (createdFromEnabled &&
             createdToEnabled &&
@@ -123,7 +137,8 @@ public sealed partial class MainForm
         return new AssetListFilter(
             fileType,
             createdFromBoundary,
-            createdBeforeBoundary);
+            createdBeforeBoundary,
+            extension);
     }
 
     private static DateTimeOffset StartOfLocalDay(DateTime value)
@@ -189,7 +204,10 @@ public sealed partial class MainForm
                 _assetCreatedFromDatePicker.Checked,
                 _assetCreatedFromDatePicker.Value,
                 _assetCreatedToDatePicker.Checked,
-                _assetCreatedToDatePicker.Value);
+                _assetCreatedToDatePicker.Value,
+                _assetExtensionFilterComboBox.SelectedIndex > 0
+                    ? _assetExtensionFilterComboBox.SelectedItem as string
+                    : null);
         }
         catch (ArgumentException exception)
         {
@@ -209,6 +227,7 @@ public sealed partial class MainForm
     private async Task ResetAssetFilterAsync()
     {
         _assetFileTypeFilterComboBox.SelectedIndex = 0;
+        _assetExtensionFilterComboBox.SelectedIndex = 0;
         _assetCreatedFromDatePicker.Checked = false;
         _assetCreatedToDatePicker.Checked = false;
         _assetListFilter = AssetListFilter.Empty;
@@ -227,10 +246,49 @@ public sealed partial class MainForm
     {
         var enabled = !_isBusy && !_refreshingAssetPage;
         _assetFileTypeFilterComboBox.Enabled = enabled;
+        _assetExtensionFilterComboBox.Enabled = enabled;
         _assetCreatedFromDatePicker.Enabled = enabled;
         _assetCreatedToDatePicker.Enabled = enabled;
         _applyAssetFilterButton.Enabled = enabled;
         _resetAssetFilterButton.Enabled = enabled;
+    }
+
+    internal static void RefreshAssetExtensionChoices(
+        ComboBox comboBox,
+        IReadOnlyList<string> extensions)
+    {
+        var selectedExtension = comboBox.SelectedIndex > 0
+            ? comboBox.SelectedItem as string
+            : null;
+        var choices = extensions
+            .Where(extension => !string.IsNullOrWhiteSpace(extension))
+            .Select(extension => extension.Trim().ToLowerInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (selectedExtension is not null &&
+            !choices.Contains(selectedExtension, StringComparer.OrdinalIgnoreCase))
+        {
+            choices.Add(selectedExtension);
+            choices.Sort(StringComparer.OrdinalIgnoreCase);
+        }
+
+        comboBox.BeginUpdate();
+        try
+        {
+            comboBox.Items.Clear();
+            comboBox.Items.Add(AllAssetExtensionsLabel);
+            comboBox.Items.AddRange(choices.Cast<object>().ToArray());
+            comboBox.SelectedItem = selectedExtension ?? AllAssetExtensionsLabel;
+            if (comboBox.SelectedIndex < 0)
+            {
+                comboBox.SelectedIndex = 0;
+            }
+        }
+        finally
+        {
+            comboBox.EndUpdate();
+        }
     }
 
     internal sealed record AssetFileTypeFilterChoice(

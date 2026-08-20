@@ -174,6 +174,13 @@ public sealed class SqliteAssetRepositoryTests
             AssetFileTypeFilter.Image,
             januaryFirst.AddDays(2),
             januaryFirst.AddDays(3));
+        var extensionFilter = new AssetListFilter(
+            AssetFileTypeFilter.Document,
+            extension: "PDF");
+
+        Assert.Equal(
+            [".mp3", ".mp4", ".pdf", ".png", ".zip"],
+            await repository.ListAssetExtensionsAsync());
 
         Assert.Equal(
             ["video.mp4"],
@@ -196,6 +203,10 @@ public sealed class SqliteAssetRepositoryTests
         Assert.Equal(
             "image.png",
             Assert.Single(await repository.ListAssetsAsync(combinedFilter, 100))
+                .OriginalFilename);
+        Assert.Equal(
+            "article.pdf",
+            Assert.Single(await repository.ListAssetsAsync(extensionFilter, 100))
                 .OriginalFilename);
 
         SqliteConnection.ClearAllPools();
