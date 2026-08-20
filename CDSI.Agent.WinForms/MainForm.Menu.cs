@@ -112,9 +112,11 @@ public sealed partial class MainForm
         var safetyItem = new ToolStripMenuItem("数据安全与隐私(&S)");
         safetyItem.Click += (_, _) => ShowDataSafetyInformation();
         var licenseItem = new ToolStripMenuItem("开源协议(&L)");
-        licenseItem.Click += (_, _) => OpenBundledDocument("LICENSE");
+        licenseItem.Click += (_, _) =>
+            ShowLegalDocuments(LegalDocumentPage.OpenSourceLicense);
         var thirdPartyItem = new ToolStripMenuItem("第三方许可(&T)");
-        thirdPartyItem.Click += (_, _) => OpenBundledDocument("THIRD-PARTY-NOTICES.md");
+        thirdPartyItem.Click += (_, _) =>
+            ShowLegalDocuments(LegalDocumentPage.ThirdPartyNotices);
         var aboutItem = new ToolStripMenuItem("关于 CDSI Atlas(&A)");
         aboutItem.Click += (_, _) => ShowAboutDialog();
         helpMenu.DropDownItems.AddRange(
@@ -312,6 +314,21 @@ public sealed partial class MainForm
             "数据安全与隐私",
             MessageBoxButtons.OK,
             MessageBoxIcon.Information);
+    }
+
+    private void ShowLegalDocuments(LegalDocumentPage initialPage)
+    {
+        try
+        {
+            using var dialog = LegalDocumentsForm.LoadFromDirectory(
+                AppContext.BaseDirectory,
+                initialPage);
+            dialog.ShowDialog(this);
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法打开许可信息", exception);
+        }
     }
 
     private void ShowAboutDialog()
