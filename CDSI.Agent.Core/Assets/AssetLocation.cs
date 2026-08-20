@@ -28,5 +28,6 @@ public enum AssetLocationStatus
 {
     Available,
     Missing,
+    Offline,
     Unverified
 }

@@ -65,6 +65,12 @@ public sealed partial class SqliteAssetRepository
         var pathKey = CreatePathKey(normalizedPath);
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var volumeBinding = FindVolumeBinding(
+            await LoadOnlineVolumeMountsAsync(
+                connection,
+                (SqliteTransaction)transaction,
+                cancellationToken),
+            normalizedPath);
 
         await using (var conflictCommand = connection.CreateCommand())
         {
@@ -96,22 +102,33 @@ public sealed partial class SqliteAssetRepository
             """
             INSERT INTO asset_locations(
                 id, asset_id, location_type, ownership, device_id, path, path_key,
-                status, last_seen_at, last_verified_at)
+                status, last_seen_at, last_verified_at,
+                volume_id, volume_relative_path)
             VALUES (
                 $id, $asset_id, 'Local', 'Managed', $device_id, $path, $path_key,
-                'Available', $verified_at, $verified_at)
+                'Available', $verified_at, $verified_at,
+                $volume_id, $volume_relative_path)
             ON CONFLICT(device_id, path_key) DO UPDATE SET
                 path = excluded.path,
                 ownership = 'Managed',
                 status = 'Available',
                 last_seen_at = excluded.last_seen_at,
-                last_verified_at = excluded.last_verified_at;
+                last_verified_at = excluded.last_verified_at,
+                volume_id = CASE
+                    WHEN excluded.volume_id IS NULL THEN asset_locations.volume_id
+                    ELSE excluded.volume_id
+                END,
+                volume_relative_path = CASE
+                    WHEN excluded.volume_id IS NULL THEN asset_locations.volume_relative_path
+                    ELSE excluded.volume_relative_path
+                END;
             """;
         command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("D"));
         command.Parameters.AddWithValue("$asset_id", assetId.ToString("D"));
         command.Parameters.AddWithValue("$device_id", deviceId);
         command.Parameters.AddWithValue("$path", normalizedPath);
         command.Parameters.AddWithValue("$path_key", pathKey);
+        AddVolumeBindingParameters(command, volumeBinding);
         command.Parameters.AddWithValue("$verified_at", verifiedAt.ToString("O"));
         await command.ExecuteNonQueryAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);

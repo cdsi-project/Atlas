@@ -39,6 +39,9 @@ static class Program
             repository,
             workspaceProvisioner);
         var scanRootService = new ScanRootManagementService(repository);
+        var volumeReconciliationService = new LocalVolumeReconciliationService(
+            new WindowsLocalVolumeProvider(),
+            repository);
         var secretStore = new WindowsCredentialSecretStore();
         var storageService = new ObjectStorageProfileService(
             repository,
@@ -80,6 +83,7 @@ static class Program
             metadataService,
             workspaceService,
             scanRootService,
+            volumeReconciliationService,
             storageService,
             openWebSettingsService,
             openWebPublishingService,

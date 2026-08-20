@@ -81,6 +81,103 @@ public sealed class SqliteAssetRepositoryTests
     }
 
     [Fact]
+    public async Task ReconcileLocalVolumesAsync_RemapPathsWithoutScanningFiles()
+    {
+        using var directory = new TestDirectory();
+        var repository = new SqliteAssetRepository(Path.Combine(directory.Path, "cdsi.db"));
+        await repository.InitializeAsync();
+        var deviceId = await repository.GetOrCreateDeviceIdAsync();
+        const string originalMount = @"X:\";
+        const string remappedMount = @"Y:\";
+        var originalRoot = Path.Combine(originalMount, "Creator");
+        var originalWorkspace = Path.Combine(originalMount, "Workspace");
+        var originalFile = CreateFile(
+            Path.Combine(originalRoot, "video.mp4"),
+            "video.mp4") with
+        {
+            MimeType = "video/mp4"
+        };
+        var root = await repository.GetOrCreateScanRootAsync(
+            originalRoot,
+            ScanRootMode.Readonly,
+            DateTimeOffset.UtcNow);
+        await repository.SaveManagedWorkspaceAsync(
+            deviceId,
+            originalWorkspace,
+            DateTimeOffset.UtcNow);
+        var registered = await repository.RegisterLocalFilesAsync(
+            deviceId,
+            [originalFile],
+            DateTimeOffset.UtcNow);
+        var originalAssetId = Assert.Single(registered).AssetId;
+        var originalVolume = CreateTestVolume(originalMount);
+
+        var first = await repository.ReconcileLocalVolumesAsync(
+            [originalVolume],
+            DateTimeOffset.UtcNow);
+        var addedAfterBinding = CreateFile(
+            Path.Combine(originalRoot, "audio.mp3"),
+            "audio.mp3") with
+        {
+            MimeType = "audio/mpeg"
+        };
+        await repository.RegisterLocalFilesAsync(
+            deviceId,
+            [addedAfterBinding],
+            DateTimeOffset.UtcNow);
+        var remapped = await repository.ReconcileLocalVolumesAsync(
+            [originalVolume with { MountPath = remappedMount }],
+            DateTimeOffset.UtcNow.AddSeconds(1));
+
+        var remappedRoot = Assert.Single(await repository.ListScanRootsAsync());
+        var remappedAssets = await repository.ListAssetsAsync(100);
+        var remappedWorkspace = await repository.GetManagedWorkspaceAsync(deviceId);
+
+        Assert.Equal(1, first.NewlyTrackedVolumes);
+        Assert.Equal(1, first.BoundScanRoots);
+        Assert.Equal(1, first.BoundAssetLocations);
+        Assert.Equal(root.Id, remappedRoot.Id);
+        Assert.Equal(Path.Combine(remappedMount, "Creator"), remappedRoot.Path);
+        Assert.Equal(1, remapped.RemappedScanRoots);
+        Assert.Equal(2, remapped.RemappedAssetLocations);
+        Assert.Equal(
+            Path.Combine(remappedMount, "Workspace"),
+            remappedWorkspace?.Path);
+        Assert.Equal(
+            originalAssetId,
+            remappedAssets.Single(asset => asset.OriginalFilename == "video.mp4").AssetId);
+        Assert.All(
+            remappedAssets,
+            asset => Assert.StartsWith(remappedMount, asset.Path));
+
+        var disconnected = await repository.ReconcileLocalVolumesAsync(
+            [],
+            DateTimeOffset.UtcNow.AddSeconds(2));
+        var offlineRoot = Assert.Single(await repository.ListScanRootsAsync());
+        var offlineAssets = await repository.ListAssetsAsync(100);
+        Assert.Equal(1, disconnected.OfflineVolumes);
+        Assert.Equal(ScanRootStatus.Offline, offlineRoot.Status);
+        Assert.All(
+            offlineAssets,
+            asset => Assert.Equal(AssetLocationStatus.Offline, asset.LocationStatus));
+
+        var reconnected = await repository.ReconcileLocalVolumesAsync(
+            [originalVolume with { MountPath = remappedMount }],
+            DateTimeOffset.UtcNow.AddSeconds(3));
+        var reconnectedRoot = Assert.Single(await repository.ListScanRootsAsync());
+        var reconnectedAssets = await repository.ListAssetsAsync(100);
+        Assert.Equal(1, reconnected.ReconnectedVolumes);
+        Assert.Equal(ScanRootStatus.Active, reconnectedRoot.Status);
+        Assert.All(
+            reconnectedAssets,
+            asset => Assert.Equal(
+                AssetLocationStatus.Unverified,
+                asset.LocationStatus));
+
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
     public async Task ListAssetsAsync_ReturnsStableDatabasePagesAndTotalCount()
     {
         using var directory = new TestDirectory();
@@ -454,7 +551,7 @@ public sealed class SqliteAssetRepositoryTests
                     'upload_jobs', 'upload_items',
                     'multipart_upload_sessions', 'asset_collections',
                     'asset_collection_items', 'agent_settings',
-                    'openweb_publications');
+                    'openweb_publications', 'local_volumes');
                 """;
             var tableCount = Convert.ToInt32(await tableCommand.ExecuteScalarAsync());
 
@@ -467,14 +564,16 @@ public sealed class SqliteAssetRepositoryTests
                     'ix_asset_locations_type_asset_id',
                     'ix_assets_created_at_julian',
                     'ix_assets_mime_type',
-                    'ix_assets_extension_lower');
+                    'ix_assets_extension_lower',
+                    'ix_scan_roots_volume_id',
+                    'ix_asset_locations_volume_id');
                 """;
             var filterIndexCount = Convert.ToInt32(
                 await indexCommand.ExecuteScalarAsync());
 
-            Assert.Equal(11, version);
-            Assert.Equal(14, tableCount);
-            Assert.Equal(4, filterIndexCount);
+            Assert.Equal(12, version);
+            Assert.Equal(15, tableCount);
+            Assert.Equal(6, filterIndexCount);
         }
 
         SqliteConnection.ClearAllPools();
@@ -646,5 +745,16 @@ public sealed class SqliteAssetRepositoryTests
             5,
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow);
+    }
+
+    private static LocalVolumeDescriptor CreateTestVolume(string mountPath)
+    {
+        return new LocalVolumeDescriptor(
+            @"\\?\Volume{CDSI-TEST}",
+            "1234ABCD",
+            mountPath,
+            "CDSI Test",
+            "NTFS",
+            "Removable");
     }
 }

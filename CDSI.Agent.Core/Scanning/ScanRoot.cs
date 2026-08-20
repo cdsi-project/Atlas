@@ -9,7 +9,9 @@ public sealed record ScanRoot(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     DateTimeOffset? LastScannedAt,
-    DateTimeOffset? RemovedAt);
+    DateTimeOffset? RemovedAt,
+    Guid? LocalVolumeId = null,
+    string? VolumeRelativePath = null);
 
 public enum ScanRootMode
 {
@@ -22,6 +24,7 @@ public enum ScanRootStatus
     Active,
     Disabled,
     Unavailable,
+    Offline,
     Error,
     Removed
 }

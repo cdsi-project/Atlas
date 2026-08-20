@@ -484,6 +484,7 @@ public sealed partial class SettingsForm : Form
         {
             ScanRootStatus.Active => "正常",
             ScanRootStatus.Unavailable => "不可用",
+            ScanRootStatus.Offline => "设备离线",
             ScanRootStatus.Error => "有错误",
             _ => root.Status.ToString()
         };

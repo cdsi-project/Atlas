@@ -220,7 +220,7 @@ public sealed partial class MainForm
         {
             MessageBox.Show(
                 this,
-                "选择中包含位置缺失的文件，请重新选择可用位置。",
+                "选择中包含不可用的本地位置，请重新选择可用文件。",
                 "CDSI Atlas",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);

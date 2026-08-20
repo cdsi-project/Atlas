@@ -4,6 +4,23 @@ namespace CDSI.Agent.WinForms.Tests;
 
 public sealed class MainFormLayoutTests
 {
+    [Theory]
+    [InlineData(0x0007)]
+    [InlineData(0x8000)]
+    [InlineData(0x8004)]
+    public void IsLocalVolumeDeviceChange_AcceptsRelevantWindowsEvents(
+        int eventType)
+    {
+        Assert.True(MainForm.IsLocalVolumeDeviceChange(0x0219, eventType));
+        Assert.False(MainForm.IsLocalVolumeDeviceChange(0x0200, eventType));
+    }
+
+    [Fact]
+    public void IsLocalVolumeDeviceChange_RejectsUnrelatedDeviceEvents()
+    {
+        Assert.False(MainForm.IsLocalVolumeDeviceChange(0x0219, 0x8001));
+    }
+
     [Fact]
     public void CreateStatisticsPanel_ReservesVisibleValueRows()
     {

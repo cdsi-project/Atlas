@@ -91,7 +91,15 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                     path = excluded.path,
                     mode = excluded.mode,
                     enabled = 1,
-                    status = 'Active',
+                    status = CASE
+                        WHEN scan_roots.volume_id IS NOT NULL AND EXISTS (
+                            SELECT 1
+                            FROM local_volumes v
+                            WHERE v.id = scan_roots.volume_id
+                              AND v.is_online = 0
+                        ) THEN 'Offline'
+                        ELSE 'Active'
+                    END,
                     updated_at = excluded.updated_at,
                     removed_at = NULL;
                 """;
@@ -109,7 +117,8 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             """
             SELECT
                 id, path, mode, enabled, status, created_at,
-                updated_at, last_scanned_at, removed_at
+                updated_at, last_scanned_at, removed_at,
+                volume_id, volume_relative_path
             FROM scan_roots
             WHERE path_key = $path_key;
             """;
@@ -230,6 +239,10 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
         var registered = new List<RegisteredLocalAsset>(files.Count);
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var volumeMounts = await LoadOnlineVolumeMountsAsync(
+            connection,
+            (SqliteTransaction)transaction,
+            cancellationToken);
 
         foreach (var file in files)
         {
@@ -237,6 +250,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
 
             var normalizedPath = NormalizePath(file.FullPath);
             var pathKey = CreatePathKey(normalizedPath);
+            var volumeBinding = FindVolumeBinding(volumeMounts, normalizedPath);
             var existingAsset = await FindAssetAsync(
                 connection,
                 (SqliteTransaction)transaction,
@@ -267,6 +281,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                     deviceId,
                     normalizedPath,
                     pathKey,
+                    volumeBinding,
                     discoveredAt,
                     cancellationToken);
             }
@@ -285,6 +300,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                     deviceId,
                     normalizedPath,
                     pathKey,
+                    volumeBinding,
                     discoveredAt,
                     cancellationToken);
             }
@@ -1096,6 +1112,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
         string deviceId,
         string path,
         string pathKey,
+        LocalPathVolumeBinding? volumeBinding,
         DateTimeOffset seenAt,
         CancellationToken cancellationToken)
     {
@@ -1105,16 +1122,19 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             """
             INSERT INTO asset_locations(
                 id, asset_id, location_type, ownership, device_id, path, path_key,
-                status, last_seen_at, last_verified_at)
+                status, last_seen_at, last_verified_at,
+                volume_id, volume_relative_path)
             VALUES (
                 $id, $asset_id, 'Local', 'External', $device_id, $path, $path_key,
-                'Available', $last_seen_at, NULL);
+                'Available', $last_seen_at, NULL,
+                $volume_id, $volume_relative_path);
             """;
         command.Parameters.AddWithValue("$id", locationId.ToString("D"));
         command.Parameters.AddWithValue("$asset_id", assetId.ToString("D"));
         command.Parameters.AddWithValue("$device_id", deviceId);
         command.Parameters.AddWithValue("$path", path);
         command.Parameters.AddWithValue("$path_key", pathKey);
+        AddVolumeBindingParameters(command, volumeBinding);
         command.Parameters.AddWithValue("$last_seen_at", seenAt.ToString("O"));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -1125,6 +1145,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
         string deviceId,
         string path,
         string pathKey,
+        LocalPathVolumeBinding? volumeBinding,
         DateTimeOffset seenAt,
         CancellationToken cancellationToken)
     {
@@ -1135,12 +1156,21 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             UPDATE asset_locations
             SET path = $path,
                 status = 'Available',
-                last_seen_at = $last_seen_at
+                last_seen_at = $last_seen_at,
+                volume_id = CASE
+                    WHEN $volume_id IS NULL THEN volume_id
+                    ELSE $volume_id
+                END,
+                volume_relative_path = CASE
+                    WHEN $volume_id IS NULL THEN volume_relative_path
+                    ELSE $volume_relative_path
+                END
             WHERE device_id = $device_id AND path_key = $path_key;
             """;
         command.Parameters.AddWithValue("$device_id", deviceId);
         command.Parameters.AddWithValue("$path", path);
         command.Parameters.AddWithValue("$path_key", pathKey);
+        AddVolumeBindingParameters(command, volumeBinding);
         command.Parameters.AddWithValue("$last_seen_at", seenAt.ToString("O"));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

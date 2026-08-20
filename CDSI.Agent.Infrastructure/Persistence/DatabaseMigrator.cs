@@ -517,6 +517,58 @@ internal static class DatabaseMigrator
             await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
+        if (currentVersion < 12)
+        {
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await using var migrationCommand = connection.CreateCommand();
+            migrationCommand.Transaction = (SqliteTransaction)transaction;
+            migrationCommand.CommandText =
+                """
+                CREATE TABLE local_volumes (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    stable_id TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                    serial_number TEXT NOT NULL,
+                    label TEXT NULL,
+                    filesystem TEXT NULL,
+                    drive_type TEXT NOT NULL,
+                    mount_path TEXT NOT NULL,
+                    mount_path_key TEXT NOT NULL,
+                    is_online INTEGER NOT NULL,
+                    first_seen_at TEXT NOT NULL,
+                    last_seen_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                ALTER TABLE scan_roots
+                    ADD COLUMN volume_id TEXT NULL;
+                ALTER TABLE scan_roots
+                    ADD COLUMN volume_relative_path TEXT NULL;
+
+                ALTER TABLE managed_workspaces
+                    ADD COLUMN volume_id TEXT NULL;
+                ALTER TABLE managed_workspaces
+                    ADD COLUMN volume_relative_path TEXT NULL;
+
+                ALTER TABLE asset_locations
+                    ADD COLUMN volume_id TEXT NULL;
+                ALTER TABLE asset_locations
+                    ADD COLUMN volume_relative_path TEXT NULL;
+
+                CREATE INDEX ix_scan_roots_volume_id
+                ON scan_roots(volume_id);
+
+                CREATE INDEX ix_asset_locations_volume_id
+                ON asset_locations(volume_id);
+
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (12, $applied_at);
+                """;
+            migrationCommand.Parameters.AddWithValue(
+                "$applied_at",
+                DateTimeOffset.UtcNow.ToString("O"));
+            await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     private static async Task<bool> TableExistsAsync(

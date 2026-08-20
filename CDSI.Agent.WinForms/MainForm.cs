@@ -59,6 +59,7 @@ public sealed partial class MainForm : Form
         MetadataExtractionApplicationService metadataService,
         WorkspaceApplicationService workspaceService,
         ScanRootManagementService scanRootService,
+        LocalVolumeReconciliationService volumeReconciliationService,
         ObjectStorageProfileService storageService,
         OpenWebSettingsService openWebSettingsService,
         OpenWebArticlePublishingService openWebPublishingService,
@@ -72,6 +73,7 @@ public sealed partial class MainForm : Form
         _metadataService = metadataService;
         _workspaceService = workspaceService;
         _scanRootService = scanRootService;
+        _volumeReconciliationService = volumeReconciliationService;
         _storageService = storageService;
         _openWebSettingsService = openWebSettingsService;
         _openWebPublishingService = openWebPublishingService;
@@ -81,7 +83,11 @@ public sealed partial class MainForm : Form
         InitializeLayout(dataDirectory);
 
         Shown += MainForm_Shown;
-        FormClosing += (_, _) => _scanCancellation?.Cancel();
+        FormClosing += (_, _) =>
+        {
+            _scanCancellation?.Cancel();
+            StopLocalVolumeMonitoring();
+        };
     }
 
     private void InitializeLayout(string dataDirectory)
@@ -690,9 +696,13 @@ public sealed partial class MainForm : Form
                 await _workspaceService.ConfigureAsync(setupForm.SelectedPath);
             }
 
+            var volumeResult = await _volumeReconciliationService.ReconcileAsync();
+            EnableLocalVolumeMonitoring();
             await RefreshScanScopeAsync();
             await RefreshAssetsAsync();
-            _statusLabel.Text = "就绪";
+            _statusLabel.Text = volumeResult.HasChanges
+                ? FormatVolumeReconciliationStatus(volumeResult)
+                : "就绪";
         }
         catch (Exception exception)
         {
@@ -713,6 +723,7 @@ public sealed partial class MainForm : Form
             _storageService,
             _openWebSettingsService);
         settingsForm.ShowDialog(this);
+        await _volumeReconciliationService.ReconcileAsync();
         await RefreshScanScopeAsync();
     }
 
@@ -726,9 +737,13 @@ public sealed partial class MainForm : Form
         var roots = await rootsTask;
         var enabledRoots = roots.Count(root => root.Enabled);
         var externalRoots = roots.Count(root => root.Mode == ScanRootMode.Readonly);
+        var offlineRoots = roots.Count(root => root.Status == ScanRootStatus.Offline);
+        var offlineText = offlineRoots > 0
+            ? $" · 离线 {offlineRoots:N0}"
+            : string.Empty;
         _scopeLabel.Text = workspace is null
-            ? $"未配置工作目录 · 外部目录 {externalRoots:N0}"
-            : $"工作目录: {workspace.Path} · 已启用 {enabledRoots:N0} · 外部目录 {externalRoots:N0}";
+            ? $"未配置工作目录 · 外部目录 {externalRoots:N0}{offlineText}"
+            : $"工作目录: {workspace.Path} · 已启用 {enabledRoots:N0} · 外部目录 {externalRoots:N0}{offlineText}";
     }
 
     private async void ScanButton_Click(object? sender, EventArgs e)
@@ -1038,6 +1053,16 @@ public sealed partial class MainForm : Form
 
     private static string FormatStatus(AssetListItem asset)
     {
+        if (asset.LocationStatus == AssetLocationStatus.Offline)
+        {
+            return "设备离线";
+        }
+
+        if (asset.LocationStatus == AssetLocationStatus.Unverified)
+        {
+            return "位置待确认";
+        }
+
         if (asset.LocationStatus == AssetLocationStatus.Missing)
         {
             return "位置缺失";
@@ -1059,7 +1084,14 @@ public sealed partial class MainForm : Form
 
     private static string FormatLocationStatus(AssetLocationStatus status)
     {
-        return status == AssetLocationStatus.Missing ? "位置缺失" : "可用";
+        return status switch
+        {
+            AssetLocationStatus.Available => "可用",
+            AssetLocationStatus.Missing => "位置缺失",
+            AssetLocationStatus.Offline => "设备离线",
+            AssetLocationStatus.Unverified => "位置待确认",
+            _ => status.ToString()
+        };
     }
 
     private static string FormatMetadata(AssetMetadata? metadata)

@@ -145,6 +145,19 @@ public sealed class ScanApplicationService
                 break;
             }
 
+            if (root.Status == ScanRootStatus.Offline)
+            {
+                rootsUnavailable++;
+                progress?.Report(new ScanProgress(
+                    ScanStage.Failed,
+                    filesDiscovered,
+                    filesIndexed,
+                    errors,
+                    root.Path,
+                    "目录所在设备当前离线，已跳过。"));
+                continue;
+            }
+
             if (!Directory.Exists(root.Path))
             {
                 rootsUnavailable++;

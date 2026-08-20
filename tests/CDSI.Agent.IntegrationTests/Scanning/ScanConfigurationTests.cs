@@ -156,6 +156,58 @@ public sealed class ScanConfigurationTests
         SqliteConnection.ClearAllPools();
     }
 
+    [Fact]
+    public async Task ScanConfiguredRoots_DoesNotTraverseAnOfflineVolume()
+    {
+        using var directory = new TestDirectory();
+        var repository = new SqliteAssetRepository(
+            Path.Combine(directory.Path, "State", "cdsi.db"));
+        await repository.InitializeAsync();
+        const string mountPath = @"X:\";
+        await repository.GetOrCreateScanRootAsync(
+            Path.Combine(mountPath, "Creator"),
+            ScanRootMode.Readonly,
+            DateTimeOffset.UtcNow);
+        await repository.ReconcileLocalVolumesAsync(
+            [new LocalVolumeDescriptor(
+                @"\\?\Volume{CDSI-OFFLINE-TEST}",
+                "AABBCCDD",
+                mountPath,
+                "Offline test",
+                "NTFS",
+                "Removable")],
+            DateTimeOffset.UtcNow);
+        await repository.ReconcileLocalVolumesAsync(
+            [],
+            DateTimeOffset.UtcNow.AddSeconds(1));
+        var offlineRoot = await repository.GetOrCreateScanRootAsync(
+            Path.Combine(mountPath, "Creator"),
+            ScanRootMode.Readonly,
+            DateTimeOffset.UtcNow.AddSeconds(2));
+        Assert.Equal(ScanRootStatus.Offline, offlineRoot.Status);
+        await repository.SetScanRootEnabledAsync(
+            offlineRoot.Id,
+            enabled: false,
+            DateTimeOffset.UtcNow.AddSeconds(3));
+        await repository.SetScanRootEnabledAsync(
+            offlineRoot.Id,
+            enabled: true,
+            DateTimeOffset.UtcNow.AddSeconds(4));
+        var service = new ScanApplicationService(
+            new UnexpectedScanner(),
+            repository);
+
+        var summary = await service.ScanConfiguredRootsAsync();
+        var root = Assert.Single(await service.ListScanRootsAsync());
+
+        Assert.Equal(1, summary.RootsConfigured);
+        Assert.Equal(0, summary.RootsScanned);
+        Assert.Equal(1, summary.RootsUnavailable);
+        Assert.Equal(ScanRootStatus.Offline, root.Status);
+
+        SqliteConnection.ClearAllPools();
+    }
+
     private sealed class ErrorOnlyScanner : IFileScanner
     {
         public async Task ScanAsync(
@@ -167,6 +219,18 @@ public sealed class ScanConfigurationTests
             await onError(
                 new ScanError(rootPath, "Expected partial traversal failure."),
                 cancellationToken);
+        }
+    }
+
+    private sealed class UnexpectedScanner : IFileScanner
+    {
+        public Task ScanAsync(
+            string rootPath,
+            Func<DiscoveredFile, CancellationToken, ValueTask> onFile,
+            Func<ScanError, CancellationToken, ValueTask> onError,
+            CancellationToken cancellationToken)
+        {
+            throw new InvalidOperationException("离线卷不应调用文件扫描器。");
         }
     }
 }

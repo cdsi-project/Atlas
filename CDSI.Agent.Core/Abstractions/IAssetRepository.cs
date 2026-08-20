@@ -41,6 +41,11 @@ public interface IAssetRepository
         DateTimeOffset now,
         CancellationToken cancellationToken = default);
 
+    Task<LocalVolumeReconciliationResult> ReconcileLocalVolumesAsync(
+        IReadOnlyCollection<LocalVolumeDescriptor> mountedVolumes,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default);
+
     Task<ManagedWorkspace?> GetManagedWorkspaceAsync(
         string deviceId,
         CancellationToken cancellationToken = default);
