@@ -229,6 +229,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             SET status = 'Missing'
             WHERE device_id = $device_id
               AND location_type = 'Local'
+              AND excluded_from_asset_list = 0
               AND last_seen_at < $scan_started_at
               AND (
                   path_key = $root_key
@@ -390,6 +391,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                   WHERE l.asset_id = a.id
                     AND l.location_type = 'Local'
                     AND l.status = 'Available'
+                    AND l.excluded_from_asset_list = 0
               )
               {modeFilter};
             """;
@@ -434,6 +436,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             WHERE a.sha256 IS NULL
               AND l.location_type = 'Local'
               AND l.status = 'Available'
+              AND l.excluded_from_asset_list = 0
               AND ($after_asset_id IS NULL OR a.id > $after_asset_id)
               {modeFilter}
             GROUP BY
@@ -488,9 +491,10 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             WHERE EXISTS (
                 SELECT 1
                 FROM asset_locations l
-                WHERE l.asset_id = a.id
-                  AND l.location_type = 'Local'
-                  AND l.status = 'Available'
+                  WHERE l.asset_id = a.id
+                    AND l.location_type = 'Local'
+                    AND l.status = 'Available'
+                    AND l.excluded_from_asset_list = 0
             )
               AND NOT EXISTS (
                   SELECT 1
@@ -543,6 +547,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             INNER JOIN asset_locations l ON l.asset_id = a.id
             WHERE l.location_type = 'Local'
               AND l.status = 'Available'
+              AND l.excluded_from_asset_list = 0
               AND ($after_asset_id IS NULL OR a.id > $after_asset_id)
               AND NOT EXISTS (
                   SELECT 1
@@ -680,6 +685,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                           FROM asset_locations l
                           WHERE l.asset_id = a.id
                             AND l.location_type = 'Local'
+                            AND l.excluded_from_asset_list = 0
                       )
                 )
                 SELECT
@@ -691,6 +697,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                             ON available_asset.id = available_location.asset_id
                         WHERE available_location.location_type = 'Local'
                           AND available_location.status = 'Available'
+                          AND available_location.excluded_from_asset_list = 0
                     ), 0),
                     COALESCE(SUM(CASE
                         WHEN EXISTS (
@@ -699,6 +706,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                             WHERE available_location.asset_id = a.id
                               AND available_location.location_type = 'Local'
                               AND available_location.status = 'Available'
+                              AND available_location.excluded_from_asset_list = 0
                         ) THEN 0 ELSE 1 END), 0),
                     COALESCE((
                         SELECT SUM(available_asset.size)
@@ -707,6 +715,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                             ON available_asset.id = available_location.asset_id
                         WHERE available_location.location_type = 'Local'
                           AND available_location.status = 'Available'
+                          AND available_location.excluded_from_asset_list = 0
                     ), 0),
                     COALESCE(SUM(CASE WHEN {VideoAssetPredicate} THEN 1 ELSE 0 END), 0),
                     COALESCE(SUM(CASE WHEN {AudioAssetPredicate} THEN 1 ELSE 0 END), 0),
@@ -771,6 +780,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                   FROM asset_locations l
                   WHERE l.asset_id = a.id
                     AND l.location_type = 'Local'
+                    AND l.excluded_from_asset_list = 0
               )
               AND m.status = $metadata_status;
             """;
@@ -840,6 +850,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             FROM asset_locations l
             INNER JOIN assets a ON a.id = l.asset_id
             WHERE l.location_type = 'Local'
+              AND l.excluded_from_asset_list = 0
               AND a.hidden_from_asset_list = 0
               {filterSql};
             """;
@@ -906,6 +917,8 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             FROM asset_locations l
             INNER JOIN assets a ON a.id = l.asset_id
             WHERE l.location_type = 'Local'
+              AND l.excluded_from_asset_list = 0
+              AND a.hidden_from_asset_list = 0
             ORDER BY l.path;
             """;
 
@@ -956,6 +969,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                   FROM asset_locations l
                   WHERE l.asset_id = a.id
                     AND l.location_type = 'Local'
+                    AND l.excluded_from_asset_list = 0
               )
             GROUP BY lower(a.extension)
             ORDER BY lower(a.extension);
@@ -1050,6 +1064,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                AND m.source_size = a.size
                AND m.source_modified_at = a.modified_at
             WHERE l.location_type = 'Local'
+              AND l.excluded_from_asset_list = 0
               AND a.hidden_from_asset_list = 0
               {filterSql}
             ORDER BY
@@ -1106,12 +1121,20 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
         await using var groupCommand = connection.CreateCommand();
         groupCommand.CommandText =
             """
-            SELECT sha256, size
-            FROM assets
-            WHERE sha256 IS NOT NULL
-            GROUP BY sha256, size
+            SELECT a.sha256, a.size
+            FROM assets a
+            WHERE a.sha256 IS NOT NULL
+              AND a.hidden_from_asset_list = 0
+              AND EXISTS (
+                  SELECT 1
+                  FROM asset_locations visible_location
+                  WHERE visible_location.asset_id = a.id
+                    AND visible_location.location_type = 'Local'
+                    AND visible_location.excluded_from_asset_list = 0
+              )
+            GROUP BY a.sha256, a.size
             HAVING COUNT(*) > 1
-            ORDER BY COUNT(*) DESC, size DESC
+            ORDER BY COUNT(*) DESC, a.size DESC
             LIMIT $limit;
             """;
         groupCommand.Parameters.AddWithValue("$limit", limit);
@@ -1141,6 +1164,8 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                 WHERE a.sha256 = $sha256
                   AND a.size = $size
                   AND l.location_type = 'Local'
+                  AND l.excluded_from_asset_list = 0
+                  AND a.hidden_from_asset_list = 0
                 ORDER BY l.path;
                 """;
             itemCommand.Parameters.AddWithValue("$sha256", candidate.Sha256);
@@ -1315,6 +1340,8 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             SET path = $path,
                 status = 'Available',
                 last_seen_at = $last_seen_at,
+                excluded_from_asset_list = 0,
+                excluded_from_asset_list_at = NULL,
                 volume_id = CASE
                     WHEN $volume_id IS NULL THEN volume_id
                     ELSE $volume_id
@@ -1446,6 +1473,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                         WHERE l2.asset_id = a2.id
                           AND l2.location_type = 'Local'
                           AND l2.status = 'Available'
+                          AND l2.excluded_from_asset_list = 0
                     )
                     GROUP BY a2.size
                     HAVING COUNT(*) > 1

@@ -24,6 +24,7 @@ public sealed class FileSystemScannerTests
 
         await scanner.ScanAsync(
             directory.Path,
+            [],
             (file, _) =>
             {
                 discovered.Add(file);
@@ -56,6 +57,7 @@ public sealed class FileSystemScannerTests
 
         await scanner.ScanAsync(
             directory.Path,
+            [],
             (file, _) =>
             {
                 discovered.Add(file);
@@ -66,5 +68,32 @@ public sealed class FileSystemScannerTests
 
         Assert.Equal("text/markdown", discovered.Single(file => file.Extension == ".md").MimeType);
         Assert.Null(discovered.Single(file => file.Extension == ".custom").MimeType);
+    }
+
+    [Fact]
+    public async Task ScanAsync_DoesNotTraverseExcludedDirectories()
+    {
+        using var directory = new TestDirectory();
+        var included = Directory.CreateDirectory(Path.Combine(directory.Path, "Included"));
+        var excluded = Directory.CreateDirectory(Path.Combine(directory.Path, "Excluded"));
+        var excludedChild = Directory.CreateDirectory(Path.Combine(excluded.FullName, "Child"));
+        await File.WriteAllTextAsync(Path.Combine(included.FullName, "keep.txt"), "keep");
+        await File.WriteAllTextAsync(Path.Combine(excluded.FullName, "skip.txt"), "skip");
+        await File.WriteAllTextAsync(Path.Combine(excludedChild.FullName, "nested.txt"), "nested");
+        var discovered = new List<DiscoveredFile>();
+        var scanner = new FileSystemScanner();
+
+        await scanner.ScanAsync(
+            directory.Path,
+            [excluded.FullName],
+            (file, _) =>
+            {
+                discovered.Add(file);
+                return ValueTask.CompletedTask;
+            },
+            (_, _) => ValueTask.CompletedTask,
+            CancellationToken.None);
+
+        Assert.Equal("keep.txt", Assert.Single(discovered).OriginalFilename);
     }
 }

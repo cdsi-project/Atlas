@@ -95,6 +95,9 @@ public sealed class ScanRootManagementService
             ScanRootMode.Readonly,
             now,
             cancellationToken);
+        await _repository.RestoreAssetDirectoryAsync(
+            normalizedPath,
+            cancellationToken);
         await _repository.SetScanRootFileFilterAsync(
             scanRoot.Id,
             fileFilter,
@@ -165,6 +168,17 @@ public sealed class ScanRootManagementService
         await EnsureExternalRootAsync(scanRootId, cancellationToken);
         await _repository.RemoveScanRootAsync(
             scanRootId,
+            DateTimeOffset.UtcNow,
+            cancellationToken);
+    }
+
+    public Task<AssetDirectoryExclusionResult> ExcludeAssetDirectoryAsync(
+        string path,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        return _repository.ExcludeAssetDirectoryAsync(
+            path,
             DateTimeOffset.UtcNow,
             cancellationToken);
     }

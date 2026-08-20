@@ -285,6 +285,8 @@ public sealed class ScanApplicationService
             startedAt,
             cancellationToken);
         var effectiveFileFilter = fileFilter ?? scanRoot.CreateFileFilter();
+        var excludedDirectoryPaths =
+            await _repository.ListExcludedAssetDirectoryPathsAsync(cancellationToken);
         var deviceId = await _repository.GetOrCreateDeviceIdAsync(cancellationToken);
         var job = new ScanJob(
             Guid.NewGuid(),
@@ -368,6 +370,7 @@ public sealed class ScanApplicationService
         {
             await _scanner.ScanAsync(
                 normalizedRoot,
+                excludedDirectoryPaths,
                 async (file, token) =>
                 {
                     if (!effectiveFileFilter.Matches(file.Extension, file.MimeType))

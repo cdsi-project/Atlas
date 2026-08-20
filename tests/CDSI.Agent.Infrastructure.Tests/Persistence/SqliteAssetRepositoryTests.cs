@@ -701,7 +701,7 @@ public sealed class SqliteAssetRepositoryTests
                     'asset_collection_items', 'agent_settings',
                     'openweb_publications', 'local_volumes', 'openweb_sources',
                     'restore_jobs', 'restore_items', 'asset_tags',
-                    'asset_tag_links');
+                    'asset_tag_links', 'asset_directory_exclusions');
                 """;
             var tableCount = Convert.ToInt32(await tableCommand.ExecuteScalarAsync());
 
@@ -751,11 +751,26 @@ public sealed class SqliteAssetRepositoryTests
             var assetVisibilityColumnCount = Convert.ToInt32(
                 await assetVisibilityColumnCommand.ExecuteScalarAsync());
 
-            Assert.Equal(18, version);
-            Assert.Equal(20, tableCount);
+            await using var locationVisibilityColumnCommand = connection.CreateCommand();
+            locationVisibilityColumnCommand.CommandText =
+                """
+                SELECT COUNT(*)
+                FROM pragma_table_info('asset_locations')
+                WHERE (name = 'excluded_from_asset_list'
+                  AND "notnull" = 1
+                  AND dflt_value = '0')
+                   OR (name = 'excluded_from_asset_list_at'
+                  AND "notnull" = 0);
+                """;
+            var locationVisibilityColumnCount = Convert.ToInt32(
+                await locationVisibilityColumnCommand.ExecuteScalarAsync());
+
+            Assert.Equal(19, version);
+            Assert.Equal(21, tableCount);
             Assert.Equal(7, filterIndexCount);
             Assert.Equal(2, scanFilterColumnCount);
             Assert.Equal(2, assetVisibilityColumnCount);
+            Assert.Equal(2, locationVisibilityColumnCount);
         }
 
         SqliteConnection.ClearAllPools();

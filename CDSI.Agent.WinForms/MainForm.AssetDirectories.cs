@@ -9,6 +9,9 @@ public sealed partial class MainForm
     private readonly DataGridView _assetDirectoryGrid = new();
     private readonly Button _openAssetDirectoryButton = new();
     private readonly Label _assetDirectorySummaryLabel = new();
+    private readonly ContextMenuStrip _assetDirectoryContextMenu = new();
+    private readonly ToolStripMenuItem _openAssetDirectoryMenuItem = new();
+    private readonly ToolStripMenuItem _removeAssetDirectoryMenuItem = new();
 
     private void ConfigureAssetDirectoryTab()
     {
@@ -49,6 +52,28 @@ public sealed partial class MainForm
             if (args.RowIndex >= 0)
             {
                 OpenSelectedAssetDirectory();
+            }
+        };
+        ConfigureAssetDirectoryContextMenu(
+            _assetDirectoryContextMenu,
+            _openAssetDirectoryMenuItem,
+            _removeAssetDirectoryMenuItem);
+        _openAssetDirectoryMenuItem.Click += (_, _) => OpenSelectedAssetDirectory();
+        _removeAssetDirectoryMenuItem.Click += async (_, _) =>
+            await RemoveSelectedAssetDirectoryAsync();
+        _assetDirectoryContextMenu.Opening += (_, args) =>
+            args.Cancel = _isBusy ||
+                _assetDirectoryGrid.CurrentRow?.Tag is not AssetDirectorySummary;
+        _assetDirectoryGrid.ContextMenuStrip = _assetDirectoryContextMenu;
+        _assetDirectoryGrid.CellMouseDown += (_, args) =>
+        {
+            if (args.Button == MouseButtons.Right && args.RowIndex >= 0)
+            {
+                ApplyAssetGridRightClickSelection(
+                    _assetDirectoryGrid,
+                    args.RowIndex,
+                    args.ColumnIndex,
+                    Keys.None);
             }
         };
 
@@ -97,6 +122,21 @@ public sealed partial class MainForm
         layout.Controls.Add(toolbar, 0, 0);
         layout.Controls.Add(directoryGrid, 0, 1);
         return layout;
+    }
+
+    internal static void ConfigureAssetDirectoryContextMenu(
+        ContextMenuStrip contextMenu,
+        ToolStripMenuItem openItem,
+        ToolStripMenuItem removeItem)
+    {
+        ArgumentNullException.ThrowIfNull(contextMenu);
+        ArgumentNullException.ThrowIfNull(openItem);
+        ArgumentNullException.ThrowIfNull(removeItem);
+        openItem.Text = "打开目录位置";
+        removeItem.Text = "移除";
+        contextMenu.Items.Clear();
+        contextMenu.Items.AddRange(
+            [openItem, new ToolStripSeparator(), removeItem]);
     }
 
     private static DataGridViewColumn CreateDirectoryCountColumn(
@@ -185,6 +225,46 @@ public sealed partial class MainForm
         {
             ShowError("无法打开资产目录", exception);
         }
+    }
+
+    private async Task RemoveSelectedAssetDirectoryAsync()
+    {
+        if (_assetDirectoryGrid.CurrentRow?.Tag is not AssetDirectorySummary directory ||
+            MessageBox.Show(
+                this,
+                CreateAssetDirectoryRemovalConfirmation(directory.Path),
+                "移除资产目录",
+                MessageBoxButtons.OKCancel,
+                MessageBoxIcon.Warning) != DialogResult.OK)
+        {
+            return;
+        }
+
+        SetBusy(true, allowCancel: false);
+        try
+        {
+            var result = await _scanRootService.ExcludeAssetDirectoryAsync(directory.Path);
+            await RefreshScanScopeAsync();
+            await RefreshAssetsAsync();
+            _statusLabel.Text =
+                $"已移除资产目录，排除 {result.ExcludedLocationCount:N0} 个资产位置，本地文件未删除";
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法移除资产目录", exception);
+        }
+        finally
+        {
+            SetBusy(false);
+        }
+    }
+
+    internal static string CreateAssetDirectoryRemovalConfirmation(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        return $"移除后不再扫描，不计入资源清单。{Environment.NewLine}{Environment.NewLine}" +
+            $"{path}{Environment.NewLine}{Environment.NewLine}" +
+            "不会删除、移动或修改目录中的本地文件。是否继续？";
     }
 
     internal static ProcessStartInfo CreateOpenDirectoryStartInfo(string directoryPath)

@@ -6,6 +6,7 @@ public interface IFileScanner
 {
     Task ScanAsync(
         string rootPath,
+        IReadOnlyCollection<string> excludedDirectoryPaths,
         Func<DiscoveredFile, CancellationToken, ValueTask> onFile,
         Func<ScanError, CancellationToken, ValueTask> onError,
         CancellationToken cancellationToken);

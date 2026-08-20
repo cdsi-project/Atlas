@@ -85,6 +85,9 @@ public sealed class OpenWebSettingsServiceTests
                 """
                 DROP TABLE asset_tag_links;
                 DROP TABLE asset_tags;
+                DROP TABLE asset_directory_exclusions;
+                ALTER TABLE asset_locations DROP COLUMN excluded_from_asset_list_at;
+                ALTER TABLE asset_locations DROP COLUMN excluded_from_asset_list;
                 DROP TABLE restore_items;
                 DROP TABLE restore_jobs;
                 DROP TABLE openweb_sources;

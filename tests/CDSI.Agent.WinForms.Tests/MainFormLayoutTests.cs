@@ -777,6 +777,38 @@ public sealed class MainFormLayoutTests
     }
 
     [Fact]
+    public void AssetDirectoryContextMenu_OffersOpenAndRemoveCommands()
+    {
+        using var contextMenu = new ContextMenuStrip();
+        using var openItem = new ToolStripMenuItem();
+        using var removeItem = new ToolStripMenuItem();
+
+        MainForm.ConfigureAssetDirectoryContextMenu(
+            contextMenu,
+            openItem,
+            removeItem);
+
+        Assert.Equal(3, contextMenu.Items.Count);
+        Assert.Same(openItem, contextMenu.Items[0]);
+        Assert.IsType<ToolStripSeparator>(contextMenu.Items[1]);
+        Assert.Same(removeItem, contextMenu.Items[2]);
+        Assert.Equal("打开目录位置", openItem.Text);
+        Assert.Equal("移除", removeItem.Text);
+    }
+
+    [Fact]
+    public void AssetDirectoryRemovalConfirmation_ExplainsScopeAndPreservesFiles()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "Creator Assets");
+
+        var message = MainForm.CreateAssetDirectoryRemovalConfirmation(path);
+
+        Assert.Contains("移除后不再扫描，不计入资源清单", message);
+        Assert.Contains(path, message);
+        Assert.Contains("不会删除、移动或修改", message);
+    }
+
+    [Fact]
     public void OpenDirectoryStartInfo_UsesTheShellWithAnAbsolutePath()
     {
         var directoryPath = Path.Combine(Path.GetTempPath(), "Creator Assets");

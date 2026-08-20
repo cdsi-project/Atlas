@@ -7,3 +7,8 @@ public sealed record AssetDirectorySummary(
     long MissingAssetCount,
     long AvailableSizeBytes,
     DateTimeOffset LatestModifiedAt);
+
+public sealed record AssetDirectoryExclusionResult(
+    string Path,
+    int ExcludedLocationCount,
+    int StoppedScanRootCount);

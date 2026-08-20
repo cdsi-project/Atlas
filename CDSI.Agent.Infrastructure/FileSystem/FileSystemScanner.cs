@@ -15,11 +15,13 @@ public sealed class FileSystemScanner : IFileScanner
 
     public async Task ScanAsync(
         string rootPath,
+        IReadOnlyCollection<string> excludedDirectoryPaths,
         Func<DiscoveredFile, CancellationToken, ValueTask> onFile,
         Func<ScanError, CancellationToken, ValueTask> onError,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
+        ArgumentNullException.ThrowIfNull(excludedDirectoryPaths);
         ArgumentNullException.ThrowIfNull(onFile);
         ArgumentNullException.ThrowIfNull(onError);
 
@@ -28,6 +30,14 @@ public sealed class FileSystemScanner : IFileScanner
         {
             throw new DirectoryNotFoundException($"Scan root does not exist: {normalizedRoot}");
         }
+
+        var excludedDirectories = excludedDirectoryPaths
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath)
+            .Distinct(OperatingSystem.IsWindows()
+                ? StringComparer.OrdinalIgnoreCase
+                : StringComparer.Ordinal)
+            .ToArray();
 
         var pendingDirectories = new Stack<string>();
         var visitedDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -38,7 +48,9 @@ public sealed class FileSystemScanner : IFileScanner
             cancellationToken.ThrowIfCancellationRequested();
 
             var normalizedDirectory = Path.GetFullPath(currentDirectory);
-            if (!visitedDirectories.Add(normalizedDirectory))
+            if (!visitedDirectories.Add(normalizedDirectory) ||
+                excludedDirectories.Any(excluded =>
+                    IsSameOrDescendant(normalizedDirectory, excluded)))
             {
                 continue;
             }
@@ -128,5 +140,23 @@ public sealed class FileSystemScanner : IFileScanner
             or IOException
             or SecurityException
             or NotSupportedException;
+    }
+
+    private static bool IsSameOrDescendant(string candidate, string parent)
+    {
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (string.Equals(candidate, parent, comparison))
+        {
+            return true;
+        }
+
+        var relative = Path.GetRelativePath(parent, candidate);
+        return !Path.IsPathRooted(relative) &&
+            !relative.Equals("..", StringComparison.Ordinal) &&
+            !relative.StartsWith(
+                $"..{Path.DirectorySeparatorChar}",
+                StringComparison.Ordinal);
     }
 }

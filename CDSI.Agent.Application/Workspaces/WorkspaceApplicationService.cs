@@ -58,6 +58,9 @@ public sealed class WorkspaceApplicationService
             }
         }
 
+        await _repository.RestoreAssetDirectoryAsync(
+            layout.InboxPath,
+            cancellationToken);
         await _repository.GetOrCreateScanRootAsync(
             layout.InboxPath,
             ScanRootMode.Managed,

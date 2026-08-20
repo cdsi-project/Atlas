@@ -773,6 +773,35 @@ internal static class DatabaseMigrator
             await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
+        if (currentVersion < 19)
+        {
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await using var migrationCommand = connection.CreateCommand();
+            migrationCommand.Transaction = (SqliteTransaction)transaction;
+            migrationCommand.CommandText =
+                """
+                ALTER TABLE asset_locations
+                ADD COLUMN excluded_from_asset_list INTEGER NOT NULL DEFAULT 0;
+
+                ALTER TABLE asset_locations
+                ADD COLUMN excluded_from_asset_list_at TEXT NULL;
+
+                CREATE TABLE asset_directory_exclusions (
+                    path_key TEXT NOT NULL PRIMARY KEY,
+                    path TEXT NOT NULL,
+                    path_prefix TEXT NOT NULL,
+                    excluded_at TEXT NOT NULL
+                );
+
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (19, $applied_at);
+                """;
+            migrationCommand.Parameters.AddWithValue(
+                "$applied_at",
+                DateTimeOffset.UtcNow.ToString("O"));
+            await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     private static async Task<bool> TableExistsAsync(

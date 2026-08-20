@@ -149,6 +149,58 @@ public sealed class ScanConfigurationTests
     }
 
     [Fact]
+    public async Task ExcludeAssetDirectory_HidesExistingLocationsAndSkipsFutureScans()
+    {
+        using var directory = new TestDirectory();
+        var repository = new SqliteAssetRepository(
+            Path.Combine(directory.Path, "State", "cdsi.db"));
+        await repository.InitializeAsync();
+        var root = Directory.CreateDirectory(Path.Combine(directory.Path, "Assets"));
+        var included = Directory.CreateDirectory(Path.Combine(root.FullName, "Included"));
+        var excluded = Directory.CreateDirectory(Path.Combine(root.FullName, "Excluded"));
+        var includedFile = Path.Combine(included.FullName, "keep.txt");
+        var excludedFile = Path.Combine(excluded.FullName, "skip.txt");
+        await File.WriteAllTextAsync(includedFile, "keep");
+        await File.WriteAllTextAsync(excludedFile, "skip");
+        var scanService = new ScanApplicationService(new FileSystemScanner(), repository);
+        var rootService = new ScanRootManagementService(repository);
+
+        await scanService.ScanDirectoryAsync(root.FullName);
+        var excludedRoot = await rootService.AddExternalAsync(excluded.FullName);
+        var exclusion = await rootService.ExcludeAssetDirectoryAsync(excluded.FullName);
+        await File.WriteAllTextAsync(Path.Combine(excluded.FullName, "later.txt"), "later");
+        var rescan = await scanService.ScanDirectoryAsync(root.FullName);
+        var visibleAssets = await scanService.ListAssetsAsync();
+        var visibleDirectories = await scanService.ListAssetDirectoriesAsync();
+        var excludedPaths = await repository.ListExcludedAssetDirectoryPathsAsync();
+
+        Assert.Equal(1, exclusion.ExcludedLocationCount);
+        Assert.Equal(1, exclusion.StoppedScanRootCount);
+        Assert.DoesNotContain(
+            await rootService.ListExternalAsync(),
+            scanRoot => scanRoot.Id == excludedRoot.Root.Id);
+        Assert.Equal(1, rescan.FilesDiscovered);
+        Assert.Equal("keep.txt", Assert.Single(visibleAssets).OriginalFilename);
+        Assert.Equal(included.FullName, Assert.Single(visibleDirectories).Path);
+        Assert.Equal(excluded.FullName, Assert.Single(excludedPaths));
+        Assert.True(File.Exists(excludedFile));
+        Assert.True(File.Exists(Path.Combine(excluded.FullName, "later.txt")));
+
+        var restoredRoot = await rootService.AddExternalAsync(excluded.FullName);
+        var restoredScan = await scanService.ScanRootsAsync([restoredRoot.Root.Id]);
+        var restoredAssets = await scanService.ListAssetsAsync();
+        Assert.Equal(2, restoredScan.FilesDiscovered);
+        Assert.Empty(await repository.ListExcludedAssetDirectoryPathsAsync());
+        Assert.Equal(
+            ["keep.txt", "later.txt", "skip.txt"],
+            restoredAssets
+                .Select(asset => asset.OriginalFilename)
+                .Order(StringComparer.Ordinal));
+
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
     public async Task ScanRootsAsync_IndexesOnlyTheConfiguredFileType()
     {
         using var directory = new TestDirectory();
@@ -335,6 +387,7 @@ public sealed class ScanConfigurationTests
     {
         public async Task ScanAsync(
             string rootPath,
+            IReadOnlyCollection<string> excludedDirectoryPaths,
             Func<DiscoveredFile, CancellationToken, ValueTask> onFile,
             Func<ScanError, CancellationToken, ValueTask> onError,
             CancellationToken cancellationToken)
@@ -349,6 +402,7 @@ public sealed class ScanConfigurationTests
     {
         public Task ScanAsync(
             string rootPath,
+            IReadOnlyCollection<string> excludedDirectoryPaths,
             Func<DiscoveredFile, CancellationToken, ValueTask> onFile,
             Func<ScanError, CancellationToken, ValueTask> onError,
             CancellationToken cancellationToken)
@@ -370,6 +424,7 @@ public sealed class ScanConfigurationTests
 
         public async Task ScanAsync(
             string rootPath,
+            IReadOnlyCollection<string> excludedDirectoryPaths,
             Func<DiscoveredFile, CancellationToken, ValueTask> onFile,
             Func<ScanError, CancellationToken, ValueTask> onError,
             CancellationToken cancellationToken)
@@ -377,6 +432,7 @@ public sealed class ScanConfigurationTests
             ScannedRoots.Add(rootPath);
             await _inner.ScanAsync(
                 rootPath,
+                excludedDirectoryPaths,
                 onFile,
                 onError,
                 cancellationToken);
