@@ -315,7 +315,7 @@ public sealed partial class SettingsForm : Form
         _rootsGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             HeaderText = "文件类型",
-            Width = 90
+            Width = 160
         });
         _rootsGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
@@ -369,7 +369,7 @@ public sealed partial class SettingsForm : Form
         {
             var index = _rootsGrid.Rows.Add(
                 root.Path,
-                FormatFileTypeFilter(root.FileTypeFilter),
+                FormatFileFilter(root),
                 FormatRootStatus(root),
                 root.LastScannedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "尚未扫描");
             _rootsGrid.Rows[index].Tag = root;
@@ -438,7 +438,8 @@ public sealed partial class SettingsForm : Form
         {
             var result = await _scanRootService.AddExternalAsync(
                 dialog.SelectedPath,
-                dialog.FileTypeFilter);
+                dialog.FileTypeFilter,
+                dialog.ExtensionWhitelist);
             if (result.RequiresInitialScan)
             {
                 _initialScanRootIds.Add(result.Root.Id);
@@ -472,18 +473,27 @@ public sealed partial class SettingsForm : Form
         using var dialog = new ScanRootDialog(
             root.Path,
             root.FileTypeFilter,
+            root.ExtensionWhitelist,
             allowPathSelection: false);
-        if (dialog.ShowDialog(this) != DialogResult.OK ||
-            dialog.FileTypeFilter == root.FileTypeFilter)
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        var fileFilter = new ScanFileFilter(
+            dialog.FileTypeFilter,
+            dialog.ExtensionWhitelist);
+        if (root.CreateFileFilter().HasSameConfiguration(fileFilter))
         {
             return;
         }
 
         try
         {
-            await _scanRootService.SetFileTypeFilterAsync(
+            await _scanRootService.SetFileFilterAsync(
                 root.Id,
-                dialog.FileTypeFilter);
+                fileFilter.FileTypeFilter,
+                fileFilter.ExtensionWhitelist);
             _initialScanRootIds.Add(root.Id);
             await RefreshRootsAsync();
             UpdateStartScanButton();
@@ -575,6 +585,20 @@ public sealed partial class SettingsForm : Form
             AssetFileTypeFilter.Other => "其他",
             _ => throw new ArgumentOutOfRangeException(nameof(fileTypeFilter))
         };
+    }
+
+    internal static string FormatFileFilter(ScanRoot root)
+    {
+        var extensions = root.ExtensionWhitelist ?? Array.Empty<string>();
+        if (extensions.Count == 0)
+        {
+            return FormatFileTypeFilter(root.FileTypeFilter);
+        }
+
+        var preview = string.Join(", ", extensions.Take(3));
+        return extensions.Count <= 3
+            ? $"白名单: {preview}"
+            : $"白名单: {preview} 等 {extensions.Count} 种";
     }
 
     private static string FormatRootStatus(ScanRoot root)

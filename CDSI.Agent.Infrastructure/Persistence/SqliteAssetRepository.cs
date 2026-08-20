@@ -118,7 +118,8 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             SELECT
                 id, path, mode, enabled, status, created_at,
                 updated_at, last_scanned_at, removed_at,
-                volume_id, volume_relative_path, file_type_filter
+                volume_id, volume_relative_path, file_type_filter,
+                extension_whitelist_json
             FROM scan_roots
             WHERE path_key = $path_key;
             """;
@@ -196,13 +197,10 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
         string deviceId,
         string rootPath,
         DateTimeOffset scanStartedAt,
-        AssetFileTypeFilter fileTypeFilter = AssetFileTypeFilter.All,
+        ScanFileFilter? fileFilter = null,
         CancellationToken cancellationToken = default)
     {
-        if (!Enum.IsDefined(fileTypeFilter))
-        {
-            throw new ArgumentOutOfRangeException(nameof(fileTypeFilter));
-        }
+        fileFilter ??= new ScanFileFilter();
 
         var normalizedRoot = NormalizePath(rootPath);
         var rootKey = CreatePathKey(normalizedRoot);
@@ -212,7 +210,9 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        var fileTypeCondition = CreateAssetFileTypeCondition(fileTypeFilter);
+        var fileTypeCondition = fileFilter.UsesExtensionWhitelist
+            ? CreateExtensionWhitelistCondition(fileFilter.ExtensionWhitelist.Count)
+            : CreateAssetFileTypeCondition(fileFilter.FileTypeFilter);
         var fileTypeClause = fileTypeCondition is null
             ? string.Empty
             : $"""
@@ -240,6 +240,12 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
         command.Parameters.AddWithValue("$scan_started_at", scanStartedAt.ToString("O"));
         command.Parameters.AddWithValue("$root_key", rootKey);
         command.Parameters.AddWithValue("$root_prefix", CreatePathKey(rootPrefix));
+        for (var index = 0; index < fileFilter.ExtensionWhitelist.Count; index++)
+        {
+            command.Parameters.AddWithValue(
+                $"$scan_extension_{index}",
+                fileFilter.ExtensionWhitelist[index]);
+        }
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -1366,6 +1372,18 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                 $"NOT ({VideoAssetPredicate} OR {AudioAssetPredicate} OR {ImageAssetPredicate} OR {DocumentAssetPredicate})",
             _ => throw new ArgumentOutOfRangeException(nameof(fileType))
         };
+    }
+
+    private static string CreateExtensionWhitelistCondition(int extensionCount)
+    {
+        if (extensionCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(extensionCount));
+        }
+
+        var parameters = Enumerable.Range(0, extensionCount)
+            .Select(index => $"$scan_extension_{index}");
+        return $"lower(COALESCE(a.extension, '')) IN ({string.Join(", ", parameters)})";
     }
 
     private static void AddAssetFilterParameters(

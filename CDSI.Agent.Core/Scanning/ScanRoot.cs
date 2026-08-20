@@ -14,7 +14,12 @@ public sealed record ScanRoot(
     DateTimeOffset? RemovedAt,
     Guid? LocalVolumeId = null,
     string? VolumeRelativePath = null,
-    AssetFileTypeFilter FileTypeFilter = AssetFileTypeFilter.All);
+    AssetFileTypeFilter FileTypeFilter = AssetFileTypeFilter.All,
+    IReadOnlyList<string>? ExtensionWhitelist = null)
+{
+    public ScanFileFilter CreateFileFilter() =>
+        new(FileTypeFilter, ExtensionWhitelist);
+}
 
 public enum ScanRootMode
 {

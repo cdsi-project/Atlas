@@ -53,9 +53,11 @@ public sealed class SqliteConfigurationRepositoryTests
         await repository.MarkScanRootCompletedAsync(
             created.Id,
             now.AddSeconds(15));
-        await repository.SetScanRootFileTypeFilterAsync(
+        await repository.SetScanRootFileFilterAsync(
             created.Id,
-            AssetFileTypeFilter.Video,
+            new ScanFileFilter(
+                AssetFileTypeFilter.All,
+                ["MOV", "*.mp4", ".mp4"]),
             now.AddSeconds(30));
         var changedFilter = Assert.Single(await repository.ListScanRootsAsync());
         await repository.SetScanRootEnabledAsync(
@@ -71,7 +73,8 @@ public sealed class SqliteConfigurationRepositoryTests
             ScanRootMode.Readonly,
             now.AddMinutes(3));
 
-        Assert.Equal(AssetFileTypeFilter.Video, changedFilter.FileTypeFilter);
+        Assert.Equal(AssetFileTypeFilter.All, changedFilter.FileTypeFilter);
+        Assert.Equal([".mov", ".mp4"], changedFilter.ExtensionWhitelist);
         Assert.Null(changedFilter.LastScannedAt);
         Assert.False(disabled.Enabled);
         Assert.Equal(ScanRootStatus.Disabled, disabled.Status);
@@ -81,7 +84,7 @@ public sealed class SqliteConfigurationRepositoryTests
         Assert.Equal(created.Id, reactivated.Id);
         Assert.True(reactivated.Enabled);
         Assert.Equal(ScanRootStatus.Active, reactivated.Status);
-        Assert.Equal(AssetFileTypeFilter.Video, reactivated.FileTypeFilter);
+        Assert.Equal([".mov", ".mp4"], reactivated.ExtensionWhitelist);
         Assert.Null(reactivated.RemovedAt);
 
         SqliteConnection.ClearAllPools();

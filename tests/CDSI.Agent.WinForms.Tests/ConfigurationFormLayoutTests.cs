@@ -107,12 +107,39 @@ public sealed class ConfigurationFormLayoutTests
             .Single(control => control.AccessibleName == "扫描文件类型");
         var fileTypeLabel = Descendants(dialog)
             .OfType<Label>()
-            .Single(label => label.Text == "文件类型");
+            .Single(label => label.Text == "扫描策略");
+        var whitelistInput = Descendants(dialog)
+            .OfType<TextBox>()
+            .Single(control => control.AccessibleName == "白名单扩展名输入");
 
         Assert.Equal(AssetFileTypeFilter.All, dialog.FileTypeFilter);
         Assert.Equal("全部类型", fileTypeComboBox.SelectedItem?.ToString());
-        Assert.Equal(6, fileTypeComboBox.Items.Count);
+        Assert.Equal(7, fileTypeComboBox.Items.Count);
+        Assert.False(dialog.IsWhitelistSelected);
+        Assert.False(whitelistInput.Enabled);
         Assert.False(fileTypeLabel.Bounds.IntersectsWith(fileTypeComboBox.Bounds));
+    }
+
+    [Fact]
+    public void ScanRootDialog_AddsNormalizedExtensionsToTheWhitelist()
+    {
+        using var dialog = new ScanRootDialog(Path.GetTempPath());
+        dialog.CreateControl();
+        var fileTypeComboBox = Descendants(dialog)
+            .OfType<ComboBox>()
+            .Single(control => control.AccessibleName == "扫描文件类型");
+        var whitelistInput = Descendants(dialog)
+            .OfType<TextBox>()
+            .Single(control => control.AccessibleName == "白名单扩展名输入");
+
+        fileTypeComboBox.SelectedIndex = 6;
+        whitelistInput.Text = "MP4, *.mov, .MP4";
+        dialog.AddExtensions(["MP4", "*.mov", ".MP4"]);
+
+        Assert.True(dialog.IsWhitelistSelected);
+        Assert.True(whitelistInput.Enabled);
+        Assert.Equal([".mov", ".mp4"], dialog.ExtensionWhitelist);
+        Assert.Equal(AssetFileTypeFilter.All, dialog.FileTypeFilter);
     }
 
     [Fact]

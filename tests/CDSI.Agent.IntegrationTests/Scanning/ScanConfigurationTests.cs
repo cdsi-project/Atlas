@@ -181,6 +181,39 @@ public sealed class ScanConfigurationTests
     }
 
     [Fact]
+    public async Task ScanRootsAsync_IndexesOnlyWhitelistedExtensions()
+    {
+        using var directory = new TestDirectory();
+        var root = Directory.CreateDirectory(Path.Combine(directory.Path, "Mixed"));
+        await File.WriteAllTextAsync(Path.Combine(root.FullName, "clip.mp4"), "video");
+        await File.WriteAllTextAsync(Path.Combine(root.FullName, "source.mov"), "source");
+        await File.WriteAllTextAsync(Path.Combine(root.FullName, "notes.txt"), "notes");
+
+        var repository = new SqliteAssetRepository(
+            Path.Combine(directory.Path, "State", "cdsi.db"));
+        await repository.InitializeAsync();
+        var rootService = new ScanRootManagementService(repository);
+        var registration = await rootService.AddExternalAsync(
+            root.FullName,
+            AssetFileTypeFilter.All,
+            ["MOV"]);
+        var scanService = new ScanApplicationService(
+            new FileSystemScanner(),
+            repository);
+
+        var summary = await scanService.ScanRootsAsync([registration.Root.Id]);
+        var asset = Assert.Single(await scanService.ListAssetsAsync());
+        var savedRoot = Assert.Single(await rootService.ListExternalAsync());
+
+        Assert.Equal(1, summary.FilesDiscovered);
+        Assert.Equal(1, summary.FilesIndexed);
+        Assert.Equal("source.mov", asset.OriginalFilename);
+        Assert.Equal([".mov"], savedRoot.ExtensionWhitelist);
+
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
     public async Task PartialScan_DoesNotMarkUnseenLocationsMissing()
     {
         using var directory = new TestDirectory();

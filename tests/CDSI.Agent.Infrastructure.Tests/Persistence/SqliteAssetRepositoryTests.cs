@@ -107,7 +107,7 @@ public sealed class SqliteAssetRepositoryTests
             deviceId,
             root.FullName,
             scanStartedAt,
-            AssetFileTypeFilter.Video);
+            new ScanFileFilter(AssetFileTypeFilter.Video));
         var assets = await repository.ListAssetsAsync(100);
 
         Assert.Equal(
@@ -116,6 +116,41 @@ public sealed class SqliteAssetRepositoryTests
         Assert.Equal(
             AssetLocationStatus.Available,
             assets.Single(asset => asset.OriginalFilename == "not-scanned.txt").LocationStatus);
+
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
+    public async Task MarkMissingLocalLocationsAsync_OnlyMarksWhitelistedExtensions()
+    {
+        using var directory = new TestDirectory();
+        var repository = new SqliteAssetRepository(Path.Combine(directory.Path, "cdsi.db"));
+        await repository.InitializeAsync();
+        var deviceId = await repository.GetOrCreateDeviceIdAsync();
+        var root = Directory.CreateDirectory(Path.Combine(directory.Path, "Assets"));
+        var scanStartedAt = DateTimeOffset.UtcNow;
+        var mp4 = CreateFile(Path.Combine(root.FullName, "missing.mp4"), "missing.mp4");
+        var mov = CreateFile(Path.Combine(root.FullName, "missing.mov"), "missing.mov");
+        await repository.RegisterLocalFilesAsync(
+            deviceId,
+            [mp4, mov],
+            scanStartedAt.AddSeconds(-1));
+
+        await repository.MarkMissingLocalLocationsAsync(
+            deviceId,
+            root.FullName,
+            scanStartedAt,
+            new ScanFileFilter(
+                AssetFileTypeFilter.All,
+                [".mp4"]));
+        var assets = await repository.ListAssetsAsync(100);
+
+        Assert.Equal(
+            AssetLocationStatus.Missing,
+            assets.Single(asset => asset.OriginalFilename == "missing.mp4").LocationStatus);
+        Assert.Equal(
+            AssetLocationStatus.Available,
+            assets.Single(asset => asset.OriginalFilename == "missing.mov").LocationStatus);
 
         SqliteConnection.ClearAllPools();
     }
@@ -611,22 +646,25 @@ public sealed class SqliteAssetRepositoryTests
             var filterIndexCount = Convert.ToInt32(
                 await indexCommand.ExecuteScalarAsync());
 
-            await using var scanTypeColumnCommand = connection.CreateCommand();
-            scanTypeColumnCommand.CommandText =
+            await using var scanFilterColumnCommand = connection.CreateCommand();
+            scanFilterColumnCommand.CommandText =
                 """
                 SELECT COUNT(*)
                 FROM pragma_table_info('scan_roots')
-                WHERE name = 'file_type_filter'
+                WHERE (name = 'file_type_filter'
                   AND "notnull" = 1
-                  AND dflt_value = '''All''';
+                  AND dflt_value = '''All''')
+                   OR (name = 'extension_whitelist_json'
+                  AND "notnull" = 1
+                  AND dflt_value = '''[]''');
                 """;
-            var scanTypeColumnCount = Convert.ToInt32(
-                await scanTypeColumnCommand.ExecuteScalarAsync());
+            var scanFilterColumnCount = Convert.ToInt32(
+                await scanFilterColumnCommand.ExecuteScalarAsync());
 
-            Assert.Equal(13, version);
+            Assert.Equal(14, version);
             Assert.Equal(15, tableCount);
             Assert.Equal(6, filterIndexCount);
-            Assert.Equal(1, scanTypeColumnCount);
+            Assert.Equal(2, scanFilterColumnCount);
         }
 
         SqliteConnection.ClearAllPools();

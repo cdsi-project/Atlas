@@ -38,19 +38,30 @@ public sealed class ScanRootManagementService
         return AddExternalAsync(
             path,
             AssetFileTypeFilter.All,
+            Array.Empty<string>(),
+            cancellationToken);
+    }
+
+    public Task<ScanRootRegistrationResult> AddExternalAsync(
+        string path,
+        AssetFileTypeFilter fileTypeFilter,
+        CancellationToken cancellationToken = default)
+    {
+        return AddExternalAsync(
+            path,
+            fileTypeFilter,
+            Array.Empty<string>(),
             cancellationToken);
     }
 
     public async Task<ScanRootRegistrationResult> AddExternalAsync(
         string path,
         AssetFileTypeFilter fileTypeFilter,
+        IReadOnlyCollection<string> extensionWhitelist,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        if (!Enum.IsDefined(fileTypeFilter))
-        {
-            throw new ArgumentOutOfRangeException(nameof(fileTypeFilter));
-        }
+        var fileFilter = new ScanFileFilter(fileTypeFilter, extensionWhitelist);
 
         var normalizedPath = NormalizePath(path);
         if (!Directory.Exists(normalizedPath))
@@ -84,20 +95,22 @@ public sealed class ScanRootManagementService
             ScanRootMode.Readonly,
             now,
             cancellationToken);
-        await _repository.SetScanRootFileTypeFilterAsync(
+        await _repository.SetScanRootFileFilterAsync(
             scanRoot.Id,
-            fileTypeFilter,
+            fileFilter,
             now,
             cancellationToken);
         scanRoot = scanRoot with
         {
-            FileTypeFilter = fileTypeFilter,
+            FileTypeFilter = fileFilter.FileTypeFilter,
+            ExtensionWhitelist = fileFilter.ExtensionWhitelist,
             UpdatedAt = now
         };
+        var existingFilter = exactRoot?.CreateFileFilter();
         var requiresInitialScan = exactRoot is null ||
             !exactRoot.Enabled ||
             exactRoot.LastScannedAt is null ||
-            exactRoot.FileTypeFilter != fileTypeFilter;
+            !existingFilter!.HasSameConfiguration(fileFilter);
         return new ScanRootRegistrationResult(
             scanRoot,
             warnings,
@@ -122,15 +135,25 @@ public sealed class ScanRootManagementService
         AssetFileTypeFilter fileTypeFilter,
         CancellationToken cancellationToken = default)
     {
-        if (!Enum.IsDefined(fileTypeFilter))
-        {
-            throw new ArgumentOutOfRangeException(nameof(fileTypeFilter));
-        }
-
-        await EnsureExternalRootAsync(scanRootId, cancellationToken);
-        await _repository.SetScanRootFileTypeFilterAsync(
+        await SetFileFilterAsync(
             scanRootId,
             fileTypeFilter,
+            Array.Empty<string>(),
+            cancellationToken);
+    }
+
+    public async Task SetFileFilterAsync(
+        Guid scanRootId,
+        AssetFileTypeFilter fileTypeFilter,
+        IReadOnlyCollection<string> extensionWhitelist,
+        CancellationToken cancellationToken = default)
+    {
+        var fileFilter = new ScanFileFilter(fileTypeFilter, extensionWhitelist);
+
+        await EnsureExternalRootAsync(scanRootId, cancellationToken);
+        await _repository.SetScanRootFileFilterAsync(
+            scanRootId,
+            fileFilter,
             DateTimeOffset.UtcNow,
             cancellationToken);
     }

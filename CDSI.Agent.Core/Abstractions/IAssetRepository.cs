@@ -30,9 +30,9 @@ public interface IAssetRepository
         DateTimeOffset now,
         CancellationToken cancellationToken = default);
 
-    Task SetScanRootFileTypeFilterAsync(
+    Task SetScanRootFileFilterAsync(
         Guid scanRootId,
-        AssetFileTypeFilter fileTypeFilter,
+        ScanFileFilter fileFilter,
         DateTimeOffset now,
         CancellationToken cancellationToken = default);
 
@@ -75,7 +75,7 @@ public interface IAssetRepository
         string deviceId,
         string rootPath,
         DateTimeOffset scanStartedAt,
-        AssetFileTypeFilter fileTypeFilter = AssetFileTypeFilter.All,
+        ScanFileFilter? fileFilter = null,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<RegisteredLocalAsset>> RegisterLocalFilesAsync(

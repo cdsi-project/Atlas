@@ -209,7 +209,7 @@ public sealed class ScanApplicationService
                     progress,
                     cancellationToken,
                     root.Mode,
-                    root.FileTypeFilter);
+                    root.CreateFileFilter());
                 rootsScanned++;
                 filesDiscovered += summary.FilesDiscovered;
                 filesIndexed += summary.FilesIndexed;
@@ -255,13 +255,9 @@ public sealed class ScanApplicationService
         IProgress<ScanProgress>? progress = null,
         CancellationToken cancellationToken = default,
         ScanRootMode mode = ScanRootMode.Readonly,
-        AssetFileTypeFilter? fileTypeFilter = null)
+        ScanFileFilter? fileFilter = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
-        if (fileTypeFilter is not null && !Enum.IsDefined(fileTypeFilter.Value))
-        {
-            throw new ArgumentOutOfRangeException(nameof(fileTypeFilter));
-        }
 
         var normalizedRoot = Path.GetFullPath(rootPath);
         if (!Directory.Exists(normalizedRoot))
@@ -277,7 +273,7 @@ public sealed class ScanApplicationService
             mode,
             startedAt,
             cancellationToken);
-        var effectiveFileTypeFilter = fileTypeFilter ?? scanRoot.FileTypeFilter;
+        var effectiveFileFilter = fileFilter ?? scanRoot.CreateFileFilter();
         var deviceId = await _repository.GetOrCreateDeviceIdAsync(cancellationToken);
         var job = new ScanJob(
             Guid.NewGuid(),
@@ -363,10 +359,7 @@ public sealed class ScanApplicationService
                 normalizedRoot,
                 async (file, token) =>
                 {
-                    if (!AssetFileTypeClassifier.Matches(
-                            file.Extension,
-                            file.MimeType,
-                            effectiveFileTypeFilter))
+                    if (!effectiveFileFilter.Matches(file.Extension, file.MimeType))
                     {
                         return;
                     }
@@ -399,7 +392,7 @@ public sealed class ScanApplicationService
                     deviceId,
                     normalizedRoot,
                     startedAt,
-                    effectiveFileTypeFilter,
+                    effectiveFileFilter,
                     cancellationToken);
             }
 
