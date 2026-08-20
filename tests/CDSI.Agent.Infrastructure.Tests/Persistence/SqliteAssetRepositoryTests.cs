@@ -118,6 +118,67 @@ public sealed class SqliteAssetRepositoryTests
         SqliteConnection.ClearAllPools();
     }
 
+    [Fact]
+    public async Task ListAssetDirectoriesAsync_GroupsLocationsByTheirParentDirectory()
+    {
+        using var directory = new TestDirectory();
+        var repository = new SqliteAssetRepository(
+            Path.Combine(directory.Path, "cdsi.db"));
+        await repository.InitializeAsync();
+        var deviceId = await repository.GetOrCreateDeviceIdAsync();
+        var root = Path.Combine(directory.Path, "Assets");
+        var firstDirectory = Path.Combine(root, "Project A");
+        var secondDirectory = Path.Combine(root, "Project B");
+        var scanStartedAt = DateTimeOffset.UtcNow;
+        var missing = CreateFile(
+            Path.Combine(firstDirectory, "missing.txt"),
+            "missing.txt") with
+        {
+            Size = 10
+        };
+        var available = CreateFile(
+            Path.Combine(firstDirectory, "available.txt"),
+            "available.txt") with
+        {
+            Size = 20
+        };
+        var other = CreateFile(
+            Path.Combine(secondDirectory, "other.txt"),
+            "other.txt") with
+        {
+            Size = 30
+        };
+
+        await repository.RegisterLocalFilesAsync(
+            deviceId,
+            [missing],
+            scanStartedAt.AddSeconds(-1));
+        await repository.RegisterLocalFilesAsync(
+            deviceId,
+            [available, other],
+            scanStartedAt.AddSeconds(1));
+        await repository.MarkMissingLocalLocationsAsync(
+            deviceId,
+            root,
+            scanStartedAt);
+
+        var summaries = await repository.ListAssetDirectoriesAsync();
+
+        Assert.Equal(2, summaries.Count);
+        var first = summaries.Single(summary => summary.Path == firstDirectory);
+        Assert.Equal(2, first.AssetCount);
+        Assert.Equal(1, first.AvailableAssetCount);
+        Assert.Equal(1, first.MissingAssetCount);
+        Assert.Equal(20, first.AvailableSizeBytes);
+        var second = summaries.Single(summary => summary.Path == secondDirectory);
+        Assert.Equal(1, second.AssetCount);
+        Assert.Equal(1, second.AvailableAssetCount);
+        Assert.Equal(0, second.MissingAssetCount);
+        Assert.Equal(30, second.AvailableSizeBytes);
+
+        SqliteConnection.ClearAllPools();
+    }
+
 
     [Fact]
     public async Task ListExactDuplicateGroupsAsync_GroupsOnlyMatchingSha256Values()

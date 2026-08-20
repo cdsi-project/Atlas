@@ -55,6 +55,12 @@ public sealed class ScanApplicationService
         return _repository.GetLocalAssetStatisticsAsync(cancellationToken);
     }
 
+    public Task<IReadOnlyList<AssetDirectorySummary>> ListAssetDirectoriesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return _repository.ListAssetDirectoriesAsync(cancellationToken);
+    }
+
     public Task<IReadOnlyList<ExactDuplicateGroup>> ListExactDuplicateGroupsAsync(
         int limit = 500,
         CancellationToken cancellationToken = default)

@@ -723,6 +723,51 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             await command.ExecuteScalarAsync(cancellationToken));
     }
 
+    public async Task<IReadOnlyList<AssetDirectorySummary>> ListAssetDirectoriesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var comparer = OperatingSystem.IsWindows()
+            ? StringComparer.OrdinalIgnoreCase
+            : StringComparer.Ordinal;
+        var directories = new Dictionary<string, AssetDirectoryAccumulator>(comparer);
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT l.path, l.status, a.size, a.modified_at
+            FROM asset_locations l
+            INNER JOIN assets a ON a.id = l.asset_id
+            WHERE l.location_type = 'Local'
+            ORDER BY l.path;
+            """;
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var directoryPath = Path.GetDirectoryName(reader.GetString(0));
+            if (string.IsNullOrWhiteSpace(directoryPath))
+            {
+                continue;
+            }
+
+            if (!directories.TryGetValue(directoryPath, out var accumulator))
+            {
+                accumulator = new AssetDirectoryAccumulator(directoryPath);
+                directories.Add(directoryPath, accumulator);
+            }
+
+            accumulator.Add(
+                Enum.Parse<AssetLocationStatus>(reader.GetString(1)),
+                reader.GetInt64(2),
+                ParseTimestamp(reader.GetString(3)));
+        }
+
+        return directories.Values
+            .Select(directory => directory.ToSummary())
+            .OrderBy(directory => directory.Path, comparer)
+            .ToArray();
+    }
+
     public async Task<IReadOnlyList<AssetListItem>> ListAssetsAsync(
         int limit,
         long offset = 0,
@@ -1191,4 +1236,48 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
         long Size,
         DateTimeOffset ModifiedAt,
         string? Sha256);
+
+    private sealed class AssetDirectoryAccumulator(string path)
+    {
+        private long _assetCount;
+        private long _availableAssetCount;
+        private long _missingAssetCount;
+        private long _availableSizeBytes;
+        private DateTimeOffset _latestModifiedAt = DateTimeOffset.MinValue;
+
+        public void Add(
+            AssetLocationStatus status,
+            long size,
+            DateTimeOffset modifiedAt)
+        {
+            _assetCount++;
+            if (status == AssetLocationStatus.Available)
+            {
+                _availableAssetCount++;
+                _availableSizeBytes = long.MaxValue - _availableSizeBytes < size
+                    ? long.MaxValue
+                    : _availableSizeBytes + size;
+            }
+            else if (status == AssetLocationStatus.Missing)
+            {
+                _missingAssetCount++;
+            }
+
+            if (modifiedAt > _latestModifiedAt)
+            {
+                _latestModifiedAt = modifiedAt;
+            }
+        }
+
+        public AssetDirectorySummary ToSummary()
+        {
+            return new AssetDirectorySummary(
+                path,
+                _assetCount,
+                _availableAssetCount,
+                _missingAssetCount,
+                _availableSizeBytes,
+                _latestModifiedAt);
+        }
+    }
 }

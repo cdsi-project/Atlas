@@ -271,4 +271,77 @@ public sealed class MainFormLayoutTests
             "6a85382d-fdfd-4533-ad6f-14333ad6f14a",
             grid.Rows[0].Cells[0].Value);
     }
+
+    [Fact]
+    public void RowNumberColumn_UsesTheVisibleOrderAndGlobalPageOffset()
+    {
+        using var grid = new DataGridView
+        {
+            AllowUserToAddRows = false
+        };
+        var rowNumberColumn = MainForm.CreateRowNumberColumn();
+        grid.Columns.Add(rowNumberColumn);
+        grid.Columns.Add("File", "文件");
+        grid.Rows.Add(0L, "C.txt");
+        grid.Rows.Add(0L, "A.txt");
+        grid.Rows.Add(0L, "B.txt");
+
+        grid.Sort(grid.Columns["File"]!, System.ComponentModel.ListSortDirection.Ascending);
+        MainForm.UpdateAssetRowNumbers(grid, 101);
+
+        Assert.Equal("行号", rowNumberColumn.HeaderText);
+        Assert.Equal(DataGridViewColumnSortMode.NotSortable, rowNumberColumn.SortMode);
+        Assert.True(rowNumberColumn.Frozen);
+        Assert.Equal(
+            [101L, 102L, 103L],
+            grid.Rows.Cast<DataGridViewRow>()
+                .Select(row => Assert.IsType<long>(row.Cells["RowNumber"].Value)));
+        Assert.Equal(
+            ["A.txt", "B.txt", "C.txt"],
+            grid.Rows.Cast<DataGridViewRow>()
+                .Select(row => row.Cells["File"].Value));
+    }
+
+    [Fact]
+    public void AssetDirectoryLayout_KeepsTheToolbarAndDirectoryGridVisible()
+    {
+        using var grid = new DataGridView();
+        using var openButton = new Button();
+        using var summaryLabel = new Label();
+        using var layout = MainForm.CreateAssetDirectoryLayout(
+            grid,
+            openButton,
+            summaryLabel);
+        layout.Size = new Size(900, 500);
+        layout.CreateControl();
+        layout.PerformLayout();
+
+        Assert.Contains(grid, Descendants(layout));
+        Assert.Contains(openButton, Descendants(layout));
+        Assert.Contains(summaryLabel, Descendants(layout));
+        Assert.Equal(DockStyle.Fill, grid.Dock);
+    }
+
+    [Fact]
+    public void OpenDirectoryStartInfo_UsesTheShellWithAnAbsolutePath()
+    {
+        var directoryPath = Path.Combine(Path.GetTempPath(), "Creator Assets");
+
+        var startInfo = MainForm.CreateOpenDirectoryStartInfo(directoryPath);
+
+        Assert.Equal(Path.GetFullPath(directoryPath), startInfo.FileName);
+        Assert.True(startInfo.UseShellExecute);
+    }
+
+    private static IEnumerable<Control> Descendants(Control parent)
+    {
+        foreach (Control child in parent.Controls)
+        {
+            yield return child;
+            foreach (var descendant in Descendants(child))
+            {
+                yield return descendant;
+            }
+        }
+    }
 }

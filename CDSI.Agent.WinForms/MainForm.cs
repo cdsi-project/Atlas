@@ -231,6 +231,7 @@ public sealed partial class MainForm : Form
 
         ConfigureAssetGrid();
         ConfigureDuplicateGrid();
+        ConfigureAssetDirectoryTab();
         ConfigureAssetCollectionTab();
         _assetGrid.SelectionChanged += AssetGrid_SelectionChanged;
 
@@ -275,6 +276,7 @@ public sealed partial class MainForm : Form
             Padding = new Point(12, 5)
         };
         tabs.TabPages.Add(_assetsTabPage);
+        tabs.TabPages.Add(_assetDirectoriesTabPage);
         tabs.TabPages.Add(_duplicatesTabPage);
         tabs.TabPages.Add(_collectionsTabPage);
 
@@ -463,6 +465,7 @@ public sealed partial class MainForm : Form
     {
         ConfigureGrid(_assetGrid);
         EnableAssetMultiSelection(_assetGrid);
+        _assetGrid.Columns.Add(CreateRowNumberColumn());
         _assetGrid.Columns.Add(CreateAssetIdColumn());
         _assetGrid.Columns.Add(CreateColumn("文件", 220, DataGridViewAutoSizeColumnMode.Fill, 24));
         _assetGrid.Columns.Add(CreateColumn("类型", 125));
@@ -478,6 +481,12 @@ public sealed partial class MainForm : Form
         _assetGrid.Columns.Add(CreateColumn("文本", 100));
         _assetGrid.Columns.Add(CreateObjectStorageStatusColumn());
         _assetGrid.Columns.Add(CreateColumn("状态", 80));
+        _assetGrid.Sorted += (_, _) => UpdateAssetRowNumbers(
+            _assetGrid,
+            CalculateAssetPagination(
+                _assetTotalItems,
+                _assetPageSize,
+                _assetPageIndex).FirstItem);
         ConfigureAssetContextMenu();
     }
 
@@ -552,6 +561,34 @@ public sealed partial class MainForm : Form
         column.ValueType = typeof(long);
         column.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
         return column;
+    }
+
+    internal static DataGridViewColumn CreateRowNumberColumn()
+    {
+        var column = CreateColumn("行号", 62, minimumWidth: 54);
+        column.Name = "RowNumber";
+        column.ValueType = typeof(long);
+        column.SortMode = DataGridViewColumnSortMode.NotSortable;
+        column.Frozen = true;
+        column.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+        return column;
+    }
+
+    internal static void UpdateAssetRowNumbers(
+        DataGridView grid,
+        long firstItemNumber)
+    {
+        ArgumentNullException.ThrowIfNull(grid);
+        if (!grid.Columns.Contains("RowNumber"))
+        {
+            return;
+        }
+
+        var firstNumber = Math.Max(1, firstItemNumber);
+        foreach (DataGridViewRow row in grid.Rows)
+        {
+            row.Cells["RowNumber"].Value = firstNumber + row.Index;
+        }
     }
 
     internal static DataGridViewColumn CreateAssetIdColumn()
@@ -850,10 +887,12 @@ public sealed partial class MainForm : Form
         var assetCountTask = _scanService.GetAssetListCountAsync();
         var duplicateGroupsTask = _scanService.ListExactDuplicateGroupsAsync();
         var statisticsTask = _scanService.GetLocalAssetStatisticsAsync();
+        var assetDirectoriesTask = _scanService.ListAssetDirectoriesAsync();
         await Task.WhenAll(
             assetCountTask,
             duplicateGroupsTask,
-            statisticsTask);
+            statisticsTask,
+            assetDirectoriesTask);
 
         var assetCount = await assetCountTask;
         var pagination = CalculateAssetPagination(
@@ -866,12 +905,14 @@ public sealed partial class MainForm : Form
             pagination.Offset);
         var duplicateGroups = await duplicateGroupsTask;
         var statistics = await statisticsTask;
+        var assetDirectories = await assetDirectoriesTask;
         _assetGrid.Rows.Clear();
         _duplicateGrid.Rows.Clear();
 
         foreach (var asset in assets)
         {
             var rowIndex = _assetGrid.Rows.Add(
+                pagination.FirstItem + _assetGrid.Rows.Count,
                 asset.AssetId.ToString("D"),
                 asset.OriginalFilename,
                 asset.MimeType ?? "未知",
@@ -919,6 +960,7 @@ public sealed partial class MainForm : Form
             FormatTotalDuration(statistics.VideoDurationMilliseconds);
 
         UpdateAssetPaginationControls(assetCount);
+        RefreshAssetDirectories(assetDirectories);
         _assetsTabPage.Text = $"资产 ({assetCount:N0})";
         await RefreshAssetCollectionsAsync();
         _duplicatesTabPage.Text = $"精确重复 ({duplicateGroups.Count:N0})";
@@ -1000,7 +1042,9 @@ public sealed partial class MainForm : Form
         _collectionGrid.Enabled = !busy;
         _collectionMemberGrid.Enabled = !busy;
         _createCollectionButton.Enabled = !busy;
+        _assetDirectoryGrid.Enabled = !busy;
         UpdateCollectionActionState();
+        UpdateAssetDirectoryActionState();
         UseWaitCursor = busy && !allowCancel;
     }
 
