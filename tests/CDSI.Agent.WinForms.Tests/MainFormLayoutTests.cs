@@ -74,8 +74,13 @@ public sealed class MainFormLayoutTests
         };
         using var content = new Panel();
         using var progress = new Panel();
+        var progressRowStyle = new RowStyle();
 
-        MainForm.ConfigureMainContentLayout(mainLayout, content, progress);
+        MainForm.ConfigureMainContentLayout(
+            mainLayout,
+            content,
+            progress,
+            progressRowStyle);
 
         Assert.Equal(2, mainLayout.GetRow(content));
         Assert.Equal(3, mainLayout.GetRow(progress));
@@ -83,7 +88,13 @@ public sealed class MainFormLayoutTests
         Assert.Equal(SizeType.Percent, mainLayout.RowStyles[2].SizeType);
         Assert.Equal(100, mainLayout.RowStyles[2].Height);
         Assert.Equal(SizeType.Absolute, mainLayout.RowStyles[3].SizeType);
+        Assert.Equal(0, mainLayout.RowStyles[3].Height);
+        Assert.False(progress.Visible);
+
+        MainForm.SetProgressVisibility(progress, progressRowStyle, visible: true);
+
         Assert.Equal(58, mainLayout.RowStyles[3].Height);
+        Assert.True(progress.Visible);
     }
 
     [Theory]

@@ -29,6 +29,8 @@ public sealed partial class MainForm : Form
     private readonly ManagedAssetTransferService _transferService;
     private readonly FingerprintApplicationService _fingerprintService;
     private readonly MetadataExtractionApplicationService _metadataService;
+    private readonly TableLayoutPanel _progressPanel = new();
+    private readonly RowStyle _progressPanelRowStyle = new(SizeType.Absolute, 0);
     private readonly ProgressBar _progressBar = new();
     private readonly Label _progressLabel = new();
     private readonly Label _currentPathLabel = new();
@@ -155,18 +157,15 @@ public sealed partial class MainForm : Form
         });
         mainLayout.Controls.Add(header, 0, 1);
 
-        var progressPanel = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 2,
-            Padding = new Padding(28, 7, 28, 7),
-            BackColor = Color.FromArgb(247, 248, 250)
-        };
-        progressPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 250));
-        progressPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        progressPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
-        progressPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
+        _progressPanel.Dock = DockStyle.Fill;
+        _progressPanel.ColumnCount = 2;
+        _progressPanel.RowCount = 2;
+        _progressPanel.Padding = new Padding(28, 7, 28, 7);
+        _progressPanel.BackColor = Color.FromArgb(247, 248, 250);
+        _progressPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 250));
+        _progressPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        _progressPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+        _progressPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
 
         _progressLabel.AutoSize = true;
         _progressLabel.Text = "就绪";
@@ -183,10 +182,10 @@ public sealed partial class MainForm : Form
         _progressBar.Height = 5;
         _progressBar.Style = ProgressBarStyle.Blocks;
 
-        progressPanel.Controls.Add(_progressLabel, 0, 0);
-        progressPanel.SetColumnSpan(_progressLabel, 2);
-        progressPanel.Controls.Add(_progressBar, 0, 1);
-        progressPanel.Controls.Add(_currentPathLabel, 1, 1);
+        _progressPanel.Controls.Add(_progressLabel, 0, 0);
+        _progressPanel.SetColumnSpan(_progressLabel, 2);
+        _progressPanel.Controls.Add(_progressBar, 0, 1);
+        _progressPanel.Controls.Add(_currentPathLabel, 1, 1);
 
         ConfigureAssetGrid();
         ConfigureDuplicateGrid();
@@ -235,7 +234,11 @@ public sealed partial class MainForm : Form
             BackColor = BackColor
         };
         gridHost.Controls.Add(_mainTabControl);
-        ConfigureMainContentLayout(mainLayout, gridHost, progressPanel);
+        ConfigureMainContentLayout(
+            mainLayout,
+            gridHost,
+            _progressPanel,
+            _progressPanelRowStyle);
 
         var statusStrip = new StatusStrip
         {
@@ -270,18 +273,33 @@ public sealed partial class MainForm : Form
     internal static void ConfigureMainContentLayout(
         TableLayoutPanel mainLayout,
         Control content,
-        Control progress)
+        Control progress,
+        RowStyle progressRowStyle)
     {
         ArgumentNullException.ThrowIfNull(mainLayout);
         ArgumentNullException.ThrowIfNull(content);
         ArgumentNullException.ThrowIfNull(progress);
+        ArgumentNullException.ThrowIfNull(progressRowStyle);
         mainLayout.RowStyles.Clear();
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        progressRowStyle.SizeType = SizeType.Absolute;
+        mainLayout.RowStyles.Add(progressRowStyle);
         mainLayout.Controls.Add(content, 0, 2);
         mainLayout.Controls.Add(progress, 0, 3);
+        SetProgressVisibility(progress, progressRowStyle, visible: false);
+    }
+
+    internal static void SetProgressVisibility(
+        Control progress,
+        RowStyle progressRowStyle,
+        bool visible)
+    {
+        ArgumentNullException.ThrowIfNull(progress);
+        ArgumentNullException.ThrowIfNull(progressRowStyle);
+        progressRowStyle.Height = visible ? 58 : 0;
+        progress.Visible = visible;
     }
 
     internal static void ConfigureMainTabs(
@@ -1087,6 +1105,7 @@ public sealed partial class MainForm : Form
     {
         _isBusy = busy;
         _canCancelCurrentTask = ShouldAllowTaskCancellation(busy, allowCancel);
+        SetProgressVisibility(_progressPanel, _progressPanelRowStyle, busy);
         _assetGrid.Enabled = !busy;
         _assetContextMenu.Enabled = !busy;
         UpdateAssetPaginationControls(_assetTotalItems);
