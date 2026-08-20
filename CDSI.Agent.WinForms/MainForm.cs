@@ -724,10 +724,11 @@ public sealed partial class MainForm : Form
             _scanRootService,
             _storageService,
             _openWebSettingsService);
-        settingsForm.ShowDialog(this);
+        var settingsResult = settingsForm.ShowDialog(this);
         await _volumeReconciliationService.ReconcileAsync();
         await RefreshScanScopeAsync();
-        if (settingsForm.InitialScanRootIds.Count > 0)
+        if (settingsResult == DialogResult.OK &&
+            settingsForm.InitialScanRootIds.Count > 0)
         {
             await RunScanPipelineAsync(
                 settingsForm.InitialScanRootIds,

@@ -1,3 +1,4 @@
+using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Scanning;
 using CDSI.Agent.Core.Workspaces;
 using Microsoft.Data.Sqlite;
@@ -18,7 +19,7 @@ public sealed partial class SqliteAssetRepository
             SELECT
                 id, path, mode, enabled, status, created_at,
                 updated_at, last_scanned_at, removed_at,
-                volume_id, volume_relative_path
+                volume_id, volume_relative_path, file_type_filter
             FROM scan_roots
             WHERE $include_removed = 1 OR removed_at IS NULL
             ORDER BY mode DESC, path;
@@ -61,6 +62,36 @@ public sealed partial class SqliteAssetRepository
             """;
         command.Parameters.AddWithValue("$id", scanRootId.ToString("D"));
         command.Parameters.AddWithValue("$enabled", enabled ? 1 : 0);
+        command.Parameters.AddWithValue("$updated_at", now.ToString("O"));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task SetScanRootFileTypeFilterAsync(
+        Guid scanRootId,
+        AssetFileTypeFilter fileTypeFilter,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Enum.IsDefined(fileTypeFilter))
+        {
+            throw new ArgumentOutOfRangeException(nameof(fileTypeFilter));
+        }
+
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            UPDATE scan_roots
+            SET file_type_filter = $file_type_filter,
+                last_scanned_at = CASE
+                    WHEN file_type_filter <> $file_type_filter THEN NULL
+                    ELSE last_scanned_at
+                END,
+                updated_at = $updated_at
+            WHERE id = $id AND removed_at IS NULL;
+            """;
+        command.Parameters.AddWithValue("$id", scanRootId.ToString("D"));
+        command.Parameters.AddWithValue("$file_type_filter", fileTypeFilter.ToString());
         command.Parameters.AddWithValue("$updated_at", now.ToString("O"));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -198,7 +229,8 @@ public sealed partial class SqliteAssetRepository
             reader.IsDBNull(7) ? null : ParseTimestamp(reader.GetString(7)),
             reader.IsDBNull(8) ? null : ParseTimestamp(reader.GetString(8)),
             reader.IsDBNull(9) ? null : Guid.Parse(reader.GetString(9)),
-            reader.IsDBNull(10) ? null : reader.GetString(10));
+            reader.IsDBNull(10) ? null : reader.GetString(10),
+            Enum.Parse<AssetFileTypeFilter>(reader.GetString(11)));
     }
 
     private static ManagedWorkspace ReadManagedWorkspace(SqliteDataReader reader)

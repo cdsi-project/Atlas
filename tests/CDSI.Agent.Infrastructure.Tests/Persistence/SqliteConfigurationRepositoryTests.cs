@@ -1,3 +1,4 @@
+using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Scanning;
 using CDSI.Agent.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
@@ -48,6 +49,15 @@ public sealed class SqliteConfigurationRepositoryTests
             rootPath,
             ScanRootMode.Readonly,
             now);
+        Assert.Equal(AssetFileTypeFilter.All, created.FileTypeFilter);
+        await repository.MarkScanRootCompletedAsync(
+            created.Id,
+            now.AddSeconds(15));
+        await repository.SetScanRootFileTypeFilterAsync(
+            created.Id,
+            AssetFileTypeFilter.Video,
+            now.AddSeconds(30));
+        var changedFilter = Assert.Single(await repository.ListScanRootsAsync());
         await repository.SetScanRootEnabledAsync(
             created.Id,
             enabled: false,
@@ -61,6 +71,8 @@ public sealed class SqliteConfigurationRepositoryTests
             ScanRootMode.Readonly,
             now.AddMinutes(3));
 
+        Assert.Equal(AssetFileTypeFilter.Video, changedFilter.FileTypeFilter);
+        Assert.Null(changedFilter.LastScannedAt);
         Assert.False(disabled.Enabled);
         Assert.Equal(ScanRootStatus.Disabled, disabled.Status);
         Assert.Empty(activeAfterRemoval);
@@ -69,6 +81,7 @@ public sealed class SqliteConfigurationRepositoryTests
         Assert.Equal(created.Id, reactivated.Id);
         Assert.True(reactivated.Enabled);
         Assert.Equal(ScanRootStatus.Active, reactivated.Status);
+        Assert.Equal(AssetFileTypeFilter.Video, reactivated.FileTypeFilter);
         Assert.Null(reactivated.RemovedAt);
 
         SqliteConnection.ClearAllPools();

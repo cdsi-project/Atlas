@@ -1,4 +1,5 @@
 using CDSI.Agent.Core.Abstractions;
+using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Scanning;
 
 namespace CDSI.Agent.Application.Scanning;
@@ -30,11 +31,27 @@ public sealed class ScanRootManagementService
             cancellationToken);
     }
 
-    public async Task<ScanRootRegistrationResult> AddExternalAsync(
+    public Task<ScanRootRegistrationResult> AddExternalAsync(
         string path,
         CancellationToken cancellationToken = default)
     {
+        return AddExternalAsync(
+            path,
+            AssetFileTypeFilter.All,
+            cancellationToken);
+    }
+
+    public async Task<ScanRootRegistrationResult> AddExternalAsync(
+        string path,
+        AssetFileTypeFilter fileTypeFilter,
+        CancellationToken cancellationToken = default)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        if (!Enum.IsDefined(fileTypeFilter))
+        {
+            throw new ArgumentOutOfRangeException(nameof(fileTypeFilter));
+        }
+
         var normalizedPath = NormalizePath(path);
         if (!Directory.Exists(normalizedPath))
         {
@@ -61,14 +78,26 @@ public sealed class ScanRootManagementService
             .Select(root => $"与已配置目录重叠: {root.Path}")
             .ToArray();
 
+        var now = DateTimeOffset.UtcNow;
         var scanRoot = await _repository.GetOrCreateScanRootAsync(
             normalizedPath,
             ScanRootMode.Readonly,
-            DateTimeOffset.UtcNow,
+            now,
             cancellationToken);
+        await _repository.SetScanRootFileTypeFilterAsync(
+            scanRoot.Id,
+            fileTypeFilter,
+            now,
+            cancellationToken);
+        scanRoot = scanRoot with
+        {
+            FileTypeFilter = fileTypeFilter,
+            UpdatedAt = now
+        };
         var requiresInitialScan = exactRoot is null ||
             !exactRoot.Enabled ||
-            exactRoot.LastScannedAt is null;
+            exactRoot.LastScannedAt is null ||
+            exactRoot.FileTypeFilter != fileTypeFilter;
         return new ScanRootRegistrationResult(
             scanRoot,
             warnings,
@@ -84,6 +113,24 @@ public sealed class ScanRootManagementService
         await _repository.SetScanRootEnabledAsync(
             scanRootId,
             enabled,
+            DateTimeOffset.UtcNow,
+            cancellationToken);
+    }
+
+    public async Task SetFileTypeFilterAsync(
+        Guid scanRootId,
+        AssetFileTypeFilter fileTypeFilter,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Enum.IsDefined(fileTypeFilter))
+        {
+            throw new ArgumentOutOfRangeException(nameof(fileTypeFilter));
+        }
+
+        await EnsureExternalRootAsync(scanRootId, cancellationToken);
+        await _repository.SetScanRootFileTypeFilterAsync(
+            scanRootId,
+            fileTypeFilter,
             DateTimeOffset.UtcNow,
             cancellationToken);
     }

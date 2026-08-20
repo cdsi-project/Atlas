@@ -118,7 +118,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             SELECT
                 id, path, mode, enabled, status, created_at,
                 updated_at, last_scanned_at, removed_at,
-                volume_id, volume_relative_path
+                volume_id, volume_relative_path, file_type_filter
             FROM scan_roots
             WHERE path_key = $path_key;
             """;
@@ -196,8 +196,14 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
         string deviceId,
         string rootPath,
         DateTimeOffset scanStartedAt,
+        AssetFileTypeFilter fileTypeFilter = AssetFileTypeFilter.All,
         CancellationToken cancellationToken = default)
     {
+        if (!Enum.IsDefined(fileTypeFilter))
+        {
+            throw new ArgumentOutOfRangeException(nameof(fileTypeFilter));
+        }
+
         var normalizedRoot = NormalizePath(rootPath);
         var rootKey = CreatePathKey(normalizedRoot);
         var rootPrefix = normalizedRoot.EndsWith(Path.DirectorySeparatorChar)
@@ -206,8 +212,19 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
+        var fileTypeCondition = CreateAssetFileTypeCondition(fileTypeFilter);
+        var fileTypeClause = fileTypeCondition is null
+            ? string.Empty
+            : $"""
+              AND EXISTS (
+                  SELECT 1
+                  FROM assets a
+                  WHERE a.id = asset_locations.asset_id
+                    AND {fileTypeCondition}
+              )
+              """;
         command.CommandText =
-            """
+            $"""
             UPDATE asset_locations
             SET status = 'Missing'
             WHERE device_id = $device_id
@@ -216,7 +233,8 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
               AND (
                   path_key = $root_key
                   OR substr(path_key, 1, length($root_prefix)) = $root_prefix
-              );
+              )
+              {fileTypeClause};
             """;
         command.Parameters.AddWithValue("$device_id", deviceId);
         command.Parameters.AddWithValue("$scan_started_at", scanStartedAt.ToString("O"));

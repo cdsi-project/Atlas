@@ -2,6 +2,7 @@ using CDSI.Agent.Application.OpenWeb;
 using CDSI.Agent.Application.Scanning;
 using CDSI.Agent.Application.Storage;
 using CDSI.Agent.Application.Workspaces;
+using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Scanning;
 
 namespace CDSI.Agent.WinForms;
@@ -13,12 +14,14 @@ public sealed partial class SettingsForm : Form
     private readonly ObjectStorageProfileService _storageService;
     private readonly TextBox _workspacePathTextBox = new();
     private readonly DataGridView _rootsGrid = new();
+    private readonly Button _editRootButton = new();
     private readonly Button _toggleRootButton = new();
     private readonly Button _removeRootButton = new();
     private readonly Label _workspaceStatusLabel = new();
     private readonly DataGridView _storageGrid = new();
     private readonly Button _editStorageButton = new();
     private readonly Button _deleteStorageButton = new();
+    private readonly Button _startScanButton = new();
     private readonly HashSet<Guid> _initialScanRootIds = [];
 
     internal IReadOnlyCollection<Guid> InitialScanRootIds =>
@@ -53,11 +56,21 @@ public sealed partial class SettingsForm : Form
         tabs.TabPages.Add(CreateStoragePage());
         tabs.TabPages.Add(CreateOpenWebPage());
 
+        _startScanButton.Text = "开始扫描";
+        _startScanButton.BackColor = Color.FromArgb(24, 121, 78);
+        _startScanButton.ForeColor = Color.White;
+        _startScanButton.FlatStyle = FlatStyle.Flat;
+        _startScanButton.FlatAppearance.BorderSize = 0;
+        _startScanButton.Cursor = Cursors.Hand;
+        _startScanButton.DialogResult = DialogResult.OK;
+        _startScanButton.Enabled = false;
+        _startScanButton.Size = new Size(104, 32);
+
         var closeButton = CreateButton(
             "关闭",
             Color.FromArgb(236, 239, 242),
             Color.FromArgb(31, 37, 43));
-        closeButton.DialogResult = DialogResult.OK;
+        closeButton.DialogResult = DialogResult.Cancel;
         closeButton.Anchor = AnchorStyles.Right;
         closeButton.Size = new Size(96, 32);
 
@@ -69,6 +82,7 @@ public sealed partial class SettingsForm : Form
             Padding = new Padding(16, 10, 16, 10),
             BackColor = Color.White
         };
+        footer.Controls.Add(_startScanButton);
         footer.Controls.Add(closeButton);
 
         Controls.Add(tabs);
@@ -154,6 +168,11 @@ public sealed partial class SettingsForm : Form
         addButton.Click += AddRootButton_Click;
         addButton.Size = new Size(104, 32);
 
+        _editRootButton.Text = "设置类型";
+        _editRootButton.Size = new Size(88, 32);
+        _editRootButton.FlatStyle = FlatStyle.Flat;
+        _editRootButton.Click += EditRootButton_Click;
+
         _toggleRootButton.Text = "停用";
         _toggleRootButton.Size = new Size(88, 32);
         _toggleRootButton.FlatStyle = FlatStyle.Flat;
@@ -173,6 +192,7 @@ public sealed partial class SettingsForm : Form
             Padding = new Padding(0, 4, 0, 8)
         };
         commands.Controls.Add(addButton);
+        commands.Controls.Add(_editRootButton);
         commands.Controls.Add(_toggleRootButton);
         commands.Controls.Add(_removeRootButton);
 
@@ -294,6 +314,11 @@ public sealed partial class SettingsForm : Form
         });
         _rootsGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
+            HeaderText = "文件类型",
+            Width = 90
+        });
+        _rootsGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
             HeaderText = "状态",
             Width = 90
         });
@@ -333,17 +358,25 @@ public sealed partial class SettingsForm : Form
     private async Task RefreshRootsAsync()
     {
         var roots = await _scanRootService.ListExternalAsync();
+        foreach (var root in roots.Where(root =>
+                     root.Enabled && root.LastScannedAt is null))
+        {
+            _initialScanRootIds.Add(root.Id);
+        }
+
         _rootsGrid.Rows.Clear();
         foreach (var root in roots)
         {
             var index = _rootsGrid.Rows.Add(
                 root.Path,
+                FormatFileTypeFilter(root.FileTypeFilter),
                 FormatRootStatus(root),
                 root.LastScannedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "尚未扫描");
             _rootsGrid.Rows[index].Tag = root;
         }
 
         UpdateRootCommands();
+        UpdateStartScanButton();
     }
 
     private void WorkspaceBrowseButton_Click(object? sender, EventArgs e)
@@ -395,13 +428,7 @@ public sealed partial class SettingsForm : Form
     }
     private async void AddRootButton_Click(object? sender, EventArgs e)
     {
-        using var dialog = new FolderBrowserDialog
-        {
-            Description = "添加只读扫描目录",
-            UseDescriptionForTitle = true,
-            ShowNewFolderButton = false,
-            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
-        };
+        using var dialog = new ScanRootDialog();
         if (dialog.ShowDialog(this) != DialogResult.OK)
         {
             return;
@@ -409,13 +436,16 @@ public sealed partial class SettingsForm : Form
 
         try
         {
-            var result = await _scanRootService.AddExternalAsync(dialog.SelectedPath);
+            var result = await _scanRootService.AddExternalAsync(
+                dialog.SelectedPath,
+                dialog.FileTypeFilter);
             if (result.RequiresInitialScan)
             {
                 _initialScanRootIds.Add(result.Root.Id);
             }
 
             await RefreshRootsAsync();
+            UpdateStartScanButton();
             if (result.Warnings.Count > 0)
             {
                 MessageBox.Show(
@@ -429,6 +459,38 @@ public sealed partial class SettingsForm : Form
         catch (Exception exception)
         {
             ShowError("无法添加扫描目录", exception);
+        }
+    }
+
+    private async void EditRootButton_Click(object? sender, EventArgs e)
+    {
+        if (_rootsGrid.CurrentRow?.Tag is not ScanRoot root)
+        {
+            return;
+        }
+
+        using var dialog = new ScanRootDialog(
+            root.Path,
+            root.FileTypeFilter,
+            allowPathSelection: false);
+        if (dialog.ShowDialog(this) != DialogResult.OK ||
+            dialog.FileTypeFilter == root.FileTypeFilter)
+        {
+            return;
+        }
+
+        try
+        {
+            await _scanRootService.SetFileTypeFilterAsync(
+                root.Id,
+                dialog.FileTypeFilter);
+            _initialScanRootIds.Add(root.Id);
+            await RefreshRootsAsync();
+            UpdateStartScanButton();
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法更新扫描文件类型", exception);
         }
     }
 
@@ -453,6 +515,7 @@ public sealed partial class SettingsForm : Form
             }
 
             await RefreshRootsAsync();
+            UpdateStartScanButton();
         }
         catch (Exception exception)
         {
@@ -478,6 +541,7 @@ public sealed partial class SettingsForm : Form
             await _scanRootService.RemoveAsync(root.Id);
             _initialScanRootIds.Remove(root.Id);
             await RefreshRootsAsync();
+            UpdateStartScanButton();
         }
         catch (Exception exception)
         {
@@ -488,9 +552,29 @@ public sealed partial class SettingsForm : Form
     private void UpdateRootCommands()
     {
         var root = _rootsGrid.CurrentRow?.Tag as ScanRoot;
+        _editRootButton.Enabled = root is not null;
         _toggleRootButton.Enabled = root is not null;
         _removeRootButton.Enabled = root is not null;
         _toggleRootButton.Text = root?.Enabled == true ? "停用" : "启用";
+    }
+
+    private void UpdateStartScanButton()
+    {
+        _startScanButton.Enabled = _initialScanRootIds.Count > 0;
+    }
+
+    internal static string FormatFileTypeFilter(AssetFileTypeFilter fileTypeFilter)
+    {
+        return fileTypeFilter switch
+        {
+            AssetFileTypeFilter.All => "全部类型",
+            AssetFileTypeFilter.Video => "视频",
+            AssetFileTypeFilter.Audio => "音频",
+            AssetFileTypeFilter.Image => "图片",
+            AssetFileTypeFilter.Document => "文档",
+            AssetFileTypeFilter.Other => "其他",
+            _ => throw new ArgumentOutOfRangeException(nameof(fileTypeFilter))
+        };
     }
 
     private static string FormatRootStatus(ScanRoot root)

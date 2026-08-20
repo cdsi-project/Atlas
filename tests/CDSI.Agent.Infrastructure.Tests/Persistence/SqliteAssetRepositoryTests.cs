@@ -81,6 +81,46 @@ public sealed class SqliteAssetRepositoryTests
     }
 
     [Fact]
+    public async Task MarkMissingLocalLocationsAsync_OnlyMarksTheScannedFileType()
+    {
+        using var directory = new TestDirectory();
+        var repository = new SqliteAssetRepository(Path.Combine(directory.Path, "cdsi.db"));
+        await repository.InitializeAsync();
+        var deviceId = await repository.GetOrCreateDeviceIdAsync();
+        var root = Directory.CreateDirectory(Path.Combine(directory.Path, "Assets"));
+        var scanStartedAt = DateTimeOffset.UtcNow;
+        var video = CreateFile(
+            Path.Combine(root.FullName, "missing.mp4"),
+            "missing.mp4") with
+        {
+            MimeType = "video/mp4"
+        };
+        var document = CreateFile(
+            Path.Combine(root.FullName, "not-scanned.txt"),
+            "not-scanned.txt");
+        await repository.RegisterLocalFilesAsync(
+            deviceId,
+            [video, document],
+            scanStartedAt.AddSeconds(-1));
+
+        await repository.MarkMissingLocalLocationsAsync(
+            deviceId,
+            root.FullName,
+            scanStartedAt,
+            AssetFileTypeFilter.Video);
+        var assets = await repository.ListAssetsAsync(100);
+
+        Assert.Equal(
+            AssetLocationStatus.Missing,
+            assets.Single(asset => asset.OriginalFilename == "missing.mp4").LocationStatus);
+        Assert.Equal(
+            AssetLocationStatus.Available,
+            assets.Single(asset => asset.OriginalFilename == "not-scanned.txt").LocationStatus);
+
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
     public async Task ReconcileLocalVolumesAsync_RemapPathsWithoutScanningFiles()
     {
         using var directory = new TestDirectory();
@@ -571,9 +611,22 @@ public sealed class SqliteAssetRepositoryTests
             var filterIndexCount = Convert.ToInt32(
                 await indexCommand.ExecuteScalarAsync());
 
-            Assert.Equal(12, version);
+            await using var scanTypeColumnCommand = connection.CreateCommand();
+            scanTypeColumnCommand.CommandText =
+                """
+                SELECT COUNT(*)
+                FROM pragma_table_info('scan_roots')
+                WHERE name = 'file_type_filter'
+                  AND "notnull" = 1
+                  AND dflt_value = '''All''';
+                """;
+            var scanTypeColumnCount = Convert.ToInt32(
+                await scanTypeColumnCommand.ExecuteScalarAsync());
+
+            Assert.Equal(13, version);
             Assert.Equal(15, tableCount);
             Assert.Equal(6, filterIndexCount);
+            Assert.Equal(1, scanTypeColumnCount);
         }
 
         SqliteConnection.ClearAllPools();

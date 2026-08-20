@@ -1,3 +1,5 @@
+using CDSI.Agent.Core.Assets;
+
 namespace CDSI.Agent.Core.Scanning;
 
 public sealed record ScanRoot(
@@ -11,7 +13,8 @@ public sealed record ScanRoot(
     DateTimeOffset? LastScannedAt,
     DateTimeOffset? RemovedAt,
     Guid? LocalVolumeId = null,
-    string? VolumeRelativePath = null);
+    string? VolumeRelativePath = null,
+    AssetFileTypeFilter FileTypeFilter = AssetFileTypeFilter.All);
 
 public enum ScanRootMode
 {
