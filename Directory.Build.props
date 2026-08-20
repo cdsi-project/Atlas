@@ -10,5 +10,12 @@
     <FileVersion>$(CdsiVersion).0.0</FileVersion>
     <InformationalVersion>$(CdsiVersion)</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <Authors>CDSI Project</Authors>
+    <Company>CDSI Project</Company>
+    <Copyright>Copyright (c) 2026 CDSI Project</Copyright>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/cdsi-project/Atlas</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/cdsi-project/Atlas.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 </Project>

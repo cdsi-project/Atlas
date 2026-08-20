@@ -1,5 +1,7 @@
 # CDSI Atlas
 
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+
 CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己的 Windows 设备上扫描所选目录，建立独立于文件路径的资产与位置记录。扫描和分析不会修改源文件；复制、移动或 OSS 备份只会在用户明确选择文件并确认后执行。
 
 当前仓库实现 Milestone 0.9：带受管工作目录、多扫描目录、逻辑资产清单、显式受管资产操作、可验证 OSS 备份、重复文件检测、基础媒体理解和 OpenWeb 文章发布的资产索引闭环。
@@ -194,6 +196,12 @@ dotnet run --project CDSI.Agent.WinForms/CDSI.Agent.WinForms.csproj
 仓库根目录的 <code>VERSION</code> 是唯一版本来源。构建时，所有程序集和桌面界面都会读取该文件。
 
 每次提交将版本递增 <code>0.001</code>，并创建同名 Git 标签，例如 <code>VERSION=0.108</code> 对应 <code>v0.108</code>。
+
+## 开源许可
+
+CDSI Atlas 由 CDSI Project 以 [Apache License 2.0](LICENSE) 发布。该协议允许使用、修改、分发和商业使用，并包含明确的专利授权与免责声明。Apache-2.0 不授予 CDSI 名称、标识或商标的使用权。
+
+项目使用的第三方组件继续受各自许可证约束，详见 [NOTICE](NOTICE) 和 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。WinForms 构建和发布会将三个许可文件复制到应用程序旁；发布源码或二进制版本时应同时保留这些文件，并特别遵守 TagLibSharp 的 LGPL-2.1-only 要求。
 
 ## 本地数据
 
