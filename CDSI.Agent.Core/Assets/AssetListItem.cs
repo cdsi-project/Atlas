@@ -8,6 +8,7 @@ public sealed record AssetListItem(
     string Extension,
     string? MimeType,
     long Size,
+    string? Sha256,
     DateTimeOffset ModifiedAt,
     DateTimeOffset DiscoveredAt,
     string Path,

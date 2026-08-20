@@ -199,6 +199,7 @@ public sealed partial class SqliteAssetRepository : IAssetCollectionRepository
                 a.extension,
                 a.mime_type,
                 a.size,
+                a.sha256,
                 a.modified_at,
                 a.discovered_at,
                 l.path,
@@ -259,18 +260,19 @@ public sealed partial class SqliteAssetRepository : IAssetCollectionRepository
                 reader.GetString(2),
                 reader.IsDBNull(3) ? null : reader.GetString(3),
                 reader.GetInt64(4),
-                ParseTimestamp(reader.GetString(5)),
+                reader.IsDBNull(5) ? null : reader.GetString(5),
                 ParseTimestamp(reader.GetString(6)),
-                reader.GetString(7),
-                Enum.Parse<AssetLocationOwnership>(reader.GetString(8)),
-                Enum.Parse<AssetLocationStatus>(reader.GetString(9)),
-                Enum.Parse<AssetStatus>(reader.GetString(10)),
-                reader.GetInt64(11) != 0,
-                ReadMetadata(reader, assetId, 12));
+                ParseTimestamp(reader.GetString(7)),
+                reader.GetString(8),
+                Enum.Parse<AssetLocationOwnership>(reader.GetString(9)),
+                Enum.Parse<AssetLocationStatus>(reader.GetString(10)),
+                Enum.Parse<AssetStatus>(reader.GetString(11)),
+                reader.GetInt64(12) != 0,
+                ReadMetadata(reader, assetId, 13));
             members.Add(new AssetCollectionMember(
                 collectionId,
                 asset,
-                ParseTimestamp(reader.GetString(20))));
+                ParseTimestamp(reader.GetString(21))));
         }
 
         return members;

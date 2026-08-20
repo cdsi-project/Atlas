@@ -357,6 +357,7 @@ public sealed class MainFormLayoutTests
             ".mp4",
             "video/mp4",
             1024,
+            null,
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow,
             Path.Combine(Path.GetTempPath(), "creator-video.mp4"),
@@ -498,6 +499,25 @@ public sealed class MainFormLayoutTests
     }
 
     [Fact]
+    public void Sha256Column_DisplaysTheCompleteFileChecksum()
+    {
+        var sha256 = new string('a', 64);
+        using var grid = new DataGridView
+        {
+            AllowUserToAddRows = false
+        };
+        var column = MainForm.CreateSha256Column();
+        grid.Columns.Add(column);
+        grid.Rows.Add(sha256);
+
+        Assert.Equal("Sha256", column.Name);
+        Assert.Equal("文件校验值（SHA256）", column.HeaderText);
+        Assert.Equal(typeof(string), column.ValueType);
+        Assert.Equal(500, column.Width);
+        Assert.Equal(sha256, grid.Rows[0].Cells[0].Value);
+    }
+
+    [Fact]
     public void AssetGridColumns_IncludeIndexTimeAndExcludeExtractedText()
     {
         using var grid = new DataGridView();
@@ -509,8 +529,10 @@ public sealed class MainFormLayoutTests
             .Select(column => column.HeaderText)
             .ToArray();
         Assert.Contains("索引时间", headers);
+        Assert.Contains("文件校验值（SHA256）", headers);
         Assert.DoesNotContain("文本", headers);
         Assert.Equal("IndexedAt", grid.Columns["IndexedAt"]?.Name);
+        Assert.Equal("Sha256", grid.Columns["Sha256"]?.Name);
     }
 
     [Fact]

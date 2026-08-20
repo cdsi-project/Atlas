@@ -94,6 +94,7 @@ public sealed class OssCollectionBackupConfirmationFormTests
             Path.GetExtension(path),
             "video/mp4",
             42,
+            null,
             now,
             now,
             path,

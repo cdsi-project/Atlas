@@ -505,6 +505,7 @@ public sealed partial class MainForm : Form
         grid.Columns.Add(CreateColumn("文件", 220, DataGridViewAutoSizeColumnMode.Fill, 24));
         grid.Columns.Add(CreateColumn("类型", 125));
         grid.Columns.Add(CreateFileSizeColumn());
+        grid.Columns.Add(CreateSha256Column());
         grid.Columns.Add(CreateColumn("修改时间", 145));
         var indexedAtColumn = CreateColumn("索引时间", 145);
         indexedAtColumn.Name = "IndexedAt";
@@ -613,6 +614,18 @@ public sealed partial class MainForm : Form
         column.Name = "FileSizeBytes";
         column.ValueType = typeof(long);
         column.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+        return column;
+    }
+
+    internal static DataGridViewColumn CreateSha256Column()
+    {
+        var column = CreateColumn(
+            "文件校验值（SHA256）",
+            500,
+            minimumWidth: 240);
+        column.Name = "Sha256";
+        column.ValueType = typeof(string);
+        column.DefaultCellStyle.Font = new Font("Consolas", 9F);
         return column;
     }
 
@@ -994,6 +1007,7 @@ public sealed partial class MainForm : Form
                 asset.OriginalFilename,
                 asset.MimeType ?? "未知",
                 asset.Size,
+                asset.Sha256 ?? "未计算",
                 asset.ModifiedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
                 asset.DiscoveredAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
                 asset.Path,

@@ -31,6 +31,7 @@ public sealed class OssBackupConfirmationFormTests
             ".mp4",
             "video/mp4",
             42,
+            null,
             now,
             now,
             @"D:\素材\原始视频.mp4",

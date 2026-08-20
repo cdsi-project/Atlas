@@ -39,7 +39,7 @@ public sealed class SqliteAssetRepositoryTests
         Assert.Single(second);
         Assert.Equal(first[0].AssetId, second[0].AssetId);
         Assert.False(second[0].RequiresFingerprint);
-        Assert.Single(assets);
+        Assert.Equal(new string('a', 64), Assert.Single(assets).Sha256);
 
         SqliteConnection.ClearAllPools();
     }
