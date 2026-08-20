@@ -481,6 +481,7 @@ public sealed partial class MainForm : Form
         _assetGrid.Columns.Add(CreateColumn("文本", 100));
         _assetGrid.Columns.Add(CreateObjectStorageStatusColumn());
         _assetGrid.Columns.Add(CreateColumn("状态", 80));
+        EnableFreeColumnResizing(_assetGrid);
         _assetGrid.Sorted += (_, _) => UpdateAssetRowNumbers(
             _assetGrid,
             CalculateAssetPagination(
@@ -495,6 +496,23 @@ public sealed partial class MainForm : Form
         ArgumentNullException.ThrowIfNull(grid);
         grid.MultiSelect = true;
         grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+    }
+
+    internal static void EnableFreeColumnResizing(DataGridView grid)
+    {
+        ArgumentNullException.ThrowIfNull(grid);
+        grid.AllowUserToResizeColumns = true;
+        grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+        grid.ScrollBars = ScrollBars.Both;
+
+        foreach (DataGridViewColumn column in grid.Columns)
+        {
+            var initialWidth = column.Width;
+            column.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+            column.MinimumWidth = 40;
+            column.Width = Math.Max(initialWidth, column.MinimumWidth);
+            column.Resizable = DataGridViewTriState.True;
+        }
     }
 
     private void ConfigureDuplicateGrid()

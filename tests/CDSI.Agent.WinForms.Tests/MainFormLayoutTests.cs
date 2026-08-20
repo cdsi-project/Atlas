@@ -136,6 +136,44 @@ public sealed class MainFormLayoutTests
     }
 
     [Fact]
+    public void EnableFreeColumnResizing_MakesEveryAssetColumnIndependent()
+    {
+        using var grid = new DataGridView
+        {
+            AllowUserToResizeColumns = false,
+            ScrollBars = ScrollBars.Vertical
+        };
+        grid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "文件",
+            Width = 220,
+            MinimumWidth = 160,
+            AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
+            Resizable = DataGridViewTriState.False
+        });
+        grid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "状态",
+            Width = 80,
+            AutoSizeMode = DataGridViewAutoSizeColumnMode.None
+        });
+
+        MainForm.EnableFreeColumnResizing(grid);
+
+        Assert.True(grid.AllowUserToResizeColumns);
+        Assert.Equal(DataGridViewAutoSizeColumnsMode.None, grid.AutoSizeColumnsMode);
+        Assert.Equal(ScrollBars.Both, grid.ScrollBars);
+        Assert.All(grid.Columns.Cast<DataGridViewColumn>(), column =>
+        {
+            Assert.Equal(DataGridViewAutoSizeColumnMode.None, column.AutoSizeMode);
+            Assert.Equal(40, column.MinimumWidth);
+            Assert.Equal(DataGridViewTriState.True, column.Resizable);
+        });
+        Assert.Equal(220, grid.Columns[0].Width);
+        Assert.Equal(80, grid.Columns[1].Width);
+    }
+
+    [Fact]
     public void OpenFileLocationStartInfo_UsesExplorerWithStructuredArguments()
     {
         var filePath = Path.Combine(Path.GetTempPath(), "Creator Assets", "clip.mp4");
