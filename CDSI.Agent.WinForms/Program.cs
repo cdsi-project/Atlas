@@ -10,6 +10,7 @@ using CDSI.Agent.Application.Workspaces;
 using CDSI.Agent.Infrastructure.FileSystem;
 using CDSI.Agent.Infrastructure.Fingerprints;
 using CDSI.Agent.Infrastructure.Metadata;
+using CDSI.Agent.Infrastructure.OpenWeb;
 using CDSI.Agent.Infrastructure.Persistence;
 using CDSI.Agent.Infrastructure.Security;
 using CDSI.Agent.Infrastructure.Storage;
@@ -40,10 +41,21 @@ static class Program
             repository,
             workspaceProvisioner);
         var scanRootService = new ScanRootManagementService(repository);
+        var secretStore = new WindowsCredentialSecretStore();
         var storageService = new ObjectStorageProfileService(
             repository,
-            new WindowsCredentialSecretStore());
-        var openWebSettingsService = new OpenWebSettingsService(repository);
+            secretStore);
+        var openWebSettingsService = new OpenWebSettingsService(
+            repository,
+            secretStore);
+        var openWebPublishingService = new OpenWebArticlePublishingService(
+            openWebSettingsService,
+            repository,
+            new LocalOpenWebArticleContentReader(),
+            new WordPressArticlePublisher(new HttpClient
+            {
+                Timeout = TimeSpan.FromSeconds(60)
+            }));
         var objectStorageBackupService = new ObjectStorageBackupService(
             repository,
             repository,
@@ -80,6 +92,7 @@ static class Program
             scanRootService,
             storageService,
             openWebSettingsService,
+            openWebPublishingService,
             objectStorageBackupService,
             assetCollectionService,
             transferService,

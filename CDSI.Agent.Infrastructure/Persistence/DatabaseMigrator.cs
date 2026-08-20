@@ -457,6 +457,38 @@ internal static class DatabaseMigrator
             await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
+        if (currentVersion < 10)
+        {
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await using var migrationCommand = connection.CreateCommand();
+            migrationCommand.Transaction = (SqliteTransaction)transaction;
+            migrationCommand.CommandText =
+                """
+                CREATE TABLE openweb_publications (
+                    asset_id TEXT NOT NULL,
+                    publisher TEXT NOT NULL,
+                    origin_domain TEXT NOT NULL COLLATE NOCASE,
+                    remote_post_id INTEGER NOT NULL,
+                    remote_url TEXT NOT NULL,
+                    remote_status TEXT NOT NULL,
+                    content_sha256 TEXT NOT NULL,
+                    synchronized_at TEXT NOT NULL,
+                    PRIMARY KEY (asset_id, publisher, origin_domain),
+                    FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX ix_openweb_publications_remote_post
+                ON openweb_publications(publisher, origin_domain, remote_post_id);
+
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (10, $applied_at);
+                """;
+            migrationCommand.Parameters.AddWithValue(
+                "$applied_at",
+                DateTimeOffset.UtcNow.ToString("O"));
+            await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     private static async Task<bool> TableExistsAsync(

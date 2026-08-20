@@ -15,6 +15,7 @@ public sealed partial class MainForm
         _copyToWorkspaceMenuItem.Text = "复制到 CDSI 工作目录";
         _moveToWorkspaceMenuItem.Text = "移动到 CDSI 工作目录";
         _backupToOssMenuItem.Text = "备份到 OSS";
+        _publishToOpenWebMenuItem.Text = "发布到 OpenWeb";
         _openFileLocationMenuItem.Click += (_, _) => OpenCurrentAssetFileLocation();
         _copyToWorkspaceMenuItem.Click += async (_, _) =>
             await TransferSelectedAssetsAsync(ManagedAssetTransferAction.Copy);
@@ -24,12 +25,15 @@ public sealed partial class MainForm
             await AddSelectedAssetsToCollectionAsync();
         _backupToOssMenuItem.Click += async (_, _) =>
             await BackupSelectedAssetsAsync();
+        _publishToOpenWebMenuItem.Click += async (_, _) =>
+            await PublishSelectedArticleAsync();
 
         _assetContextMenu.Items.AddRange(
             [
                 _openFileLocationMenuItem,
                 new ToolStripSeparator(),
                 _addToCollectionMenuItem,
+                _publishToOpenWebMenuItem,
                 new ToolStripSeparator(),
                 _copyToWorkspaceMenuItem,
                 _moveToWorkspaceMenuItem,
@@ -48,6 +52,10 @@ public sealed partial class MainForm
             _copyToWorkspaceMenuItem.Enabled = canOperate;
             _moveToWorkspaceMenuItem.Enabled = canOperate;
             _backupToOssMenuItem.Enabled = canOperate;
+            _publishToOpenWebMenuItem.Enabled =
+                selected.Count == 1 &&
+                canOperate &&
+                _openWebPublishingService.Supports(selected[0].Path);
             _addToCollectionMenuItem.Text =
                 $"加入资产清单 ({selected.Count:N0})";
             _copyToWorkspaceMenuItem.Text =

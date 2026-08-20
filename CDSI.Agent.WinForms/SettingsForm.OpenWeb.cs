@@ -7,6 +7,8 @@ public sealed partial class SettingsForm
 {
     private readonly OpenWebSettingsService _openWebSettingsService;
     private readonly TextBox _openWebOriginDomainTextBox = new();
+    private readonly TextBox _openWebUsernameTextBox = new();
+    private readonly TextBox _openWebApplicationPasswordTextBox = new();
     private readonly Label _openWebStatusLabel = new();
 
     private TabPage CreateOpenWebPage()
@@ -19,15 +21,19 @@ public sealed partial class SettingsForm
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 170,
+            Height = 292,
             ColumnCount = 2,
-            RowCount = 4,
+            RowCount = 8,
             Margin = Padding.Empty,
             Padding = Padding.Empty
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
@@ -55,6 +61,37 @@ public sealed partial class SettingsForm
         _openWebOriginDomainTextBox.Margin = new Padding(0, 5, 8, 5);
         _openWebOriginDomainTextBox.AccessibleName = "OpenWeb 源站域名";
         layout.Controls.Add(_openWebOriginDomainTextBox, 0, 2);
+        layout.SetColumnSpan(_openWebOriginDomainTextBox, 2);
+
+        var usernameLabel = new Label
+        {
+            Text = "WordPress 用户名",
+            Dock = DockStyle.Fill,
+            ForeColor = Color.FromArgb(72, 81, 89)
+        };
+        layout.Controls.Add(usernameLabel, 0, 3);
+        layout.SetColumnSpan(usernameLabel, 2);
+
+        _openWebUsernameTextBox.Dock = DockStyle.Fill;
+        _openWebUsernameTextBox.Margin = new Padding(0, 5, 8, 5);
+        _openWebUsernameTextBox.AccessibleName = "WordPress 用户名";
+        layout.Controls.Add(_openWebUsernameTextBox, 0, 4);
+        layout.SetColumnSpan(_openWebUsernameTextBox, 2);
+
+        var passwordLabel = new Label
+        {
+            Text = "应用程序密码",
+            Dock = DockStyle.Fill,
+            ForeColor = Color.FromArgb(72, 81, 89)
+        };
+        layout.Controls.Add(passwordLabel, 0, 5);
+        layout.SetColumnSpan(passwordLabel, 2);
+
+        _openWebApplicationPasswordTextBox.Dock = DockStyle.Fill;
+        _openWebApplicationPasswordTextBox.Margin = new Padding(0, 5, 8, 5);
+        _openWebApplicationPasswordTextBox.UseSystemPasswordChar = true;
+        _openWebApplicationPasswordTextBox.AccessibleName = "WordPress 应用程序密码";
+        layout.Controls.Add(_openWebApplicationPasswordTextBox, 0, 6);
 
         var saveButton = CreateButton(
             "应用",
@@ -63,13 +100,13 @@ public sealed partial class SettingsForm
         saveButton.Margin = new Padding(4, 5, 0, 5);
         saveButton.AccessibleName = "保存 OpenWeb 设置";
         saveButton.Click += OpenWebSaveButton_Click;
-        layout.Controls.Add(saveButton, 1, 2);
+        layout.Controls.Add(saveButton, 1, 6);
 
         _openWebStatusLabel.Dock = DockStyle.Fill;
         _openWebStatusLabel.ForeColor = Color.FromArgb(88, 98, 106);
         _openWebStatusLabel.Padding = new Padding(0, 8, 0, 0);
         _openWebStatusLabel.AccessibleName = "OpenWeb 设置状态";
-        layout.Controls.Add(_openWebStatusLabel, 0, 3);
+        layout.Controls.Add(_openWebStatusLabel, 0, 7);
         layout.SetColumnSpan(_openWebStatusLabel, 2);
 
         page.Controls.Add(layout);
@@ -80,6 +117,8 @@ public sealed partial class SettingsForm
     {
         var settings = await _openWebSettingsService.GetAsync();
         _openWebOriginDomainTextBox.Text = settings.OriginDomain ?? string.Empty;
+        _openWebUsernameTextBox.Text = settings.WordPressUsername ?? string.Empty;
+        _openWebApplicationPasswordTextBox.Clear();
         _openWebStatusLabel.Text = FormatOpenWebStatus(settings);
     }
 
@@ -88,9 +127,14 @@ public sealed partial class SettingsForm
         try
         {
             var settings = await _openWebSettingsService.SaveAsync(
-                _openWebOriginDomainTextBox.Text);
+                _openWebOriginDomainTextBox.Text,
+                _openWebUsernameTextBox.Text,
+                _openWebApplicationPasswordTextBox.Text);
             _openWebOriginDomainTextBox.Text =
                 settings.OriginDomain ?? string.Empty;
+            _openWebUsernameTextBox.Text =
+                settings.WordPressUsername ?? string.Empty;
+            _openWebApplicationPasswordTextBox.Clear();
             _openWebStatusLabel.Text = FormatOpenWebStatus(settings);
         }
         catch (Exception exception)
@@ -106,8 +150,14 @@ public sealed partial class SettingsForm
             return "未配置";
         }
 
+        if (settings.WordPressUsername is null ||
+            !settings.HasApplicationPassword)
+        {
+            return "WordPress 凭据未配置";
+        }
+
         return settings.UpdatedAt is null
-            ? "已保存"
-            : $"已保存 · {settings.UpdatedAt.Value.ToLocalTime():yyyy-MM-dd HH:mm}";
+            ? "WordPress 凭据已保存"
+            : $"WordPress 凭据已保存 · {settings.UpdatedAt.Value.ToLocalTime():yyyy-MM-dd HH:mm}";
     }
 }

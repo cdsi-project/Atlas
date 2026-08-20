@@ -24,6 +24,7 @@ public sealed partial class MainForm : Form
     private readonly ScanRootManagementService _scanRootService;
     private readonly ObjectStorageProfileService _storageService;
     private readonly OpenWebSettingsService _openWebSettingsService;
+    private readonly OpenWebArticlePublishingService _openWebPublishingService;
     private readonly ObjectStorageBackupService _objectStorageBackupService;
     private readonly ManagedAssetTransferService _transferService;
     private readonly Label _scopeLabel = new();
@@ -64,6 +65,7 @@ public sealed partial class MainForm : Form
         ScanRootManagementService scanRootService,
         ObjectStorageProfileService storageService,
         OpenWebSettingsService openWebSettingsService,
+        OpenWebArticlePublishingService openWebPublishingService,
         ObjectStorageBackupService objectStorageBackupService,
         AssetCollectionService assetCollectionService,
         ManagedAssetTransferService transferService,
@@ -77,6 +79,7 @@ public sealed partial class MainForm : Form
         _scanRootService = scanRootService;
         _storageService = storageService;
         _openWebSettingsService = openWebSettingsService;
+        _openWebPublishingService = openWebPublishingService;
         _objectStorageBackupService = objectStorageBackupService;
         _assetCollectionService = assetCollectionService;
         _transferService = transferService;

@@ -40,7 +40,9 @@ public sealed class ConfigurationFormLayoutTests
             new ObjectStorageProfileService(
                 repository,
                 new WindowsCredentialSecretStore()),
-            new OpenWebSettingsService(repository));
+            new OpenWebSettingsService(
+                repository,
+                new WindowsCredentialSecretStore()));
         form.CreateControl();
 
         var tabs = Assert.Single(Descendants(form).OfType<TabControl>());
@@ -56,6 +58,13 @@ public sealed class ConfigurationFormLayoutTests
             .OfType<TextBox>()
             .Single(control =>
                 control.AccessibleName == "OpenWeb 源站域名");
+        var openWebUsernameTextBox = Descendants(form)
+            .OfType<TextBox>()
+            .Single(control => control.AccessibleName == "WordPress 用户名");
+        var openWebPasswordTextBox = Descendants(form)
+            .OfType<TextBox>()
+            .Single(control =>
+                control.AccessibleName == "WordPress 应用程序密码");
 
         Assert.Equal(4, tabs.TabPages.Count);
         Assert.Equal("工作目录", tabs.TabPages[0].Text);
@@ -63,6 +72,8 @@ public sealed class ConfigurationFormLayoutTests
         Assert.Equal("OSS 配置", tabs.TabPages[2].Text);
         Assert.Equal("OpenWeb", tabs.TabPages[3].Text);
         Assert.Equal(DockStyle.Fill, openWebOriginDomainTextBox.Dock);
+        Assert.Equal(DockStyle.Fill, openWebUsernameTextBox.Dock);
+        Assert.True(openWebPasswordTextBox.UseSystemPasswordChar);
         Assert.Equal(3, rootsGrid.Columns.Count);
         Assert.Equal(DataGridViewAutoSizeColumnMode.Fill, rootsGrid.Columns[0].AutoSizeMode);
         Assert.True(rootsGrid.Columns[0].MinimumWidth >= 320);
