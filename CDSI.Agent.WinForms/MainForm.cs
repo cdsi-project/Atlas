@@ -99,9 +99,7 @@ public sealed partial class MainForm : Form
 
         var applicationVersion = GetApplicationVersion();
         Text = $"CDSI Atlas v{applicationVersion}";
-        StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(920, 600);
-        Size = new Size(1180, 760);
+        ConfigureStartupWindow(this);
         BackColor = Color.FromArgb(247, 248, 250);
         Font = new Font("Segoe UI", 9F);
         AutoScaleMode = AutoScaleMode.Dpi;
@@ -299,6 +297,15 @@ public sealed partial class MainForm : Form
         Controls.Add(mainLayout);
         Controls.Add(statusStrip);
         ResumeLayout();
+    }
+
+    internal static void ConfigureStartupWindow(Form form)
+    {
+        ArgumentNullException.ThrowIfNull(form);
+        form.StartPosition = FormStartPosition.CenterScreen;
+        form.MinimumSize = new Size(920, 600);
+        form.Size = new Size(1180, 760);
+        form.WindowState = FormWindowState.Maximized;
     }
 
     private static void ConfigureCommandButton(

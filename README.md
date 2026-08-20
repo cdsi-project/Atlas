@@ -8,6 +8,7 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 
 ## 当前能力
 
+- 主窗口启动时默认最大化，并保留标准标题栏、任务栏和窗口还原操作
 - 首次启动配置一个受管工作目录，并自动创建 <code>Inbox</code>、<code>Assets</code>、<code>Exports</code>、<code>Cache</code>、<code>Temp</code> 和 <code>System</code>
 - 工作目录可后续修改；切换时不搬移、不删除旧目录中的任何文件
 - 将受管工作目录的 <code>Inbox</code> 作为受管扫描入口

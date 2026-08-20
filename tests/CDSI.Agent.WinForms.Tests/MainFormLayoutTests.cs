@@ -6,6 +6,19 @@ namespace CDSI.Agent.WinForms.Tests;
 
 public sealed class MainFormLayoutTests
 {
+    [Fact]
+    public void ConfigureStartupWindow_DefaultsToMaximizedAndKeepsRestoreSize()
+    {
+        using var form = new Form();
+
+        MainForm.ConfigureStartupWindow(form);
+
+        Assert.Equal(FormWindowState.Maximized, form.WindowState);
+        Assert.Equal(FormStartPosition.CenterScreen, form.StartPosition);
+        Assert.Equal(new Size(920, 600), form.MinimumSize);
+        Assert.Equal(new Size(1180, 760), form.Size);
+    }
+
     [Theory]
     [InlineData(0x0007)]
     [InlineData(0x8000)]
