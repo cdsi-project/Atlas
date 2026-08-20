@@ -780,16 +780,19 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
     }
 
     public async Task<IReadOnlyList<string>> ListAssetExtensionsAsync(
+        AssetFileTypeFilter fileType = AssetFileTypeFilter.All,
         CancellationToken cancellationToken = default)
     {
         var extensions = new List<string>();
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
+        var fileTypeCondition = CreateAssetFileTypeCondition(fileType);
         command.CommandText =
-            """
+            $"""
             SELECT lower(a.extension)
             FROM assets a
             WHERE length(trim(a.extension)) > 0
+              {(fileTypeCondition is null ? string.Empty : $"AND {fileTypeCondition}")}
               AND EXISTS (
                   SELECT 1
                   FROM asset_locations l
@@ -1275,17 +1278,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
     private static string CreateAssetFilterSql(AssetListFilter filter)
     {
         var conditions = new List<string>();
-        var fileTypeCondition = filter.FileType switch
-        {
-            AssetFileTypeFilter.All => null,
-            AssetFileTypeFilter.Video => VideoAssetPredicate,
-            AssetFileTypeFilter.Audio => AudioAssetPredicate,
-            AssetFileTypeFilter.Image => ImageAssetPredicate,
-            AssetFileTypeFilter.Document => DocumentAssetPredicate,
-            AssetFileTypeFilter.Other =>
-                $"NOT ({VideoAssetPredicate} OR {AudioAssetPredicate} OR {ImageAssetPredicate} OR {DocumentAssetPredicate})",
-            _ => throw new ArgumentOutOfRangeException(nameof(filter))
-        };
+        var fileTypeCondition = CreateAssetFileTypeCondition(filter.FileType);
         if (fileTypeCondition is not null)
         {
             conditions.Add(fileTypeCondition);
@@ -1309,6 +1302,22 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
         return conditions.Count == 0
             ? string.Empty
             : $"AND {string.Join(" AND ", conditions)}";
+    }
+
+    private static string? CreateAssetFileTypeCondition(
+        AssetFileTypeFilter fileType)
+    {
+        return fileType switch
+        {
+            AssetFileTypeFilter.All => null,
+            AssetFileTypeFilter.Video => VideoAssetPredicate,
+            AssetFileTypeFilter.Audio => AudioAssetPredicate,
+            AssetFileTypeFilter.Image => ImageAssetPredicate,
+            AssetFileTypeFilter.Document => DocumentAssetPredicate,
+            AssetFileTypeFilter.Other =>
+                $"NOT ({VideoAssetPredicate} OR {AudioAssetPredicate} OR {ImageAssetPredicate} OR {DocumentAssetPredicate})",
+            _ => throw new ArgumentOutOfRangeException(nameof(fileType))
+        };
     }
 
     private static void AddAssetFilterParameters(

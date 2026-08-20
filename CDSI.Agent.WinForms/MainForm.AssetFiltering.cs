@@ -25,6 +25,7 @@ public sealed partial class MainForm
     private readonly Button _resetAssetFilterButton = new();
     private readonly Label _assetFilterResultLabel = new();
     private AssetListFilter _assetListFilter = AssetListFilter.Empty;
+    private int _assetExtensionRefreshVersion;
 
     private Control ConfigureAssetFilterPanel()
     {
@@ -40,6 +41,9 @@ public sealed partial class MainForm
         _assetExtensionFilterComboBox.AccessibleName = "扩展名过滤";
         _assetExtensionFilterComboBox.Items.Add(AllAssetExtensionsLabel);
         _assetExtensionFilterComboBox.SelectedIndex = 0;
+        _assetFileTypeFilterComboBox.SelectionChangeCommitted += async (_, _) =>
+            await RefreshAssetExtensionsForSelectedTypeAsync(
+                includeUnavailableSelection: false);
 
         ConfigureFilterDatePicker(
             _assetCreatedFromDatePicker,
@@ -232,6 +236,8 @@ public sealed partial class MainForm
         _assetCreatedToDatePicker.Checked = false;
         _assetListFilter = AssetListFilter.Empty;
         _assetPageIndex = 0;
+        await RefreshAssetExtensionsForSelectedTypeAsync(
+            includeUnavailableSelection: false);
         await RefreshAssetPageAsync();
     }
 
@@ -255,7 +261,8 @@ public sealed partial class MainForm
 
     internal static void RefreshAssetExtensionChoices(
         ComboBox comboBox,
-        IReadOnlyList<string> extensions)
+        IReadOnlyList<string> extensions,
+        bool includeUnavailableSelection = true)
     {
         var selectedExtension = comboBox.SelectedIndex > 0
             ? comboBox.SelectedItem as string
@@ -267,6 +274,7 @@ public sealed partial class MainForm
             .Order(StringComparer.OrdinalIgnoreCase)
             .ToList();
         if (selectedExtension is not null &&
+            includeUnavailableSelection &&
             !choices.Contains(selectedExtension, StringComparer.OrdinalIgnoreCase))
         {
             choices.Add(selectedExtension);
@@ -288,6 +296,44 @@ public sealed partial class MainForm
         finally
         {
             comboBox.EndUpdate();
+        }
+    }
+
+    private async Task RefreshAssetExtensionsForSelectedTypeAsync(
+        bool includeUnavailableSelection)
+    {
+        if (_assetFileTypeFilterComboBox.SelectedItem is not
+            AssetFileTypeFilterChoice selectedType)
+        {
+            return;
+        }
+
+        var refreshVersion = ++_assetExtensionRefreshVersion;
+        try
+        {
+            var extensions = await _scanService.ListAssetExtensionsAsync(
+                selectedType.Value);
+            if (refreshVersion != _assetExtensionRefreshVersion ||
+                IsDisposed ||
+                _assetFileTypeFilterComboBox.SelectedItem is not
+                    AssetFileTypeFilterChoice currentType ||
+                currentType.Value != selectedType.Value)
+            {
+                return;
+            }
+
+            RefreshAssetExtensionChoices(
+                _assetExtensionFilterComboBox,
+                extensions,
+                includeUnavailableSelection);
+        }
+        catch (Exception exception)
+            when (exception is not OperationCanceledException)
+        {
+            if (refreshVersion == _assetExtensionRefreshVersion && !IsDisposed)
+            {
+                _statusLabel.Text = $"扩展名加载失败：{exception.Message}";
+            }
         }
     }
 

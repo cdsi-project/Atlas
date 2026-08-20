@@ -181,6 +181,15 @@ public sealed class SqliteAssetRepositoryTests
         Assert.Equal(
             [".mp3", ".mp4", ".pdf", ".png", ".zip"],
             await repository.ListAssetExtensionsAsync());
+        Assert.Equal(
+            [".mp4"],
+            await repository.ListAssetExtensionsAsync(AssetFileTypeFilter.Video));
+        Assert.Equal(
+            [".pdf"],
+            await repository.ListAssetExtensionsAsync(AssetFileTypeFilter.Document));
+        Assert.Equal(
+            [".zip"],
+            await repository.ListAssetExtensionsAsync(AssetFileTypeFilter.Other));
 
         Assert.Equal(
             ["video.mp4"],

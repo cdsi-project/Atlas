@@ -171,6 +171,24 @@ public sealed class MainFormLayoutTests
     }
 
     [Fact]
+    public void RefreshAssetExtensionChoices_ResetsAnIncompatibleSelection()
+    {
+        using var comboBox = new ComboBox();
+        comboBox.Items.AddRange([MainForm.AllAssetExtensionsLabel, ".mp4"]);
+        comboBox.SelectedItem = ".mp4";
+
+        MainForm.RefreshAssetExtensionChoices(
+            comboBox,
+            [".png", ".jpg"],
+            includeUnavailableSelection: false);
+
+        Assert.Equal(
+            [MainForm.AllAssetExtensionsLabel, ".jpg", ".png"],
+            comboBox.Items.Cast<string>());
+        Assert.Equal(MainForm.AllAssetExtensionsLabel, comboBox.SelectedItem);
+    }
+
+    [Fact]
     public void CalculateAssetPagination_ClampsToTheLastAvailablePage()
     {
         var state = MainForm.CalculateAssetPagination(

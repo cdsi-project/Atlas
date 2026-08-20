@@ -94,9 +94,10 @@ public sealed class ScanApplicationService
     }
 
     public Task<IReadOnlyList<string>> ListAssetExtensionsAsync(
+        AssetFileTypeFilter fileType = AssetFileTypeFilter.All,
         CancellationToken cancellationToken = default)
     {
-        return _repository.ListAssetExtensionsAsync(cancellationToken);
+        return _repository.ListAssetExtensionsAsync(fileType, cancellationToken);
     }
 
     public Task<IReadOnlyList<ExactDuplicateGroup>> ListExactDuplicateGroupsAsync(

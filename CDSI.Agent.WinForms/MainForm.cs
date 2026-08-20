@@ -887,7 +887,12 @@ public sealed partial class MainForm : Form
         var duplicateGroupsTask = _scanService.ListExactDuplicateGroupsAsync();
         var statisticsTask = _scanService.GetLocalAssetStatisticsAsync();
         var assetDirectoriesTask = _scanService.ListAssetDirectoriesAsync();
-        var assetExtensionsTask = _scanService.ListAssetExtensionsAsync();
+        var selectedFileType = _assetFileTypeFilterComboBox.SelectedItem is
+            AssetFileTypeFilterChoice selectedType
+                ? selectedType.Value
+                : filter.FileType;
+        var assetExtensionsTask = _scanService.ListAssetExtensionsAsync(
+            selectedFileType);
         await Task.WhenAll(
             assetCountTask,
             totalAssetCountTask,
@@ -966,9 +971,17 @@ public sealed partial class MainForm : Form
 
         UpdateAssetPaginationControls(assetCount);
         UpdateAssetFilterResult(assetCount, totalAssetCount);
-        RefreshAssetExtensionChoices(
-            _assetExtensionFilterComboBox,
-            assetExtensions);
+        if (_assetFileTypeFilterComboBox.SelectedItem is
+                AssetFileTypeFilterChoice currentFileType &&
+            currentFileType.Value == selectedFileType)
+        {
+            RefreshAssetExtensionChoices(
+                _assetExtensionFilterComboBox,
+                assetExtensions,
+                includeUnavailableSelection:
+                    selectedFileType == filter.FileType &&
+                    filter.Extension is not null);
+        }
         RefreshAssetDirectories(assetDirectories);
         _assetsTabPage.Text = filter.IsEmpty
             ? $"资产 ({assetCount:N0})"

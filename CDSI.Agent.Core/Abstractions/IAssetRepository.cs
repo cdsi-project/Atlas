@@ -156,6 +156,7 @@ public interface IAssetRepository
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<string>> ListAssetExtensionsAsync(
+        AssetFileTypeFilter fileType = AssetFileTypeFilter.All,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<AssetListItem>> ListAssetsAsync(
