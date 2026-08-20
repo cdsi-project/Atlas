@@ -19,6 +19,29 @@ public sealed class MainFormLayoutTests
         Assert.Equal(new Size(1180, 760), form.Size);
     }
 
+    [Fact]
+    public void ConfigureMainMenuStrip_UsesTheExpectedTopLevelStructure()
+    {
+        using var menuStrip = new MenuStrip();
+        ToolStripMenuItem[] menus =
+        [
+            new("文件"),
+            new("扫描"),
+            new("资产"),
+            new("视图"),
+            new("工具"),
+            new("帮助")
+        ];
+
+        MainForm.ConfigureMainMenuStrip(menuStrip, menus);
+
+        Assert.Equal(
+            ["文件", "扫描", "资产", "视图", "工具", "帮助"],
+            menuStrip.Items.Cast<ToolStripMenuItem>().Select(item => item.Text));
+        Assert.Equal(DockStyle.Fill, menuStrip.Dock);
+        Assert.Equal("主菜单", menuStrip.AccessibleName);
+    }
+
     [Theory]
     [InlineData(0x0007)]
     [InlineData(0x8000)]
@@ -398,6 +421,56 @@ public sealed class MainFormLayoutTests
         });
         Assert.Equal(220, grid.Columns[0].Width);
         Assert.Equal(80, grid.Columns[1].Width);
+
+        grid.Columns[0].Width = 360;
+        grid.Columns[1].Width = 140;
+        MainForm.ResetGridColumnWidths(grid);
+
+        Assert.Equal(220, grid.Columns[0].Width);
+        Assert.Equal(80, grid.Columns[1].Width);
+    }
+
+    [Fact]
+    public void CreateOpenDocumentStartInfo_UsesTheRegisteredWindowsApplication()
+    {
+        var documentPath = Path.Combine(Path.GetTempPath(), "CDSI Docs", "README.md");
+
+        var startInfo = MainForm.CreateOpenDocumentStartInfo(documentPath);
+
+        Assert.Equal(Path.GetFullPath(documentPath), startInfo.FileName);
+        Assert.True(startInfo.UseShellExecute);
+    }
+
+    [Fact]
+    public void TaskCenterForm_AppliesDeterminateAndIndeterminateSnapshots()
+    {
+        var initial = new TaskCenterSnapshot(
+            "正在扫描",
+            "已索引 12",
+            @"D:\Assets\clip.mp4",
+            42,
+            false,
+            true,
+            "数据目录: test");
+        using var form = new TaskCenterForm(() => initial, () => { });
+
+        form.ApplySnapshot(initial);
+
+        Assert.Equal("正在扫描", form.StatusText);
+        Assert.Equal("已索引 12", form.ProgressText);
+        Assert.True(form.CanCancel);
+        Assert.Equal(ProgressBarStyle.Continuous, form.CurrentProgressStyle);
+        Assert.Equal(42, form.CurrentProgressValue);
+
+        form.ApplySnapshot(initial with
+        {
+            ProgressPercent = null,
+            IsIndeterminate = true,
+            CanCancel = false
+        });
+
+        Assert.False(form.CanCancel);
+        Assert.Equal(ProgressBarStyle.Marquee, form.CurrentProgressStyle);
     }
 
     [Fact]

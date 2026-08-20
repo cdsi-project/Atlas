@@ -30,9 +30,11 @@ public sealed partial class MainForm : Form
     private readonly Label _scopeLabel = new();
     private readonly FingerprintApplicationService _fingerprintService;
     private readonly MetadataExtractionApplicationService _metadataService;
-    private readonly CheckBox _fullVerificationCheckBox = new();
     private readonly Button _settingsButton = new();
     private readonly Button _scanButton = new();
+    private readonly Button _scanOptionsButton = new();
+    private readonly ContextMenuStrip _scanOptionsMenu = new();
+    private readonly Button _taskCenterButton = new();
     private readonly Button _cancelButton = new();
     private readonly ProgressBar _progressBar = new();
     private readonly Label _progressLabel = new();
@@ -53,6 +55,8 @@ public sealed partial class MainForm : Form
     private readonly TabPage _duplicatesTabPage = new("重复文件");
     private readonly ToolStripStatusLabel _statusLabel = new();
     private readonly ToolStripStatusLabel _databaseStatusLabel = new();
+    private readonly TabControl _mainTabControl = new();
+    private readonly string _dataDirectory;
     private CancellationTokenSource? _scanCancellation;
 
     public MainForm(
@@ -72,6 +76,7 @@ public sealed partial class MainForm : Form
         ManagedAssetTransferService transferService,
         string dataDirectory)
     {
+        _dataDirectory = Path.GetFullPath(dataDirectory);
         _scanService = scanService;
         _fingerprintService = fingerprintService;
         _metadataService = metadataService;
@@ -86,13 +91,15 @@ public sealed partial class MainForm : Form
         _assetCollectionService = assetCollectionService;
         _assetTagService = assetTagService;
         _transferService = transferService;
-        InitializeLayout(dataDirectory);
+        InitializeLayout(_dataDirectory);
 
         Shown += MainForm_Shown;
         FormClosing += (_, _) =>
         {
             _scanCancellation?.Cancel();
             StopLocalVolumeMonitoring();
+            _mainToolTip.Dispose();
+            _scanOptionsMenu.Dispose();
         };
     }
 
@@ -106,19 +113,22 @@ public sealed partial class MainForm : Form
         BackColor = Color.FromArgb(247, 248, 250);
         Font = new Font("Segoe UI", 9F);
         AutoScaleMode = AutoScaleMode.Dpi;
+        ConfigureMainMenu();
 
         var mainLayout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 4,
+            RowCount = 5,
             Padding = new Padding(0),
             BackColor = BackColor
         };
+        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 68));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
         mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        mainLayout.Controls.Add(_mainMenuStrip, 0, 0);
 
         var header = new Panel
         {
@@ -154,7 +164,7 @@ public sealed partial class MainForm : Form
             ForeColor = Color.FromArgb(179, 190, 199),
             AccessibleName = "应用版本"
         });
-        mainLayout.Controls.Add(header, 0, 0);
+        mainLayout.Controls.Add(header, 0, 1);
 
         var commandPanel = new TableLayoutPanel
         {
@@ -164,10 +174,10 @@ public sealed partial class MainForm : Form
             BackColor = Color.White
         };
         commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
         commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 104));
         commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112));
-        commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
+        commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
+        commandPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 84));
 
         _scopeLabel.Dock = DockStyle.Fill;
         _scopeLabel.Margin = new Padding(0, 0, 10, 0);
@@ -179,26 +189,23 @@ public sealed partial class MainForm : Form
 
         ConfigureCommandButton(_settingsButton, "设置", Color.FromArgb(236, 239, 242), Color.FromArgb(31, 37, 43));
         ConfigureCommandButton(_scanButton, "开始扫描", Color.FromArgb(24, 121, 78), Color.White);
-        _fullVerificationCheckBox.Text = "完整校验";
-        _fullVerificationCheckBox.AutoSize = true;
-        _fullVerificationCheckBox.Dock = DockStyle.Fill;
-        _fullVerificationCheckBox.Margin = new Padding(8, 0, 4, 0);
-        _fullVerificationCheckBox.TextAlign = ContentAlignment.MiddleLeft;
-        _fullVerificationCheckBox.ForeColor = Color.FromArgb(52, 61, 69);
+        ConfigureCommandButton(_taskCenterButton, "任务中心", Color.FromArgb(236, 239, 242), Color.FromArgb(31, 37, 43));
+        var scanCommand = ConfigureScanCommand();
 
         ConfigureCommandButton(_cancelButton, "取消", Color.FromArgb(236, 239, 242), Color.FromArgb(137, 49, 49));
         _cancelButton.Enabled = false;
 
         _settingsButton.Click += SettingsButton_Click;
         _scanButton.Click += ScanButton_Click;
+        _taskCenterButton.Click += (_, _) => ShowTaskCenter();
         _cancelButton.Click += (_, _) => _scanCancellation?.Cancel();
 
         commandPanel.Controls.Add(_scopeLabel, 0, 0);
         commandPanel.Controls.Add(_settingsButton, 1, 0);
-        commandPanel.Controls.Add(_fullVerificationCheckBox, 2, 0);
-        commandPanel.Controls.Add(_scanButton, 3, 0);
+        commandPanel.Controls.Add(_taskCenterButton, 2, 0);
+        commandPanel.Controls.Add(scanCommand, 3, 0);
         commandPanel.Controls.Add(_cancelButton, 4, 0);
-        mainLayout.Controls.Add(commandPanel, 0, 1);
+        mainLayout.Controls.Add(commandPanel, 0, 2);
 
         var progressPanel = new TableLayoutPanel
         {
@@ -232,7 +239,7 @@ public sealed partial class MainForm : Form
         progressPanel.SetColumnSpan(_progressLabel, 2);
         progressPanel.Controls.Add(_progressBar, 0, 1);
         progressPanel.Controls.Add(_currentPathLabel, 1, 1);
-        mainLayout.Controls.Add(progressPanel, 0, 2);
+        mainLayout.Controls.Add(progressPanel, 0, 3);
 
         ConfigureAssetGrid();
         ConfigureDuplicateGrid();
@@ -264,16 +271,13 @@ public sealed partial class MainForm : Form
         _duplicatesTabPage.BackColor = Color.White;
         _duplicatesTabPage.Controls.Add(_duplicateGrid);
 
-        var tabs = new TabControl
-        {
-            Dock = DockStyle.Fill,
-            Padding = new Point(12, 5)
-        };
-        tabs.TabPages.Add(_assetsTabPage);
-        tabs.TabPages.Add(_assetDirectoriesTabPage);
-        tabs.TabPages.Add(_statisticsTabPage);
-        tabs.TabPages.Add(_duplicatesTabPage);
-        tabs.TabPages.Add(_collectionsTabPage);
+        _mainTabControl.Dock = DockStyle.Fill;
+        _mainTabControl.Padding = new Point(12, 5);
+        _mainTabControl.TabPages.Add(_assetsTabPage);
+        _mainTabControl.TabPages.Add(_assetDirectoriesTabPage);
+        _mainTabControl.TabPages.Add(_statisticsTabPage);
+        _mainTabControl.TabPages.Add(_duplicatesTabPage);
+        _mainTabControl.TabPages.Add(_collectionsTabPage);
 
         var gridHost = new Panel
         {
@@ -281,8 +285,8 @@ public sealed partial class MainForm : Form
             Padding = new Padding(28, 8, 28, 18),
             BackColor = BackColor
         };
-        gridHost.Controls.Add(tabs);
-        mainLayout.Controls.Add(gridHost, 0, 3);
+        gridHost.Controls.Add(_mainTabControl);
+        mainLayout.Controls.Add(gridHost, 0, 4);
 
         var statusStrip = new StatusStrip
         {
@@ -301,6 +305,7 @@ public sealed partial class MainForm : Form
 
         Controls.Add(mainLayout);
         Controls.Add(statusStrip);
+        MainMenuStrip = _mainMenuStrip;
         ResumeLayout();
     }
 
@@ -555,6 +560,7 @@ public sealed partial class MainForm : Form
         foreach (DataGridViewColumn column in grid.Columns)
         {
             var initialWidth = column.Width;
+            column.Tag ??= initialWidth;
             column.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
             column.MinimumWidth = 40;
             column.Width = Math.Max(initialWidth, column.MinimumWidth);
@@ -763,6 +769,11 @@ public sealed partial class MainForm : Form
 
     private async void SettingsButton_Click(object? sender, EventArgs e)
     {
+        await OpenSettingsAsync();
+    }
+
+    private async Task OpenSettingsAsync()
+    {
         using var settingsForm = new SettingsForm(
             _workspaceService,
             _scanRootService,
@@ -776,7 +787,8 @@ public sealed partial class MainForm : Form
         {
             await RunScanPipelineAsync(
                 settingsForm.InitialScanRootIds,
-                isInitialScan: true);
+                isInitialScan: true,
+                fingerprintMode: FingerprintMode.DuplicateCandidates);
         }
     }
 
@@ -801,6 +813,11 @@ public sealed partial class MainForm : Form
 
     private async void ScanButton_Click(object? sender, EventArgs e)
     {
+        await StartConfiguredScanAsync(FingerprintMode.DuplicateCandidates);
+    }
+
+    private async Task StartConfiguredScanAsync(FingerprintMode fingerprintMode)
+    {
         var configuredRoots = await _scanService.ListScanRootsAsync();
         if (!configuredRoots.Any(root => root.Enabled))
         {
@@ -815,12 +832,14 @@ public sealed partial class MainForm : Form
 
         await RunScanPipelineAsync(
             scanRootIds: null,
-            isInitialScan: false);
+            isInitialScan: false,
+            fingerprintMode: fingerprintMode);
     }
 
     private async Task RunScanPipelineAsync(
         IReadOnlyCollection<Guid>? scanRootIds,
-        bool isInitialScan)
+        bool isInitialScan,
+        FingerprintMode fingerprintMode)
     {
         var selectedRootIds = scanRootIds?.Distinct().ToArray();
         if (selectedRootIds is { Length: 0 })
@@ -883,9 +902,7 @@ public sealed partial class MainForm : Form
                 return;
             }
 
-            var mode = _fullVerificationCheckBox.Checked
-                ? FingerprintMode.Complete
-                : FingerprintMode.DuplicateCandidates;
+            var mode = fingerprintMode;
             _progressBar.MarqueeAnimationSpeed = 0;
             _progressBar.Style = ProgressBarStyle.Continuous;
             _progressBar.Minimum = 0;
@@ -1102,6 +1119,7 @@ public sealed partial class MainForm : Form
     private void AssetGrid_SelectionChanged(object? sender, EventArgs e)
     {
         UpdateAssetDetails(_assetGrid.CurrentRow?.Tag as AssetListItem);
+        UpdateMainMenuState();
     }
 
     private void UpdateAssetDetails(AssetListItem? asset)
@@ -1129,8 +1147,8 @@ public sealed partial class MainForm : Form
         _scopeLabel.Enabled = !busy;
         _settingsButton.Enabled = !busy;
         _scanButton.Enabled = !busy;
+        _scanOptionsButton.Enabled = !busy;
         _cancelButton.Enabled = busy && allowCancel;
-        _fullVerificationCheckBox.Enabled = !busy;
         _assetGrid.Enabled = !busy;
         _assetContextMenu.Enabled = !busy;
         UpdateAssetPaginationControls(_assetTotalItems);
@@ -1141,6 +1159,7 @@ public sealed partial class MainForm : Form
         UpdateCollectionActionState();
         UpdateAssetDirectoryActionState();
         UpdateAssetFilterControlState();
+        UpdateMainMenuState();
         UseWaitCursor = busy && !allowCancel;
     }
 

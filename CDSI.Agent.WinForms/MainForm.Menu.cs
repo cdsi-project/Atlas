@@ -1,0 +1,403 @@
+using System.Diagnostics;
+using CDSI.Agent.Core.Assets;
+using CDSI.Agent.Core.Fingerprints;
+using CDSI.Agent.Core.Transfers;
+
+namespace CDSI.Agent.WinForms;
+
+public sealed partial class MainForm
+{
+    private readonly MenuStrip _mainMenuStrip = new();
+    private readonly ToolTip _mainToolTip = new();
+    private readonly ToolStripMenuItem _startStandardScanMenuItem = new();
+    private readonly ToolStripMenuItem _startFullScanMenuItem = new();
+    private readonly ToolStripMenuItem _cancelScanMenuItem = new();
+    private readonly ToolStripMenuItem _refreshAssetsMenuItem = new();
+    private readonly ToolStripMenuItem _fileSettingsMenuItem = new();
+    private readonly ToolStripMenuItem _toolsSettingsMenuItem = new();
+    private readonly ToolStripMenuItem _mainAssetMenuItem = new();
+
+    private void ConfigureMainMenu()
+    {
+        var fileMenu = new ToolStripMenuItem("文件(&F)");
+        var openWorkspaceItem = new ToolStripMenuItem("打开 CDSI 工作目录(&W)");
+        openWorkspaceItem.Click += async (_, _) => await OpenWorkspaceDirectoryAsync();
+        _fileSettingsMenuItem.Text = "扫描目录设置...";
+        _fileSettingsMenuItem.Click += async (_, _) => await OpenSettingsAsync();
+        var openDataDirectoryItem = new ToolStripMenuItem("打开数据目录(&D)");
+        openDataDirectoryItem.Click += (_, _) => OpenDirectoryPath(
+            _dataDirectory,
+            "无法打开数据目录");
+        var exitItem = new ToolStripMenuItem("退出(&X)");
+        exitItem.Click += (_, _) => Close();
+        fileMenu.DropDownItems.AddRange(
+            [
+                openWorkspaceItem,
+                _fileSettingsMenuItem,
+                openDataDirectoryItem,
+                new ToolStripSeparator(),
+                exitItem
+            ]);
+
+        var scanMenu = new ToolStripMenuItem("扫描(&S)");
+        _startStandardScanMenuItem.Text = "常规扫描(&S)";
+        _startStandardScanMenuItem.ShortcutKeys = Keys.F6;
+        _startStandardScanMenuItem.Click += async (_, _) =>
+            await StartConfiguredScanAsync(FingerprintMode.DuplicateCandidates);
+        _startFullScanMenuItem.Text = "完整校验扫描(&F)";
+        _startFullScanMenuItem.ShortcutKeys = Keys.Control | Keys.F6;
+        _startFullScanMenuItem.Click += async (_, _) =>
+            await StartConfiguredScanAsync(FingerprintMode.Complete);
+        _cancelScanMenuItem.Text = "取消当前任务(&C)";
+        _cancelScanMenuItem.ShortcutKeys = Keys.Escape;
+        _cancelScanMenuItem.Click += (_, _) => _scanCancellation?.Cancel();
+        _refreshAssetsMenuItem.Text = "刷新资产索引(&R)";
+        _refreshAssetsMenuItem.ShortcutKeys = Keys.F5;
+        _refreshAssetsMenuItem.Click += async (_, _) => await RefreshAssetPageAsync();
+        scanMenu.DropDownItems.AddRange(
+            [
+                _startStandardScanMenuItem,
+                _startFullScanMenuItem,
+                _cancelScanMenuItem,
+                new ToolStripSeparator(),
+                _refreshAssetsMenuItem
+            ]);
+        scanMenu.DropDownOpening += (_, _) => UpdateMainMenuState();
+
+        ConfigureMainAssetMenu();
+
+        var viewMenu = new ToolStripMenuItem("视图(&V)");
+        viewMenu.DropDownItems.AddRange(
+            [
+                CreateTabMenuItem("资产", _assetsTabPage, Keys.Control | Keys.D1),
+                CreateTabMenuItem("资产目录", _assetDirectoriesTabPage, Keys.Control | Keys.D2),
+                CreateTabMenuItem("统计", _statisticsTabPage, Keys.Control | Keys.D3),
+                CreateTabMenuItem("重复文件", _duplicatesTabPage, Keys.Control | Keys.D4),
+                CreateTabMenuItem("资产清单", _collectionsTabPage, Keys.Control | Keys.D5),
+                new ToolStripSeparator(),
+                CreateMenuItem("重置资产列表列宽", (_, _) =>
+                    ResetGridColumnWidths(_assetGrid))
+            ]);
+        viewMenu.DropDownOpening += (_, _) =>
+        {
+            foreach (var item in viewMenu.DropDownItems.OfType<ToolStripMenuItem>())
+            {
+                item.Checked = item.Tag is TabPage tabPage &&
+                    ReferenceEquals(_mainTabControl.SelectedTab, tabPage);
+            }
+        };
+
+        var toolsMenu = new ToolStripMenuItem("工具(&T)");
+        var taskCenterItem = new ToolStripMenuItem("任务中心(&J)")
+        {
+            ShortcutKeys = Keys.Control | Keys.J
+        };
+        taskCenterItem.Click += (_, _) => ShowTaskCenter();
+        _toolsSettingsMenuItem.Text = "设置(&O)...";
+        _toolsSettingsMenuItem.ShortcutKeys = Keys.Control | Keys.Oemcomma;
+        _toolsSettingsMenuItem.Click += async (_, _) => await OpenSettingsAsync();
+        toolsMenu.DropDownItems.AddRange(
+            [
+                taskCenterItem,
+                new ToolStripSeparator(),
+                _toolsSettingsMenuItem
+            ]);
+        toolsMenu.DropDownOpening += (_, _) => UpdateMainMenuState();
+
+        var helpMenu = new ToolStripMenuItem("帮助(&H)");
+        var readmeItem = new ToolStripMenuItem("使用文档(&D)")
+        {
+            ShortcutKeys = Keys.F1
+        };
+        readmeItem.Click += (_, _) => OpenBundledDocument("README.md");
+        var safetyItem = new ToolStripMenuItem("数据安全与隐私(&S)");
+        safetyItem.Click += (_, _) => ShowDataSafetyInformation();
+        var licenseItem = new ToolStripMenuItem("开源协议(&L)");
+        licenseItem.Click += (_, _) => OpenBundledDocument("LICENSE");
+        var thirdPartyItem = new ToolStripMenuItem("第三方许可(&T)");
+        thirdPartyItem.Click += (_, _) => OpenBundledDocument("THIRD-PARTY-NOTICES.md");
+        var aboutItem = new ToolStripMenuItem("关于 CDSI Atlas(&A)");
+        aboutItem.Click += (_, _) => ShowAboutDialog();
+        helpMenu.DropDownItems.AddRange(
+            [
+                readmeItem,
+                safetyItem,
+                new ToolStripSeparator(),
+                licenseItem,
+                thirdPartyItem,
+                new ToolStripSeparator(),
+                aboutItem
+            ]);
+
+        ConfigureMainMenuStrip(
+            _mainMenuStrip,
+            [fileMenu, scanMenu, _mainAssetMenuItem, viewMenu, toolsMenu, helpMenu]);
+        UpdateMainMenuState();
+    }
+
+    internal static void ConfigureMainMenuStrip(
+        MenuStrip menuStrip,
+        IReadOnlyList<ToolStripMenuItem> topLevelItems)
+    {
+        ArgumentNullException.ThrowIfNull(menuStrip);
+        ArgumentNullException.ThrowIfNull(topLevelItems);
+        menuStrip.Items.Clear();
+        menuStrip.Items.AddRange(topLevelItems.Cast<ToolStripItem>().ToArray());
+        menuStrip.Dock = DockStyle.Fill;
+        menuStrip.Padding = new Padding(20, 2, 20, 2);
+        menuStrip.BackColor = Color.White;
+        menuStrip.ForeColor = Color.FromArgb(31, 37, 43);
+        menuStrip.AccessibleName = "主菜单";
+    }
+
+    private void ConfigureMainAssetMenu()
+    {
+        _mainAssetMenuItem.Text = "资产(&A)";
+        var openLocationItem = new ToolStripMenuItem("打开文件位置(&O)");
+        openLocationItem.Click += (_, _) => OpenCurrentAssetFileLocation();
+        var tagsItem = new ToolStripMenuItem("标签(&T)");
+        var addToCollectionItem = new ToolStripMenuItem("加入资产清单(&L)");
+        addToCollectionItem.Click += async (_, _) => await AddSelectedAssetsToCollectionAsync();
+        var publishItem = new ToolStripMenuItem("发布到 OpenWeb(&P)");
+        publishItem.Click += async (_, _) => await PublishSelectedArticleAsync();
+        var copyItem = new ToolStripMenuItem("复制到 CDSI 工作目录(&C)");
+        copyItem.Click += async (_, _) =>
+            await TransferSelectedAssetsAsync(ManagedAssetTransferAction.Copy);
+        var moveItem = new ToolStripMenuItem("移动到 CDSI 工作目录(&M)");
+        moveItem.Click += async (_, _) =>
+            await TransferSelectedAssetsAsync(ManagedAssetTransferAction.Move);
+        var backupItem = new ToolStripMenuItem("备份到 OSS(&B)");
+        backupItem.Click += async (_, _) => await BackupSelectedAssetsAsync();
+        var restoreItem = new ToolStripMenuItem("从 OSS 取回(&R)");
+        restoreItem.Click += async (_, _) => await RestoreSelectedAssetsFromOssAsync();
+        var hideItem = new ToolStripMenuItem("从资产列表中移除（不删除）(&H)");
+        hideItem.Click += async (_, _) => await HideSelectedAssetsFromListAsync();
+        _mainAssetMenuItem.DropDownItems.AddRange(
+            [
+                openLocationItem,
+                tagsItem,
+                addToCollectionItem,
+                publishItem,
+                new ToolStripSeparator(),
+                copyItem,
+                moveItem,
+                new ToolStripSeparator(),
+                backupItem,
+                restoreItem,
+                new ToolStripSeparator(),
+                hideItem
+            ]);
+        _mainAssetMenuItem.DropDownOpening += (_, _) =>
+        {
+            var selected = GetSelectedAssets();
+            var canOperate = !_isBusy && selected.Count > 0 && selected.All(asset =>
+                asset.LocationStatus == AssetLocationStatus.Available);
+            _mainAssetMenuItem.Enabled = !_isBusy && selected.Count > 0;
+            openLocationItem.Enabled = !_isBusy && _assetGrid.CurrentRow?.Tag is AssetListItem;
+            ConfigureAssetTagMenu(tagsItem, selected);
+            addToCollectionItem.Enabled = !_isBusy && selected.Count > 0;
+            publishItem.Enabled = selected.Count == 1 &&
+                canOperate &&
+                _openWebPublishingService.Supports(selected[0].Path);
+            copyItem.Enabled = canOperate;
+            moveItem.Enabled = canOperate;
+            backupItem.Enabled = canOperate;
+            restoreItem.Enabled = !_isBusy && selected.Count > 0 &&
+                selected.All(asset => asset.HasHealthyObjectStorageBackup);
+            hideItem.Enabled = !_isBusy && selected.Count > 0;
+        };
+    }
+
+    private ToolStripMenuItem CreateTabMenuItem(
+        string text,
+        TabPage tabPage,
+        Keys shortcutKeys)
+    {
+        var item = new ToolStripMenuItem(text)
+        {
+            ShortcutKeys = shortcutKeys,
+            Tag = tabPage
+        };
+        item.Click += (_, _) => _mainTabControl.SelectedTab = tabPage;
+        return item;
+    }
+
+    private static ToolStripMenuItem CreateMenuItem(
+        string text,
+        EventHandler clickHandler)
+    {
+        var item = new ToolStripMenuItem(text);
+        item.Click += clickHandler;
+        return item;
+    }
+
+    private Control ConfigureScanCommand()
+    {
+        var panel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = new Padding(4, 0, 4, 0),
+            Padding = Padding.Empty,
+            BackColor = Color.White
+        };
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 30));
+
+        _scanButton.Margin = Padding.Empty;
+        _scanOptionsButton.Dock = DockStyle.Fill;
+        _scanOptionsButton.Margin = new Padding(1, 0, 0, 0);
+        _scanOptionsButton.Text = "▼";
+        _scanOptionsButton.BackColor = Color.FromArgb(20, 105, 68);
+        _scanOptionsButton.ForeColor = Color.White;
+        _scanOptionsButton.FlatStyle = FlatStyle.Flat;
+        _scanOptionsButton.FlatAppearance.BorderSize = 0;
+        _scanOptionsButton.Cursor = Cursors.Hand;
+        _scanOptionsButton.AccessibleName = "扫描选项";
+        _mainToolTip.SetToolTip(_scanOptionsButton, "选择扫描方式");
+        _scanOptionsButton.Click += (_, _) => _scanOptionsMenu.Show(
+            _scanOptionsButton,
+            new Point(0, _scanOptionsButton.Height));
+
+        var standardItem = new ToolStripMenuItem("常规扫描");
+        standardItem.Click += async (_, _) =>
+            await StartConfiguredScanAsync(FingerprintMode.DuplicateCandidates);
+        var completeItem = new ToolStripMenuItem("完整校验扫描");
+        completeItem.Click += async (_, _) =>
+            await StartConfiguredScanAsync(FingerprintMode.Complete);
+        _scanOptionsMenu.Items.AddRange([standardItem, completeItem]);
+        panel.Controls.Add(_scanButton, 0, 0);
+        panel.Controls.Add(_scanOptionsButton, 1, 0);
+        return panel;
+    }
+
+    private async Task OpenWorkspaceDirectoryAsync()
+    {
+        try
+        {
+            var workspace = await _workspaceService.GetAsync();
+            if (workspace is null)
+            {
+                MessageBox.Show(
+                    this,
+                    "尚未配置 CDSI 工作目录。",
+                    "CDSI Atlas",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                return;
+            }
+
+            OpenDirectoryPath(workspace.Path, "无法打开 CDSI 工作目录");
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法读取 CDSI 工作目录", exception);
+        }
+    }
+
+    private void OpenDirectoryPath(string path, string errorTitle)
+    {
+        try
+        {
+            Directory.CreateDirectory(path);
+            using var process = Process.Start(CreateOpenDirectoryStartInfo(path));
+        }
+        catch (Exception exception)
+        {
+            ShowError(errorTitle, exception);
+        }
+    }
+
+    private void OpenBundledDocument(string filename)
+    {
+        try
+        {
+            var path = Path.Combine(AppContext.BaseDirectory, filename);
+            if (!File.Exists(path))
+            {
+                throw new FileNotFoundException("应用文档不存在。", path);
+            }
+
+            using var process = Process.Start(CreateOpenDocumentStartInfo(path));
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法打开应用文档", exception);
+        }
+    }
+
+    internal static ProcessStartInfo CreateOpenDocumentStartInfo(string path)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        return new ProcessStartInfo
+        {
+            FileName = Path.GetFullPath(path),
+            UseShellExecute = true
+        };
+    }
+
+    private void ShowDataSafetyInformation()
+    {
+        MessageBox.Show(
+            this,
+            "扫描、索引、哈希、标签和资产清单默认只在本机处理。\n\n" +
+            "只有在您明确执行 OSS 备份、OSS 取回或 OpenWeb 发布时，应用才进行相应网络传输。\n\n" +
+            "标签和清单不会修改、移动或重命名源文件；访问密钥的 Secret 保存在当前 Windows 用户的凭据管理器中。",
+            "数据安全与隐私",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
+    }
+
+    private void ShowAboutDialog()
+    {
+        using var dialog = new AboutForm(GetApplicationVersion());
+        dialog.ShowDialog(this);
+    }
+
+    private void ShowTaskCenter()
+    {
+        using var dialog = new TaskCenterForm(
+            CreateTaskCenterSnapshot,
+            () => _scanCancellation?.Cancel());
+        dialog.ShowDialog(this);
+    }
+
+    private TaskCenterSnapshot CreateTaskCenterSnapshot()
+    {
+        var progressPercent = _progressBar.Style == ProgressBarStyle.Marquee
+            ? null
+            : (int?)Math.Clamp(_progressBar.Value / 10, 0, 100);
+        return new TaskCenterSnapshot(
+            _statusLabel.Text ?? string.Empty,
+            _progressLabel.Text ?? string.Empty,
+            _currentPathLabel.Text ?? string.Empty,
+            progressPercent,
+            _progressBar.Style == ProgressBarStyle.Marquee,
+            _cancelButton.Enabled,
+            _databaseStatusLabel.Text ?? string.Empty);
+    }
+
+    private void UpdateMainMenuState()
+    {
+        _startStandardScanMenuItem.Enabled = !_isBusy;
+        _startFullScanMenuItem.Enabled = !_isBusy;
+        _cancelScanMenuItem.Enabled = _isBusy && _cancelButton.Enabled;
+        _refreshAssetsMenuItem.Enabled = !_isBusy;
+        _fileSettingsMenuItem.Enabled = !_isBusy;
+        _toolsSettingsMenuItem.Enabled = !_isBusy;
+        _mainAssetMenuItem.Enabled = !_isBusy && GetSelectedAssets().Count > 0;
+    }
+
+    internal static void ResetGridColumnWidths(DataGridView grid)
+    {
+        ArgumentNullException.ThrowIfNull(grid);
+        foreach (DataGridViewColumn column in grid.Columns)
+        {
+            if (column.Tag is int initialWidth)
+            {
+                column.Width = initialWidth;
+            }
+        }
+    }
+}

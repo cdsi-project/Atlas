@@ -62,7 +62,7 @@ public sealed partial class MainForm
                 selected.All(asset =>
                     asset.LocationStatus == AssetLocationStatus.Available);
             args.Cancel = selected.Count == 0;
-            ConfigureAssetTagMenu(selected);
+            ConfigureAssetTagMenu(_assetTagsMenuItem, selected);
             _openFileLocationMenuItem.Enabled = _assetGrid.CurrentRow?.Tag is AssetListItem;
             _addToCollectionMenuItem.Enabled = selected.Count > 0;
             _copyToWorkspaceMenuItem.Enabled = canOperate;

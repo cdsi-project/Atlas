@@ -9,17 +9,19 @@ public sealed partial class MainForm
     private readonly ToolStripMenuItem _assetTagsMenuItem = new();
     private IReadOnlyList<AssetTagSummary> _knownAssetTags = [];
 
-    private void ConfigureAssetTagMenu(IReadOnlyList<AssetListItem> selectedAssets)
+    private void ConfigureAssetTagMenu(
+        ToolStripMenuItem menuItem,
+        IReadOnlyList<AssetListItem> selectedAssets)
     {
-        _assetTagsMenuItem.DropDownItems.Clear();
-        _assetTagsMenuItem.Text = $"标签 ({selectedAssets.Count:N0})";
-        _assetTagsMenuItem.Enabled = selectedAssets.Count > 0 && !_isBusy;
+        menuItem.DropDownItems.Clear();
+        menuItem.Text = $"标签 ({selectedAssets.Count:N0})";
+        menuItem.Enabled = selectedAssets.Count > 0 && !_isBusy;
 
         foreach (var presetName in AssetTagService.PresetNames)
         {
             var tag = _knownAssetTags.FirstOrDefault(candidate =>
                 string.Equals(candidate.Name, presetName, StringComparison.OrdinalIgnoreCase));
-            _assetTagsMenuItem.DropDownItems.Add(
+            menuItem.DropDownItems.Add(
                 CreateAssetTagMenuItem(presetName, tag?.Id, selectedAssets));
         }
 
@@ -31,18 +33,18 @@ public sealed partial class MainForm
             .ToArray();
         if (customTags.Length > 0)
         {
-            _assetTagsMenuItem.DropDownItems.Add(new ToolStripSeparator());
+            menuItem.DropDownItems.Add(new ToolStripSeparator());
             foreach (var tag in customTags)
             {
-                _assetTagsMenuItem.DropDownItems.Add(
+                menuItem.DropDownItems.Add(
                     CreateAssetTagMenuItem(tag.Name, tag.Id, selectedAssets));
             }
         }
 
-        _assetTagsMenuItem.DropDownItems.Add(new ToolStripSeparator());
+        menuItem.DropDownItems.Add(new ToolStripSeparator());
         var customItem = new ToolStripMenuItem("自定义标签...");
         customItem.Click += async (_, _) => await AddCustomAssetTagAsync();
-        _assetTagsMenuItem.DropDownItems.Add(customItem);
+        menuItem.DropDownItems.Add(customItem);
     }
 
     private ToolStripMenuItem CreateAssetTagMenuItem(
