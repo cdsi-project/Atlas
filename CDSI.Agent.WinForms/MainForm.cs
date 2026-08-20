@@ -273,13 +273,15 @@ public sealed partial class MainForm : Form
         _duplicatesTabPage.BackColor = Color.White;
         _duplicatesTabPage.Controls.Add(_duplicateGrid);
 
-        _mainTabControl.Dock = DockStyle.Fill;
-        _mainTabControl.Padding = new Point(12, 5);
-        _mainTabControl.TabPages.Add(_assetsTabPage);
-        _mainTabControl.TabPages.Add(_assetDirectoriesTabPage);
-        _mainTabControl.TabPages.Add(_statisticsTabPage);
-        _mainTabControl.TabPages.Add(_duplicatesTabPage);
-        _mainTabControl.TabPages.Add(_collectionsTabPage);
+        ConfigureMainTabs(
+            _mainTabControl,
+            [
+                _assetsTabPage,
+                _assetDirectoriesTabPage,
+                _duplicatesTabPage,
+                _collectionsTabPage,
+                _statisticsTabPage
+            ]);
 
         var gridHost = new Panel
         {
@@ -318,6 +320,18 @@ public sealed partial class MainForm : Form
         form.MinimumSize = new Size(920, 600);
         form.Size = new Size(1180, 760);
         form.WindowState = FormWindowState.Maximized;
+    }
+
+    internal static void ConfigureMainTabs(
+        TabControl tabControl,
+        IReadOnlyList<TabPage> tabPages)
+    {
+        ArgumentNullException.ThrowIfNull(tabControl);
+        ArgumentNullException.ThrowIfNull(tabPages);
+        tabControl.TabPages.Clear();
+        tabControl.TabPages.AddRange(tabPages.ToArray());
+        tabControl.Dock = DockStyle.Fill;
+        tabControl.Padding = new Point(12, 5);
     }
 
     private void MainForm_KeyDown(object? sender, KeyEventArgs e)

@@ -43,6 +43,28 @@ public sealed class MainFormLayoutTests
     }
 
     [Fact]
+    public void ConfigureMainTabs_PlacesStatisticsLast()
+    {
+        using var tabControl = new TabControl();
+        TabPage[] tabPages =
+        [
+            new("资产"),
+            new("资产目录"),
+            new("重复文件"),
+            new("资产清单"),
+            new("统计")
+        ];
+
+        MainForm.ConfigureMainTabs(tabControl, tabPages);
+
+        Assert.Equal(
+            ["资产", "资产目录", "重复文件", "资产清单", "统计"],
+            tabControl.TabPages.Cast<TabPage>().Select(page => page.Text));
+        Assert.Equal(DockStyle.Fill, tabControl.Dock);
+        Assert.Equal(new Point(12, 5), tabControl.Padding);
+    }
+
+    [Fact]
     public void ConfigureEscapeShortcutDisplay_DoesNotAssignAnInvalidShortcutKey()
     {
         using var menuItem = new ToolStripMenuItem();

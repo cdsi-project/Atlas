@@ -71,9 +71,9 @@ public sealed partial class MainForm
             [
                 CreateTabMenuItem("资产", _assetsTabPage, Keys.Control | Keys.D1),
                 CreateTabMenuItem("资产目录", _assetDirectoriesTabPage, Keys.Control | Keys.D2),
-                CreateTabMenuItem("统计", _statisticsTabPage, Keys.Control | Keys.D3),
-                CreateTabMenuItem("重复文件", _duplicatesTabPage, Keys.Control | Keys.D4),
-                CreateTabMenuItem("资产清单", _collectionsTabPage, Keys.Control | Keys.D5),
+                CreateTabMenuItem("重复文件", _duplicatesTabPage, Keys.Control | Keys.D3),
+                CreateTabMenuItem("资产清单", _collectionsTabPage, Keys.Control | Keys.D4),
+                CreateTabMenuItem("统计", _statisticsTabPage, Keys.Control | Keys.D5),
                 new ToolStripSeparator(),
                 CreateMenuItem("重置资产列表列宽", (_, _) =>
                     ResetGridColumnWidths(_assetGrid))
