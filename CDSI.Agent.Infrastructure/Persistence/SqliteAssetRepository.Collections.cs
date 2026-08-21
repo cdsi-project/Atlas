@@ -69,11 +69,12 @@ public sealed partial class SqliteAssetRepository : IAssetCollectionRepository
                     WHERE osl.asset_id = a.id
                       AND osl.status = 'Healthy'
                 ) THEN 1 ELSE 0 END), 0),
+                c.created_at,
                 c.updated_at
             FROM asset_collections c
             LEFT JOIN asset_collection_items ci ON ci.collection_id = c.id
             LEFT JOIN assets a ON a.id = ci.asset_id
-            GROUP BY c.id, c.name, c.type, c.updated_at
+            GROUP BY c.id, c.name, c.type, c.created_at, c.updated_at
             ORDER BY c.updated_at DESC, c.name;
             """;
 
@@ -87,7 +88,8 @@ public sealed partial class SqliteAssetRepository : IAssetCollectionRepository
                 reader.GetInt32(3),
                 reader.GetInt64(4),
                 reader.GetInt32(5),
-                ParseTimestamp(reader.GetString(6))));
+                ParseTimestamp(reader.GetString(6)),
+                ParseTimestamp(reader.GetString(7))));
         }
 
         return collections;

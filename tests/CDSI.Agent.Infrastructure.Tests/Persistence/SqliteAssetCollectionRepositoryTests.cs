@@ -47,7 +47,10 @@ public sealed class SqliteAssetCollectionRepositoryTests
         Assert.Equal(2, summary.AssetCount);
         Assert.Equal(17, summary.TotalSizeBytes);
         Assert.Equal(0, summary.BackedUpAssetCount);
+        Assert.Equal(now, summary.CreatedAt);
         Assert.Equal(2, members.Count);
+        Assert.All(members, member =>
+            Assert.Equal(now.AddMinutes(1), member.AddedAt));
         Assert.Contains(members, member => member.Asset.OriginalFilename == "first.mp4");
         Assert.Contains(members, member => member.Asset.OriginalFilename == "cover.jpg");
 

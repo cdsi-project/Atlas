@@ -404,15 +404,21 @@ public sealed class MainFormLayoutTests
         MainForm.ConfigureProjectManagementGridColumns(projectGrid, memberGrid);
 
         Assert.Equal(
-            ["名称", "类型", "资产", "大小", "已备份"],
+            ["名称", "类型", "创建时间", "资产", "大小", "已备份"],
             projectGrid.Columns
                 .Cast<DataGridViewColumn>()
                 .Select(column => column.HeaderText));
         Assert.Equal(
-            ["文件", "类型", "大小", "位置", "OSS"],
+            ["资源ID", "文件", "类型", "大小", "加入时间", "位置", "OSS"],
             memberGrid.Columns
                 .Cast<DataGridViewColumn>()
                 .Select(column => column.HeaderText));
+        Assert.Equal(
+            "ProjectAssetId",
+            memberGrid.Columns
+                .Cast<DataGridViewColumn>()
+                .Single(column => column.HeaderText == "资源ID")
+                .Name);
         Assert.All(
             projectGrid.Columns.Cast<DataGridViewColumn>()
                 .Concat(memberGrid.Columns.Cast<DataGridViewColumn>()),

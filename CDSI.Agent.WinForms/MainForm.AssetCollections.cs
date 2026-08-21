@@ -125,10 +125,15 @@ public sealed partial class MainForm
             45,
             minimumWidth: 120));
         projectGrid.Columns.Add(CreateColumn("类型", 64));
+        projectGrid.Columns.Add(CreateColumn("创建时间", 145));
         projectGrid.Columns.Add(CreateColumn("资产", 58));
         projectGrid.Columns.Add(CreateFileSizeColumn());
         projectGrid.Columns.Add(CreateColumn("已备份", 70));
 
+        var resourceIdColumn = CreateAssetIdColumn();
+        resourceIdColumn.Name = "ProjectAssetId";
+        resourceIdColumn.HeaderText = "资源ID";
+        memberGrid.Columns.Add(resourceIdColumn);
         memberGrid.Columns.Add(CreateColumn(
             "文件",
             220,
@@ -137,6 +142,7 @@ public sealed partial class MainForm
             minimumWidth: 160));
         memberGrid.Columns.Add(CreateColumn("类型", 110));
         memberGrid.Columns.Add(CreateFileSizeColumn());
+        memberGrid.Columns.Add(CreateColumn("加入时间", 145));
         memberGrid.Columns.Add(CreateColumn(
             "位置",
             280,
@@ -646,6 +652,7 @@ public sealed partial class MainForm
                 var rowIndex = _collectionGrid.Rows.Add(
                     collection.Name,
                     FormatCollectionType(collection.Type),
+                    collection.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
                     collection.AssetCount,
                     collection.TotalSizeBytes,
                     $"{collection.BackedUpAssetCount:N0}/{collection.AssetCount:N0}");
@@ -693,12 +700,17 @@ public sealed partial class MainForm
         {
             var asset = member.Asset;
             var rowIndex = _collectionMemberGrid.Rows.Add(
+                FormatAssetIdForList(asset.AssetId),
                 asset.OriginalFilename,
                 asset.MimeType ?? "未知",
                 asset.Size,
+                member.AddedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
                 asset.Path,
                 asset.HasHealthyObjectStorageBackup ? "已备份" : "未备份");
             _collectionMemberGrid.Rows[rowIndex].Tag = member;
+            _collectionMemberGrid.Rows[rowIndex]
+                .Cells["ProjectAssetId"]
+                .ToolTipText = asset.AssetId.ToString("D");
         }
 
         UpdateCollectionActionState();

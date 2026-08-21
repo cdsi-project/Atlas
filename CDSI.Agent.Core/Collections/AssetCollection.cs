@@ -25,6 +25,7 @@ public sealed record AssetCollectionSummary(
     int AssetCount,
     long TotalSizeBytes,
     int BackedUpAssetCount,
+    DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
 public sealed record AssetCollectionMember(

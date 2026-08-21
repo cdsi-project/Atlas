@@ -202,6 +202,7 @@ public sealed class AssetCollectionFormTests
             AssetCount: 12,
             TotalSizeBytes: 1024,
             BackedUpAssetCount: 5,
+            CreatedAt: DateTimeOffset.UtcNow,
             UpdatedAt: DateTimeOffset.UtcNow);
 
         var message = MainForm.CreateProjectDeletionConfirmation(project);
@@ -222,6 +223,7 @@ public sealed class AssetCollectionFormTests
             AssetCount: 0,
             TotalSizeBytes: 0,
             BackedUpAssetCount: 0,
+            CreatedAt: DateTimeOffset.UtcNow,
             UpdatedAt: DateTimeOffset.UtcNow);
     }
 
