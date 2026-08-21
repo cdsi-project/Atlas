@@ -173,7 +173,7 @@ public sealed partial class MainForm
     {
         ArgumentNullException.ThrowIfNull(menuItem);
         menuItem.ShortcutKeys = Keys.Control | Keys.Oemcomma;
-        menuItem.ShortcutKeyDisplayString = "Ctrl + ，";
+        menuItem.ShortcutKeyDisplayString = "Ctrl + 逗号键";
     }
 
     private void ConfigureMainAssetMenu()

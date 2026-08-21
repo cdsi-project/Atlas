@@ -130,7 +130,7 @@ public sealed class MainFormLayoutTests
         MainForm.ConfigureSettingsShortcutDisplay(menuItem);
 
         Assert.Equal(Keys.Control | Keys.Oemcomma, menuItem.ShortcutKeys);
-        Assert.Equal("Ctrl + ，", menuItem.ShortcutKeyDisplayString);
+        Assert.Equal("Ctrl + 逗号键", menuItem.ShortcutKeyDisplayString);
     }
 
     [Theory]
