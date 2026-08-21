@@ -20,7 +20,7 @@ public sealed partial class MainForm
         _openFileLocationMenuItem.ShortcutKeyDisplayString = "Enter";
         _showAssetDetailsMenuItem.Text = "资产详情";
         _showAssetDetailsMenuItem.ShortcutKeyDisplayString = "Alt+Enter";
-        _addToCollectionMenuItem.Text = "加入资产清单";
+        _addToCollectionMenuItem.Text = "加入项目";
         _copyToWorkspaceMenuItem.Text = "复制到 CDSI 工作目录";
         _moveToWorkspaceMenuItem.Text = "移动到 CDSI 工作目录";
         _backupToOssMenuItem.Text = "备份到 OSS";
@@ -33,8 +33,6 @@ public sealed partial class MainForm
             await TransferSelectedAssetsAsync(ManagedAssetTransferAction.Copy);
         _moveToWorkspaceMenuItem.Click += async (_, _) =>
             await TransferSelectedAssetsAsync(ManagedAssetTransferAction.Move);
-        _addToCollectionMenuItem.Click += async (_, _) =>
-            await AddSelectedAssetsToCollectionAsync();
         _backupToOssMenuItem.Click += async (_, _) =>
             await BackupSelectedAssetsAsync();
         _restoreFromOssMenuItem.Click += async (_, _) =>
@@ -70,9 +68,9 @@ public sealed partial class MainForm
                     asset.LocationStatus == AssetLocationStatus.Available);
             args.Cancel = selected.Count == 0;
             ConfigureAssetTagMenu(_assetTagsMenuItem, selected);
+            ConfigureAddToProjectMenu(selected);
             _openFileLocationMenuItem.Enabled = _assetGrid.CurrentRow?.Tag is AssetListItem;
             _showAssetDetailsMenuItem.Enabled = _assetGrid.CurrentRow?.Tag is AssetListItem;
-            _addToCollectionMenuItem.Enabled = selected.Count > 0;
             _copyToWorkspaceMenuItem.Enabled = canOperate;
             _moveToWorkspaceMenuItem.Enabled = canOperate;
             _backupToOssMenuItem.Enabled = canOperate;
@@ -83,8 +81,6 @@ public sealed partial class MainForm
                 selected.Count == 1 &&
                 canOperate &&
                 _openWebPublishingService.Supports(selected[0].Path);
-            _addToCollectionMenuItem.Text =
-                $"加入资产清单 ({selected.Count:N0})";
             _copyToWorkspaceMenuItem.Text =
                 $"复制到 CDSI 工作目录 ({selected.Count:N0})";
             _moveToWorkspaceMenuItem.Text =

@@ -1,4 +1,5 @@
 using CDSI.Agent.Application.Collections;
+using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Collections;
 
 namespace CDSI.Agent.WinForms;
@@ -15,6 +16,7 @@ public sealed partial class MainForm
     private readonly ContextMenuStrip _projectContextMenu = new();
     private readonly ToolStripMenuItem _syncProjectContextMenuItem = new();
     private readonly ToolStripMenuItem _deleteProjectContextMenuItem = new();
+    private IReadOnlyList<AssetCollectionSummary> _availableCollections = [];
     private bool _isBusy;
     private bool _refreshingCollections;
 
@@ -260,14 +262,93 @@ public sealed partial class MainForm
             var collection = await _assetCollectionService.CreateAsync(
                 dialog.CollectionName,
                 dialog.CollectionType);
-            _statusLabel.Text = $"已创建资产清单：{collection.Name}";
+            _statusLabel.Text = $"已创建项目：{collection.Name}";
             return collection.Id;
         }
         catch (Exception exception)
         {
-            ShowError("无法创建资产清单", exception);
+            ShowError("无法创建项目", exception);
             return null;
         }
+    }
+
+    private void ConfigureAddToProjectMenu(
+        IReadOnlyList<AssetListItem> selectedAssets)
+    {
+        PopulateAddToProjectMenu(
+            _addToCollectionMenuItem,
+            _availableCollections,
+            selectedAssets.Count);
+        foreach (var item in _addToCollectionMenuItem.DropDownItems
+                     .OfType<ToolStripMenuItem>())
+        {
+            item.Click += AddToProjectMenuItem_Click;
+        }
+    }
+
+    internal static void PopulateAddToProjectMenu(
+        ToolStripMenuItem menuItem,
+        IReadOnlyList<AssetCollectionSummary> projects,
+        int selectedAssetCount)
+    {
+        ArgumentNullException.ThrowIfNull(menuItem);
+        ArgumentNullException.ThrowIfNull(projects);
+        if (selectedAssetCount < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(selectedAssetCount));
+        }
+
+        foreach (var existingItem in menuItem.DropDownItems
+                     .Cast<ToolStripItem>()
+                     .ToArray())
+        {
+            existingItem.Dispose();
+        }
+
+        menuItem.DropDownItems.Clear();
+        menuItem.Text = $"加入项目 ({selectedAssetCount:N0})";
+        menuItem.Enabled = selectedAssetCount > 0;
+        if (projects.Count == 0)
+        {
+            menuItem.DropDownItems.Add(new ToolStripMenuItem("新建项目..."));
+            return;
+        }
+
+        foreach (var project in projects.Take(3))
+        {
+            menuItem.DropDownItems.Add(new ToolStripMenuItem(
+                FormatQuickProjectMenuName(project.Name))
+            {
+                Tag = project.Id,
+                ToolTipText = project.Name
+            });
+        }
+
+        if (projects.Count > 3)
+        {
+            menuItem.DropDownItems.Add(new ToolStripSeparator());
+            menuItem.DropDownItems.Add(new ToolStripMenuItem("更多..."));
+        }
+    }
+
+    private static string FormatQuickProjectMenuName(string projectName)
+    {
+        const int maximumDisplayLength = 40;
+        var displayName = projectName.Length <= maximumDisplayLength
+            ? projectName
+            : $"{projectName[..(maximumDisplayLength - 3)]}...";
+        return displayName.Replace("&", "&&", StringComparison.Ordinal);
+    }
+
+    private async void AddToProjectMenuItem_Click(object? sender, EventArgs e)
+    {
+        if ((sender as ToolStripMenuItem)?.Tag is Guid projectId)
+        {
+            await AddSelectedAssetsToCollectionAsync(projectId);
+            return;
+        }
+
+        await AddSelectedAssetsToCollectionAsync();
     }
 
     private async Task AddSelectedAssetsToCollectionAsync()
@@ -301,19 +382,46 @@ public sealed partial class MainForm
                 return;
             }
 
-            var added = await _assetCollectionService.AddAssetsAsync(
+            await AddSelectedAssetsToCollectionAsync(
                 collectionId.Value,
-                selectedAssets.Select(asset => asset.AssetId).ToArray());
-            await RefreshAssetCollectionsAsync(collectionId);
-            await RefreshAssetPageAsync();
-            _statusLabel.Text = added == 0
-                ? "所选资产已在该清单中"
-                : $"已将 {added:N0} 个资产加入清单";
+                selectedAssets);
         }
         catch (Exception exception)
         {
-            ShowError("无法将资产加入清单", exception);
+            ShowError("无法将资产加入项目", exception);
         }
+    }
+
+    private async Task AddSelectedAssetsToCollectionAsync(Guid collectionId)
+    {
+        var selectedAssets = GetSelectedAssets();
+        if (selectedAssets.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await AddSelectedAssetsToCollectionAsync(collectionId, selectedAssets);
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法将资产加入项目", exception);
+        }
+    }
+
+    private async Task AddSelectedAssetsToCollectionAsync(
+        Guid collectionId,
+        IReadOnlyList<AssetListItem> selectedAssets)
+    {
+        var added = await _assetCollectionService.AddAssetsAsync(
+            collectionId,
+            selectedAssets.Select(asset => asset.AssetId).ToArray());
+        await RefreshAssetCollectionsAsync(collectionId);
+        await RefreshAssetPageAsync();
+        _statusLabel.Text = added == 0
+            ? "所选资产已在该项目中"
+            : $"已将 {added:N0} 个资产加入项目";
     }
 
     private async Task SyncSelectedCollectionAsync()
@@ -426,6 +534,7 @@ public sealed partial class MainForm
     {
         var currentId = selectedCollectionId ?? GetSelectedCollection()?.Id;
         var collections = await _assetCollectionService.ListAsync();
+        _availableCollections = collections;
         _refreshingCollections = true;
         try
         {

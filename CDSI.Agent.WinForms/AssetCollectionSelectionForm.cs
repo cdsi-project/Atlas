@@ -16,7 +16,7 @@ internal sealed class AssetCollectionSelectionForm : Form
             throw new ArgumentException("至少需要一个资产清单。", nameof(collections));
         }
 
-        Text = "加入资产清单";
+        Text = "加入项目";
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(520, 180);
         MinimumSize = new Size(460, 180);
@@ -48,7 +48,7 @@ internal sealed class AssetCollectionSelectionForm : Form
         _collectionComboBox.Margin = new Padding(0, 6, 0, 6);
         _collectionComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
         _collectionComboBox.DisplayMember = nameof(CollectionChoice.DisplayName);
-        _collectionComboBox.AccessibleName = "目标资产清单";
+        _collectionComboBox.AccessibleName = "目标项目";
         _collectionComboBox.Items.AddRange(collections
             .Select(collection => new CollectionChoice(collection))
             .Cast<object>()

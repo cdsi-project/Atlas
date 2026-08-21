@@ -73,6 +73,52 @@ public sealed class AssetCollectionFormTests
     }
 
     [Fact]
+    public void AddToProjectMenu_ShowsThreeProjectsThenMore()
+    {
+        var projects = Enumerable.Range(1, 4)
+            .Select(index => CreateProject($"项目 {index}"))
+            .ToArray();
+        using var menuItem = new ToolStripMenuItem();
+
+        MainForm.PopulateAddToProjectMenu(menuItem, projects, selectedAssetCount: 2);
+
+        Assert.Equal("加入项目 (2)", menuItem.Text);
+        Assert.True(menuItem.Enabled);
+        Assert.Collection(
+            menuItem.DropDownItems.Cast<ToolStripItem>(),
+            item => Assert.Equal(projects[0].Id, item.Tag),
+            item => Assert.Equal(projects[1].Id, item.Tag),
+            item => Assert.Equal(projects[2].Id, item.Tag),
+            item => Assert.IsType<ToolStripSeparator>(item),
+            item => Assert.Equal("更多...", item.Text));
+
+        MainForm.PopulateAddToProjectMenu(
+            menuItem,
+            projects.Take(3).ToArray(),
+            selectedAssetCount: 1);
+
+        Assert.Equal(3, menuItem.DropDownItems.Count);
+        Assert.DoesNotContain(
+            menuItem.DropDownItems.Cast<ToolStripItem>(),
+            item => item.Text == "更多...");
+    }
+
+    [Fact]
+    public void AddToProjectMenu_OffersProjectCreationWhenEmpty()
+    {
+        using var menuItem = new ToolStripMenuItem();
+
+        MainForm.PopulateAddToProjectMenu(
+            menuItem,
+            [],
+            selectedAssetCount: 1);
+
+        var createItem = Assert.Single(
+            menuItem.DropDownItems.Cast<ToolStripItem>());
+        Assert.Equal("新建项目...", createItem.Text);
+    }
+
+    [Fact]
     public void ProjectDeletionConfirmation_ListsTheScopeAndPreservesAssets()
     {
         var project = new AssetCollectionSummary(
@@ -91,6 +137,18 @@ public sealed class AssetCollectionFormTests
         Assert.Contains("不会删除、移动或修改资产文件", message);
         Assert.Contains("不会删除已有 OSS 备份", message);
         Assert.Contains("无法撤销", message);
+    }
+
+    private static AssetCollectionSummary CreateProject(string name)
+    {
+        return new AssetCollectionSummary(
+            Guid.NewGuid(),
+            name,
+            AssetCollectionType.Mixed,
+            AssetCount: 0,
+            TotalSizeBytes: 0,
+            BackedUpAssetCount: 0,
+            UpdatedAt: DateTimeOffset.UtcNow);
     }
 
     private static IEnumerable<Control> Descendants(Control parent)

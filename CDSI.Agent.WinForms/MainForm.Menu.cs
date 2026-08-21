@@ -209,7 +209,7 @@ public sealed partial class MainForm
         };
         detailsItem.Click += (_, _) => ShowCurrentAssetDetails();
         var tagsItem = new ToolStripMenuItem("标签(&T)");
-        var addToCollectionItem = new ToolStripMenuItem("加入资产清单(&L)");
+        var addToCollectionItem = new ToolStripMenuItem("加入项目(&L)");
         addToCollectionItem.Click += async (_, _) => await AddSelectedAssetsToCollectionAsync();
         var publishItem = new ToolStripMenuItem("发布到 OpenWeb(&P)");
         publishItem.Click += async (_, _) => await PublishSelectedArticleAsync();
