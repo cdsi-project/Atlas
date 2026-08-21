@@ -138,6 +138,82 @@ public sealed class ObjectStorageProfileServiceTests
         Assert.Empty(secrets.Values);
     }
 
+    [Fact]
+    public async Task SaveAsync_PersistsQiniuProviderAndRequiresRegion()
+    {
+        using var directory = new TestDirectory();
+        var repository = new SqliteAssetRepository(
+            Path.Combine(directory.Path, "State", "cdsi.db"));
+        await repository.InitializeAsync();
+        var service = new ObjectStorageProfileService(
+            repository,
+            new InMemorySecretStore());
+
+        var missingRegion = await Assert.ThrowsAsync<ArgumentException>(
+            () => service.SaveAsync(new SaveObjectStorageProfileRequest(
+                null,
+                "七牛备份",
+                "s3.cn-east-1.qiniucs.com",
+                "cdsi-assets",
+                null,
+                true,
+                "access-key-id",
+                "access-key-secret",
+                ObjectStorageProvider.QiniuKodo)));
+        Assert.Contains("Region ID", missingRegion.Message);
+
+        var saved = await service.SaveAsync(new SaveObjectStorageProfileRequest(
+            null,
+            "七牛备份",
+            "s3.cn-east-1.qiniucs.com",
+            "cdsi-assets",
+            "cn-east-1",
+            true,
+            "access-key-id",
+            "access-key-secret",
+            ObjectStorageProvider.QiniuKodo));
+
+        Assert.Equal(ObjectStorageProvider.QiniuKodo, saved.Profile.Provider);
+        Assert.Equal("cn-east-1", saved.Profile.Region);
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
+    public async Task SaveAsync_WhenProviderChanges_RequiresNewSecret()
+    {
+        using var directory = new TestDirectory();
+        var repository = new SqliteAssetRepository(
+            Path.Combine(directory.Path, "State", "cdsi.db"));
+        await repository.InitializeAsync();
+        var service = new ObjectStorageProfileService(
+            repository,
+            new InMemorySecretStore());
+        var existing = await service.SaveAsync(new SaveObjectStorageProfileRequest(
+            null,
+            "主备份",
+            "oss-cn-hangzhou.aliyuncs.com",
+            "cdsi-assets",
+            "cn-hangzhou",
+            true,
+            "aliyun-key",
+            "aliyun-secret"));
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(
+            () => service.SaveAsync(new SaveObjectStorageProfileRequest(
+                existing.Profile.Id,
+                "七牛备份",
+                "s3.cn-east-1.qiniucs.com",
+                "cdsi-assets",
+                "cn-east-1",
+                true,
+                "qiniu-key",
+                null,
+                ObjectStorageProvider.QiniuKodo)));
+
+        Assert.Contains("重新填写 AccessKey Secret", exception.Message);
+        SqliteConnection.ClearAllPools();
+    }
+
     private sealed class FailingStorageProfileRepository : IStorageProfileRepository
     {
         public Task<IReadOnlyList<ObjectStorageProfile>> ListStorageProfilesAsync(

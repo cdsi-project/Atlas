@@ -39,14 +39,14 @@ public sealed class ObjectStorageProfileService
     {
         var profile = (await _repository.ListStorageProfilesAsync(cancellationToken))
             .SingleOrDefault(item => item.Id == profileId)
-            ?? throw new InvalidOperationException("OSS 配置不存在或已被删除。");
+            ?? throw new InvalidOperationException("备份配置不存在或已被删除。");
         var secret = await _secretStore.RetrieveAsync(
             CreateSecretKey(profileId),
             cancellationToken);
         if (string.IsNullOrWhiteSpace(secret))
         {
             throw new InvalidOperationException(
-                "OSS 配置缺少 AccessKey Secret，请在设置中重新保存凭据。");
+                "备份配置缺少 AccessKey Secret，请在设置中重新保存凭据。");
         }
 
         return new ObjectStorageConnection(profile, secret);
@@ -63,7 +63,14 @@ public sealed class ObjectStorageProfileService
             : profiles.SingleOrDefault(profile => profile.Id == request.Id.Value);
         if (request.Id is not null && existing is null)
         {
-            throw new InvalidOperationException("OSS 配置不存在或已被删除。");
+            throw new InvalidOperationException("备份配置不存在或已被删除。");
+        }
+
+        if (!Enum.IsDefined(request.Provider))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(request.Provider),
+                "不支持所选备份提供商。");
         }
 
         var id = existing?.Id ?? Guid.NewGuid();
@@ -72,19 +79,30 @@ public sealed class ObjectStorageProfileService
             secretKey,
             cancellationToken);
         var accessKeySecret = request.AccessKeySecret;
-        if (string.IsNullOrWhiteSpace(accessKeySecret) && !hasStoredSecret)
+        var providerChanged = existing is not null &&
+            existing.Provider != request.Provider;
+        if (string.IsNullOrWhiteSpace(accessKeySecret) &&
+            (!hasStoredSecret || providerChanged))
         {
-            throw new ArgumentException("首次保存时必须填写 AccessKey Secret。");
+            throw new ArgumentException(providerChanged
+                ? "更换备份提供商时必须重新填写 AccessKey Secret。"
+                : "首次保存时必须填写 AccessKey Secret。");
+        }
+
+        var region = NormalizeOptional(request.Region, 100, "地域");
+        if (request.Provider == ObjectStorageProvider.QiniuKodo && region is null)
+        {
+            throw new ArgumentException("七牛云 Kodo 配置必须填写 Region ID。");
         }
 
         var now = DateTimeOffset.UtcNow;
         var profile = new ObjectStorageProfile(
             id,
             RequireValue(request.DisplayName, "配置名称", 100),
-            ObjectStorageProvider.AliyunOss,
+            request.Provider,
             NormalizeEndpoint(request.Endpoint, request.UseHttps),
             ValidateBucketName(request.BucketName),
-            NormalizeOptional(request.Region, 100, "地域"),
+            region,
             request.UseHttps,
             RequireValue(request.AccessKeyId, "AccessKey ID", 128),
             existing?.CreatedAt ?? now,
@@ -111,7 +129,7 @@ public sealed class ObjectStorageProfileService
                 catch (Exception cleanupException)
                 {
                     throw new InvalidOperationException(
-                        "OSS 配置保存失败，且临时凭据未能清理。",
+                        "备份配置保存失败，且临时凭据未能清理。",
                         new AggregateException(saveException, cleanupException));
                 }
 
@@ -232,7 +250,8 @@ public sealed record SaveObjectStorageProfileRequest(
     string? Region,
     bool UseHttps,
     string AccessKeyId,
-    string? AccessKeySecret);
+    string? AccessKeySecret,
+    ObjectStorageProvider Provider = ObjectStorageProvider.AliyunOss);
 
 public sealed record ConfiguredObjectStorageProfile(
     ObjectStorageProfile Profile,

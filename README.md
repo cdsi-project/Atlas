@@ -45,7 +45,7 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 - Windows 下使用 Volume GUID 和卷序列号识别本地卷；移动设备盘符变化时只更新 SQLite 路径映射，不重新扫描或哈希文件
 - 运行期间监听设备到达和移除通知；设备拔出后资产位置标记为“设备离线”而不是“位置缺失”，重新插入后进入待确认状态
 - 检测嵌套或重叠扫描目录并提示，位置身份仍按设备和规范化路径保持幂等
-- 在设置页添加多个阿里云 OSS 配置；双击配置可编辑，右键可编辑、复制 Endpoint 或 Bucket 名称以及删除本机配置
+- 在“备份配置”中添加多个阿里云 OSS 或七牛云 Kodo 配置；双击配置可编辑，右键可编辑、复制 Endpoint 或 Bucket 名称以及删除本机配置
 - 在设置页添加多个 OpenWeb 源站；双击源站可编辑，右键可编辑、打开、复制域名、设为默认或删除本机配置；域名规范化后持久化到本机 SQLite
 - 在设置页添加多个 GitHub 或 Gitee（码云）仓库配置；双击配置可编辑，右键可编辑、打开平台网站、复制仓库地址、设为默认或删除本机配置，支持密码与 SSH 两种访问方式
 - 密码方式使用 HTTPS 仓库地址，用户名和密码分别配置；GitHub 可将个人访问令牌作为密码。SSH 方式使用 SSH 仓库地址，默认查找用户 <code>.ssh</code> 目录中的 Ed25519、ECDSA 或 RSA 密钥对
@@ -55,7 +55,7 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 - Markdown 发布支持 YAML Front Matter 中的 <code>slug</code>、<code>categories</code>、<code>category</code>、<code>tags</code> 和 <code>tag</code>；分类和标签按名称匹配，不存在时在用户明确发布文章的过程中创建
 - 保存资产与 WordPress 文章的映射，重复发布同一资产时更新原文章
 - 如果已映射文章在 WordPress 中被删除或失效，发布时会自动新建文章并用新文章 ID 更新本地映射
-- 按阿里云规则校验 Bucket，并规范化 Endpoint、地域和 HTTPS 设置
+- 按对象存储兼容规则校验 Bucket，并规范化提供商、Endpoint、地域和 HTTPS 设置
 - SQLite 只保存非敏感配置；AccessKey Secret、各源站的 WordPress 应用程序密码和 Git 密码按配置独立保存到 Windows 凭据管理器
 - 在资产列表中显示稳定的资产 ID，资产身份不依赖文件名或存储位置
 - 应用层在上传前再次校验所选资产的项目成员关系，不能绕过界面直接备份未分类资产
@@ -71,7 +71,7 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 - OSS 下载使用流式传输和同目录临时文件，完成后校验大小与 SHA-256 再原子落盘；已有相同内容会直接复用，已有不同内容则拒绝覆盖
 - 取回界面显示进度和下载速度，任务及逐文件结果写入本机 SQLite；失败后可从资产右键菜单重新发起
 - 编辑配置时不读取或回显已有 Secret，留空会保留原凭据
-- 删除 OSS 配置只删除本机记录和凭据，不删除 Bucket 或云端对象
+- 删除备份配置只删除本机记录和凭据，不删除 Bucket 或云端对象
 - 配置 OSS 不会触发连接、上传或同步
 - 默认忽略 <code>.git</code>、<code>.vs</code>、<code>node_modules</code>、<code>vendor</code>、<code>bin</code>、<code>obj</code> 等目录
 - 默认不跟随符号链接和 junction
@@ -111,11 +111,11 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 4. 使用“全部资产”页顶部的搜索条件定位文件，或切换到“资产目录”“重复文件”“项目管理”等页签查看不同视图。
 5. 复制、移动、项目同步到 OSS、OSS 取回和 OpenWeb 发布都必须由用户从界面明确发起；新的 OSS 备份要求资产先加入项目。取回时可选择本地目标和远端来源，发布文章时可确认或切换目标源站。单纯扫描或搜索不会修改、上传或下载文件。
 
-## 阿里云 OSS 配置与使用
+## 备份配置与使用
 
-Atlas 当前支持使用阿里云 OSS 保存可校验的资产副本。Atlas 不会代替用户开通 OSS、创建 Bucket、创建 RAM 用户或修改云端权限，也不会因为保存配置而自动连接或上传文件。
+Atlas 当前支持使用阿里云 OSS 或七牛云 Kodo 保存可校验的资产副本。Atlas 不会代替用户开通云服务、创建 Bucket、创建访问凭据或修改云端权限，也不会因为保存配置而自动连接或上传文件。
 
-### 云端准备
+### 阿里云 OSS 云端准备
 
 1. 在阿里云 OSS 控制台创建一个 Bucket。建议为 Atlas 使用独立的私有 Bucket，并根据数据所在地、访问延迟和费用选择地域及存储类型。
 2. 查询该 Bucket 对应的[地域 ID 和外网 Endpoint](https://help.aliyun.com/zh/oss/user-guide/regions-and-endpoints)。普通 Windows 电脑应使用外网 Endpoint；带 <code>-internal</code> 的内网 Endpoint 只适用于同地域的阿里云内网环境。
@@ -144,29 +144,37 @@ Atlas 当前支持使用阿里云 OSS 保存可校验的资产副本。Atlas 不
 
 其中 <code>oss:GetObject</code> 同时用于上传前后的 HEAD 元数据校验和文件取回；<code>oss:PutObject</code> 用于普通及分片上传；<code>oss:ListParts</code> 和 <code>oss:AbortMultipartUpload</code> 用于恢复或清理分片上传。Atlas 不需要列出全部 Bucket，也不需要删除 Object 的权限。阿里云的操作与权限对应关系可参考[分片上传权限说明](https://help.aliyun.com/zh/oss/user-guide/multipart-upload/)和 [HeadObject 权限说明](https://help.aliyun.com/zh/oss/developer-reference/headobject/)。
 
+### 七牛云 Kodo 云端准备
+
+1. 在七牛云对象存储控制台创建一个空间，建议为 Atlas 使用独立的私有空间。
+2. 在七牛云的 [S3 Endpoint 与区域 ID 对照表](https://developer.qiniu.com/kodo/4088/s3-access-domainname)中找到空间所在区域。例如华东-浙江对应 Endpoint <code>s3.cn-east-1.qiniucs.com</code>、Region ID <code>cn-east-1</code>。这里填写 S3 Endpoint，不填写空间绑定的公开访问域名，也不在 Endpoint 前添加空间名称。
+3. 创建或选择具有目标空间读写权限的 AccessKey / SecretKey。Atlas 通过七牛云的 [S3 兼容 API](https://developer.qiniu.com/kodo/4087/compatible-s3-api)执行 HeadObject、GetObject、PutObject 和分片上传；凭据必须允许读取对象、写入对象、列出已上传分片和中止分片上传。Atlas 不需要删除对象权限。
+4. 在空间概览中确认“空间 S3 域名”对应的 S3 空间名称，并将它作为 Atlas 的 Bucket 填写；它可能与常规空间名称不同。当前版本使用路径式 S3 访问，并将 Region ID 用于请求签名；Endpoint、S3 空间名称、空间区域和 Region ID 必须相互对应。
+
 ### 在 Atlas 中添加配置
 
-打开“设置”一级菜单，进入“OSS 配置”页签，点击“添加配置”并填写：
+打开“设置”一级菜单，进入“备份配置”页签，点击“添加配置”并填写：
 
 | 配置项 | 填写说明 | 示例 |
 | --- | --- | --- |
-| 配置名称 | 仅用于本机区分多个 OSS 配置 | 主 OSS |
-| Endpoint | Bucket 所在地域的访问节点，不包含 Bucket 名称、路径或查询参数 | <code>oss-cn-beijing.aliyuncs.com</code> |
-| Bucket | 已创建的 Bucket 完整名称 | <code>cdsi-assets</code> |
-| 地域 | 与 Bucket 和 Endpoint 对应的地域 ID；建议明确填写 | <code>cn-beijing</code> |
-| AccessKey ID | 专用 RAM 用户的 AccessKey ID | 由阿里云生成 |
-| AccessKey Secret | 首次保存必填；编辑时留空可保留原凭据 | 由阿里云生成 |
+| 提供商 | 选择“阿里云 OSS”或“七牛云 Kodo” | 七牛云 Kodo |
+| 配置名称 | 仅用于本机区分多个备份配置 | 七牛主备份 |
+| Endpoint | Bucket 所在地域的访问节点，不包含 Bucket 名称、路径或查询参数 | <code>s3.cn-east-1.qiniucs.com</code> |
+| Bucket | 阿里云 Bucket 名称或七牛 S3 空间名称 | <code>cdsi-assets</code> |
+| 地域 / Region ID | 与 Bucket 和 Endpoint 对应；七牛云 Kodo 必填 | <code>cn-east-1</code> |
+| AccessKey ID | 阿里云 AccessKey ID 或七牛 AccessKey | 由云服务商生成 |
+| AccessKey Secret | 阿里云 AccessKey Secret 或七牛 SecretKey；首次保存必填 | 由云服务商生成 |
 | 使用 HTTPS | 建议始终勾选 | 已勾选 |
 
-Endpoint 可填写主机名，也可填写与“使用 HTTPS”选项一致的完整 URL，但不能填写 <code>Bucket.Endpoint</code> 形式的 Bucket 域名。保存后，非敏感字段写入本机 SQLite，AccessKey Secret 独立写入当前 Windows 用户的凭据管理器。当前版本保存配置时不执行连接测试；首次备份或取回成功，才表示 Endpoint、Bucket、凭据和权限可以协同工作。
+Endpoint 可填写主机名，也可填写与“使用 HTTPS”选项一致的完整 URL，但不能填写 <code>Bucket.Endpoint</code> 形式的 Bucket 域名。切换提供商时必须重新填写 Secret，防止沿用另一家服务商的旧凭据。保存后，非敏感字段写入本机 SQLite，Secret 独立写入当前 Windows 用户的凭据管理器。当前版本保存配置时不执行连接测试；首次备份或取回成功，才表示提供商、Endpoint、Bucket、区域、凭据和权限可以协同工作。
 
-配置列表支持保存多个 Bucket。双击配置可编辑；右键可编辑、复制 Endpoint、复制 Bucket 名称或删除本机配置。删除配置不会删除 Bucket、云端 Object 或已经登记的资产记录。
+配置列表支持混合保存多个提供商和 Bucket。双击配置可编辑；右键可编辑、复制 Endpoint、复制 Bucket 名称或删除本机配置。删除配置不会删除 Bucket、云端 Object 或已经登记的资产记录。
 
 ### 备份、同步与取回
 
 1. 先在“项目管理”中创建项目，并通过“全部资产”右键菜单把资产加入项目。一个资产可以属于多个项目。
 2. 在“全部资产”中单选或多选本地可用资产，右键选择“同步到 OSS”。菜单会列出所有所选资产共同所属的项目；没有共同项目时，选择“加入项目并备份...”可加入已有项目或新建项目后继续。
-3. 在确认窗口选择目标 OSS 配置并核对项目和源文件清单；确认后才开始上传。即使随后取消上传或上传失败，已完成的项目分类仍会保留。
+3. 在确认窗口选择目标备份配置并核对项目和源文件清单；确认后才开始上传。即使随后取消上传或上传失败，已完成的项目分类仍会保留。
 4. 也可在“项目管理”中右键项目并选择“同步到 OSS”。项目名称作为 OSS 目录名，项目内文件名保持原样，即 <code>&lt;项目名称&gt;/&lt;原文件名&gt;</code>。同一项目存在同名文件时会拒绝同步，避免多个资产写入同一个对象。
 5. 大文件自动使用分片上传，失败或取消后可重试续传。上传完成后，Atlas 会通过对象大小和 <code>cdsi-sha256</code> 元数据校验结果；通过校验的备份在资产列表中以绿色显示。
 6. 需要恢复时，在“全部资产”中选择资产，右键选择“从 OSS 取回”。只能选择本机已登记且完整性状态正常的 OSS 副本；目标可选 CDSI 工作目录或用户指定目录。
@@ -178,14 +186,14 @@ Atlas 保存的是 Bucket、对象键、大小、SHA-256 和校验状态，不�
 
 | 提示或现象 | 检查方法 |
 | --- | --- |
-| <code>403 AccessDenied</code> | 检查 AccessKey 所属 RAM 用户是否拥有上述四项权限，并确认策略中的 Bucket 名称正确。 |
+| <code>403 AccessDenied</code> | 检查 AccessKey 是否拥有目标 Bucket 的读写及分片上传权限，并确认 Bucket 名称正确。 |
 | <code>404 NoSuchKey</code> | 检查已登记的对象是否被其他工具删除或改名，以及当前配置是否指向原 Bucket。Atlas 不会自动删除云端对象。 |
-| <code>SignatureDoesNotMatch</code> 或凭据无效 | 重新核对 AccessKey ID/Secret；Secret 无法从阿里云再次查看，遗失后应创建并轮换新的 AccessKey。 |
-| Endpoint 错误、超时或无法连接 | 确认 Endpoint 与 Bucket 地域一致；普通电脑使用外网 Endpoint，不要使用带 <code>-internal</code> 的内网地址。 |
+| <code>SignatureDoesNotMatch</code> 或凭据无效 | 重新核对提供商、AccessKey ID/Secret 和 Region ID；遗失 Secret 后应在云服务商控制台创建并轮换新的访问凭据。 |
+| Endpoint 错误、超时或无法连接 | 确认 Endpoint 与 Bucket 地域一致；阿里云普通电脑使用外网 Endpoint，七牛云使用对应区域的 S3 Endpoint。 |
 | 提示缺少 AccessKey Secret | 双击配置重新编辑并填写 Secret；凭据按 Windows 用户保存，切换账户或迁移数据库不会自动迁移凭据。 |
 | 目标对象已存在且内容不同 | Atlas 默认拒绝覆盖。检查项目内的同名文件或云端已有对象，处理冲突后重试。 |
 
-OSS 存储容量、请求次数、下行流量、低频或归档数据取回等费用由阿里云按 Bucket 配置计费。Atlas 不会设置生命周期、版本控制、服务端加密或归档解冻策略；启用这些云端功能前，应确认不会导致备份被自动删除、无法直接取回或产生额外费用。
+对象存储容量、请求次数、下行流量、低频或归档数据取回等费用由所选云服务商按 Bucket 配置计费。Atlas 不会设置生命周期、版本控制、服务端加密或归档解冻策略；启用这些云端功能前，应确认不会导致备份被自动删除、无法直接取回或产生额外费用。
 
 ### Markdown 发布元数据
 
@@ -217,7 +225,7 @@ CDSI Atlas 采用本地优先、默认非破坏性的处理方式，但不能替
 - “移动”是需要用户确认的显式操作。系统只在目标副本写入、校验和登记成功后删除源文件，但移动仍会改变文件位置，执行前应核对确认清单并保留必要备份。
 - OSS 备份只上传用户明确选择并确认的文件。上传使用只读流，拒绝覆盖同一对象键下内容不同的远端对象，完成后验证对象大小和 SHA-256 元数据。
 - OSS 取回只下载用户明确选择并确认的健康备份。下载先写临时文件，大小和 SHA-256 校验通过后才登记；目标已有不同内容时拒绝覆盖，失败的临时文件不会成为资产位置。
-- 删除 OSS 配置不会删除 Bucket 中的对象；文件离线或扫描暂时失败也不会删除逻辑资产记录。
+- 删除备份配置不会删除 Bucket 中的对象；文件离线或扫描暂时失败也不会删除逻辑资产记录。
 
 ### 密码与凭据
 
@@ -225,7 +233,7 @@ CDSI Atlas 采用本地优先、默认非破坏性的处理方式，但不能替
 - SQLite 会保存连接所需的非密码信息，例如 AccessKey ID、Endpoint、Bucket、各 WordPress 源站域名和用户名，以及 Git 平台、仓库地址、访问方式、用户名、默认分支和 SSH 公钥路径。AccessKey ID 和仓库地址不是 Secret，但仍不建议公开。
 - 当前应用没有独立的主密码，也没有对 SQLite 数据库进行应用层加密；本机数据的访问控制依赖 Windows 账户权限。建议为 Windows 账户设置强密码。
 - SSH 私钥始终由系统 OpenSSH 和用户管理，Atlas 只检查对应私钥是否存在并保存公钥路径，不读取、复制或上传私钥。“生成新密钥”会在 <code>.ssh</code> 中选择未占用的 Atlas 专用文件名，不覆盖已有密钥；生成时应设置口令，并将公钥添加到所选 GitHub 或 Gitee 账号。
-- WordPress 发布固定使用 HTTPS。OSS 配置允许选择 HTTP 或 HTTPS；为避免凭据和文件在传输中暴露，应始终启用 HTTPS。
+- WordPress 发布固定使用 HTTPS。备份配置允许选择 HTTP 或 HTTPS；为避免凭据和文件在传输中暴露，应始终启用 HTTPS。
 - 建议为 OSS 使用权限最小化、可轮换的专用凭据。备份至少需要目标对象的写入和读取元数据权限，取回需要 <code>oss:GetObject</code>；为 WordPress 使用应用程序密码而不是账户主密码。凭据泄露后应立即在服务端撤销并重新生成。
 
 ### 隐私与网络
@@ -335,7 +343,7 @@ CDSI Atlas 由 CDSI Project 以 [Apache License 2.0](LICENSE) 发布。该协议
 
 工作目录由用户首次启动时选择，推荐路径为 <code>D:\cdsi_workspace</code>；如果 D 盘不可用，则使用用户目录下的 <code>cdsi_workspace</code>。切换工作目录不会搬移或删除旧内容。
 
-扫描、索引、哈希和元数据提取只读取扫描目标。资产标签、项目及其成员关系保存在本机 SQLite 中，不写入文件内容、不重命名文件，也不改变文件的物理位置。用户可在资产列表中显式复制或移动选中的文件到 CDSI 工作目录；新的 OSS 备份要求资产先加入项目，并在确认目标 Bucket、项目和源文件清单后同步，已有的健康 OSS 副本仍可取回。这些操作失败时不覆盖既有本地文件。文件操作审计、上传断点、取回审计和非敏感 OSS 配置保存在本机 SQLite 中；AccessKey Secret 保存在当前 Windows 用户的凭据管理器中。仅配置 OSS、创建标签、创建项目或执行扫描不会自动上传或下载。测试只使用 <code>%TEMP%\cdsi-agent-tests\&lt;随机目录&gt;</code>，不会扫描或清理真实用户目录，也不会连接真实 OSS。
+扫描、索引、哈希和元数据提取只读取扫描目标。资产标签、项目及其成员关系保存在本机 SQLite 中，不写入文件内容、不重命名文件，也不改变文件的物理位置。用户可在资产列表中显式复制或移动选中的文件到 CDSI 工作目录；新的对象存储备份要求资产先加入项目，并在确认目标 Bucket、项目和源文件清单后同步，已有的健康远端副本仍可取回。这些操作失败时不覆盖既有本地文件。文件操作审计、上传断点、取回审计和非敏感备份配置保存在本机 SQLite 中；AccessKey Secret 保存在当前 Windows 用户的凭据管理器中。仅配置备份存储、创建标签、创建项目或执行扫描不会自动上传或下载。测试只使用 <code>%TEMP%\cdsi-agent-tests\&lt;随机目录&gt;</code>，不会扫描或清理真实用户目录，也不会连接真实对象存储。
 
 本地卷以 Volume GUID 为主要身份，扫描根和资产位置同时保存卷内相对路径。盘符变化只触发卷枚举和数据库路径重映射，不遍历文件。移动设备离线期间可能在其他电脑上发生内容变化，因此重新接入后的文件位置会先标记为待确认；当前仍需后续扫描完成内容对账，未来可在 NTFS 卷上通过 USN Change Journal 执行增量对账。
 

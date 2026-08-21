@@ -6,6 +6,7 @@ namespace CDSI.Agent.WinForms;
 public sealed class OssProfileDialog : Form
 {
     private readonly Guid? _profileId;
+    private readonly ComboBox _providerComboBox = new();
     private readonly TextBox _displayNameTextBox = new();
     private readonly TextBox _endpointTextBox = new();
     private readonly TextBox _bucketTextBox = new();
@@ -18,10 +19,10 @@ public sealed class OssProfileDialog : Form
     {
         _profileId = profile?.Id;
 
-        Text = profile is null ? "添加 OSS 配置" : "编辑 OSS 配置";
+        Text = profile is null ? "添加备份配置" : "编辑备份配置";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(610, 470);
-        MinimumSize = new Size(560, 470);
+        ClientSize = new Size(650, 530);
+        MinimumSize = new Size(600, 530);
         MaximizeBox = false;
         MinimizeBox = false;
         ShowInTaskbar = false;
@@ -32,13 +33,13 @@ public sealed class OssProfileDialog : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 9,
+            RowCount = 10,
             Padding = new Padding(24),
             BackColor = Color.White
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        for (var row = 0; row < 7; row++)
+        for (var row = 0; row < 8; row++)
         {
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
         }
@@ -46,12 +47,19 @@ public sealed class OssProfileDialog : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
 
-        AddField(layout, 0, "配置名称", _displayNameTextBox);
-        AddField(layout, 1, "Endpoint", _endpointTextBox);
-        AddField(layout, 2, "Bucket", _bucketTextBox);
-        AddField(layout, 3, "地域", _regionTextBox);
-        AddField(layout, 4, "AccessKey ID", _accessKeyIdTextBox);
-        AddField(layout, 5, "AccessKey Secret", _accessKeySecretTextBox);
+        _providerComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+        _providerComboBox.Items.AddRange(
+        [
+            new ProviderChoice("阿里云 OSS", ObjectStorageProvider.AliyunOss),
+            new ProviderChoice("七牛云 Kodo", ObjectStorageProvider.QiniuKodo)
+        ]);
+        AddField(layout, 0, "提供商", _providerComboBox);
+        AddField(layout, 1, "配置名称", _displayNameTextBox);
+        AddField(layout, 2, "Endpoint", _endpointTextBox);
+        AddField(layout, 3, "Bucket", _bucketTextBox);
+        AddField(layout, 4, "地域 / Region ID", _regionTextBox);
+        AddField(layout, 5, "AccessKey ID", _accessKeyIdTextBox);
+        AddField(layout, 6, "AccessKey Secret", _accessKeySecretTextBox);
 
         _accessKeySecretTextBox.UseSystemPasswordChar = true;
         _accessKeySecretTextBox.AccessibleName = "AccessKey Secret";
@@ -64,7 +72,7 @@ public sealed class OssProfileDialog : Form
         _useHttpsCheckBox.AutoSize = true;
         _useHttpsCheckBox.Dock = DockStyle.Fill;
         _useHttpsCheckBox.Margin = new Padding(0, 8, 0, 8);
-        layout.Controls.Add(_useHttpsCheckBox, 1, 6);
+        layout.Controls.Add(_useHttpsCheckBox, 1, 7);
 
         var securityNote = new Label
         {
@@ -74,7 +82,7 @@ public sealed class OssProfileDialog : Form
             TextAlign = ContentAlignment.TopLeft,
             Padding = new Padding(0, 8, 0, 0)
         };
-        layout.Controls.Add(securityNote, 0, 7);
+        layout.Controls.Add(securityNote, 0, 8);
         layout.SetColumnSpan(securityNote, 2);
 
         var buttons = new FlowLayoutPanel
@@ -97,7 +105,7 @@ public sealed class OssProfileDialog : Form
         cancelButton.Size = new Size(88, 32);
         buttons.Controls.Add(saveButton);
         buttons.Controls.Add(cancelButton);
-        layout.Controls.Add(buttons, 0, 8);
+        layout.Controls.Add(buttons, 0, 9);
         layout.SetColumnSpan(buttons, 2);
 
         AcceptButton = saveButton;
@@ -106,6 +114,7 @@ public sealed class OssProfileDialog : Form
 
         if (profile is not null)
         {
+            SelectProvider(profile.Provider);
             _displayNameTextBox.Text = profile.DisplayName;
             _endpointTextBox.Text = profile.Endpoint;
             _bucketTextBox.Text = profile.BucketName;
@@ -114,10 +123,14 @@ public sealed class OssProfileDialog : Form
         }
         else
         {
-            _displayNameTextBox.Text = "主 OSS";
+            SelectProvider(ObjectStorageProvider.AliyunOss);
+            _displayNameTextBox.Text = "主备份";
             _endpointTextBox.Text = "oss-cn-hangzhou.aliyuncs.com";
             _regionTextBox.Text = "cn-hangzhou";
         }
+
+        _providerComboBox.SelectedIndexChanged += (_, _) =>
+            ApplyProviderDefaults();
     }
 
     public SaveObjectStorageProfileRequest CreateRequest()
@@ -132,14 +145,20 @@ public sealed class OssProfileDialog : Form
             _accessKeyIdTextBox.Text,
             string.IsNullOrEmpty(_accessKeySecretTextBox.Text)
                 ? null
-                : _accessKeySecretTextBox.Text);
+                : _accessKeySecretTextBox.Text,
+            SelectedProvider);
     }
+
+    internal ObjectStorageProvider SelectedProvider =>
+        _providerComboBox.SelectedItem is ProviderChoice choice
+            ? choice.Provider
+            : ObjectStorageProvider.AliyunOss;
 
     private static void AddField(
         TableLayoutPanel layout,
         int row,
         string labelText,
-        TextBox textBox)
+        Control control)
     {
         var label = new Label
         {
@@ -148,13 +167,71 @@ public sealed class OssProfileDialog : Form
             TextAlign = ContentAlignment.MiddleLeft,
             ForeColor = Color.FromArgb(52, 61, 69)
         };
-        textBox.Dock = DockStyle.Fill;
-        textBox.Margin = new Padding(0, 8, 0, 8);
-        textBox.BorderStyle = BorderStyle.FixedSingle;
-        textBox.AccessibleName ??= labelText;
+        control.Dock = DockStyle.Fill;
+        control.Margin = new Padding(0, 8, 0, 8);
+        if (control is TextBox textBox)
+        {
+            textBox.BorderStyle = BorderStyle.FixedSingle;
+        }
+
+        control.AccessibleName ??= labelText;
 
         layout.Controls.Add(label, 0, row);
-        layout.Controls.Add(textBox, 1, row);
+        layout.Controls.Add(control, 1, row);
+    }
+
+    private void SelectProvider(ObjectStorageProvider provider)
+    {
+        for (var index = 0; index < _providerComboBox.Items.Count; index++)
+        {
+            if (_providerComboBox.Items[index] is ProviderChoice choice &&
+                choice.Provider == provider)
+            {
+                _providerComboBox.SelectedIndex = index;
+                return;
+            }
+        }
+
+        _providerComboBox.SelectedIndex = 0;
+    }
+
+    private void ApplyProviderDefaults()
+    {
+        if (SelectedProvider == ObjectStorageProvider.QiniuKodo)
+        {
+            if (string.IsNullOrWhiteSpace(_endpointTextBox.Text) ||
+                _endpointTextBox.Text.Contains("aliyuncs.com", StringComparison.OrdinalIgnoreCase))
+            {
+                _endpointTextBox.Text = "s3.cn-east-1.qiniucs.com";
+            }
+
+            if (string.IsNullOrWhiteSpace(_regionTextBox.Text) ||
+                _regionTextBox.Text.StartsWith("cn-hangzhou", StringComparison.OrdinalIgnoreCase))
+            {
+                _regionTextBox.Text = "cn-east-1";
+            }
+
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_endpointTextBox.Text) ||
+            _endpointTextBox.Text.Contains("qiniucs.com", StringComparison.OrdinalIgnoreCase))
+        {
+            _endpointTextBox.Text = "oss-cn-hangzhou.aliyuncs.com";
+        }
+
+        if (string.IsNullOrWhiteSpace(_regionTextBox.Text) ||
+            _regionTextBox.Text.StartsWith("cn-east-", StringComparison.OrdinalIgnoreCase))
+        {
+            _regionTextBox.Text = "cn-hangzhou";
+        }
+    }
+
+    private sealed record ProviderChoice(
+        string DisplayName,
+        ObjectStorageProvider Provider)
+    {
+        public override string ToString() => DisplayName;
     }
 
     private static Button CreateButton(string text, Color background, Color foreground)

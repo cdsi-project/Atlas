@@ -22,7 +22,7 @@ internal sealed partial class OssBackupConfirmationForm : Form
         ArgumentNullException.ThrowIfNull(assets);
         if (profiles.Count == 0)
         {
-            throw new ArgumentException("至少需要一个可用的 OSS 配置。", nameof(profiles));
+            throw new ArgumentException("至少需要一个可用的备份配置。", nameof(profiles));
         }
         if (assets.Count == 0)
         {

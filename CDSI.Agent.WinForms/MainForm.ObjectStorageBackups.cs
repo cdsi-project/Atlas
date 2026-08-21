@@ -164,7 +164,7 @@ public sealed partial class MainForm
         }
         catch (Exception exception)
         {
-            ShowError("无法读取 OSS 配置", exception);
+            ShowError("无法读取备份配置", exception);
             return;
         }
 
@@ -172,7 +172,7 @@ public sealed partial class MainForm
         {
             MessageBox.Show(
                 this,
-                "尚未配置带有效凭据的 OSS。请先在“设置”中添加 OSS 配置。",
+                "尚未配置带有效凭据的备份存储。请先在“设置”的“备份配置”中添加配置。",
                 "CDSI Atlas",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);

@@ -14,5 +14,6 @@ public sealed record ObjectStorageProfile(
 
 public enum ObjectStorageProvider
 {
-    AliyunOss
+    AliyunOss,
+    QiniuKodo
 }

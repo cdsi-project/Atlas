@@ -8,6 +8,7 @@ using CDSI.Agent.Application.Scanning;
 using CDSI.Agent.Application.Storage;
 using CDSI.Agent.Application.Transfers;
 using CDSI.Agent.Application.Workspaces;
+using CDSI.Agent.Core.Abstractions;
 using CDSI.Agent.Infrastructure.FileSystem;
 using CDSI.Agent.Infrastructure.Fingerprints;
 using CDSI.Agent.Infrastructure.Metadata;
@@ -69,7 +70,11 @@ static class Program
                 {
                     Timeout = TimeSpan.FromSeconds(60)
                 }));
-            var objectStorageAdapters = new[] { new AliyunOssStorageAdapter() };
+            IObjectStorageAdapter[] objectStorageAdapters =
+            [
+                new AliyunOssStorageAdapter(),
+                new QiniuKodoStorageAdapter()
+            ];
             var objectStorageBackupService = new ObjectStorageBackupService(
                 repository,
                 repository,

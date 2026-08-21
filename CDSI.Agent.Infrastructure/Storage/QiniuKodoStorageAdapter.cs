@@ -1,22 +1,21 @@
 using System.Globalization;
-using AlibabaCloud.OSS.V2;
-using AlibabaCloud.OSS.V2.Credentials;
-using AlibabaCloud.OSS.V2.IO;
-using AlibabaCloud.OSS.V2.Models;
+using System.Net;
+using Amazon.Runtime;
+using Amazon.S3;
+using Amazon.S3.Model;
 using CDSI.Agent.Core.Abstractions;
 using CDSI.Agent.Core.Storage;
-using OSS = AlibabaCloud.OSS.V2;
 
 namespace CDSI.Agent.Infrastructure.Storage;
 
-public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
+public sealed class QiniuKodoStorageAdapter : IObjectStorageAdapter
 {
     private const long DefaultPartSize = 16L * 1024 * 1024;
     private const long MaximumPartCount = 10_000;
     private const string Sha256MetadataKey = "cdsi-sha256";
     private const string AssetIdMetadataKey = "cdsi-asset-id";
 
-    public ObjectStorageProvider Provider => ObjectStorageProvider.AliyunOss;
+    public ObjectStorageProvider Provider => ObjectStorageProvider.QiniuKodo;
 
     public async Task<ObjectStorageObjectInfo?> StatAsync(
         ObjectStorageConnection connection,
@@ -46,11 +45,7 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
 
         if (request.Size < DefaultPartSize)
         {
-            await UploadSingleObjectAsync(
-                client,
-                request,
-                progress,
-                cancellationToken);
+            await UploadSingleObjectAsync(client, request, progress, cancellationToken);
         }
         else
         {
@@ -68,7 +63,7 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
             request.Connection.Profile.BucketName,
             request.ObjectKey,
             cancellationToken)
-            ?? throw new IOException("OSS 上传完成后未找到目标对象。");
+            ?? throw new IOException("七牛云 Kodo 上传完成后未找到目标对象。");
         return new ObjectStorageTransferResult(uploaded, Uploaded: true);
     }
 
@@ -88,55 +83,48 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
         }
 
         using var client = CreateClient(connection);
-        var result = await client.GetObjectAsync(
+        using var response = await client.GetObjectAsync(
             new GetObjectRequest
             {
-                Bucket = connection.Profile.BucketName,
-                Key = objectKey,
-                ProgressFn = (_, transferred, total) =>
-                    progress?.Report(new ObjectStorageDownloadProgress(
-                        transferred,
-                        total,
-                        "正在下载"))
+                BucketName = connection.Profile.BucketName,
+                Key = objectKey
             },
-            cancellationToken: cancellationToken);
-        if (result.Body is null)
+            cancellationToken);
+        var total = response.ContentLength;
+        var downloaded = 0L;
+        var buffer = new byte[1024 * 1024];
+        while (true)
         {
-            throw new IOException("OSS 下载响应缺少对象数据流。");
-        }
-
-        await using (result.Body)
-        {
-            await result.Body.CopyToAsync(
-                destination,
-                1024 * 1024,
+            var read = await response.ResponseStream.ReadAsync(
+                buffer.AsMemory(),
                 cancellationToken);
-        }
+            if (read == 0)
+            {
+                break;
+            }
 
-        var size = result.ContentLength
-            ?? throw new IOException("OSS 下载响应缺少 Content-Length。");
-        DateTimeOffset? lastModified = null;
-        if (DateTimeOffset.TryParse(
-                result.LastModified,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.AssumeUniversal,
-                out var parsed))
-        {
-            lastModified = parsed;
+            await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+            downloaded += read;
+            progress?.Report(new ObjectStorageDownloadProgress(
+                downloaded,
+                total,
+                "正在下载"));
         }
 
         progress?.Report(new ObjectStorageDownloadProgress(
-            size,
-            size,
+            downloaded,
+            total,
             "下载完成"));
         return new ObjectStorageDownloadResult(
             new ObjectStorageObjectInfo(
                 objectKey,
-                size,
-                ReadMetadata(result.Metadata, Sha256MetadataKey),
-                result.ETag,
-                lastModified),
-            size);
+                total,
+                ReadMetadata(response.Metadata, Sha256MetadataKey),
+                response.ETag,
+                response.LastModified is null
+                    ? null
+                    : new DateTimeOffset(response.LastModified.Value, TimeSpan.Zero)),
+            downloaded);
     }
 
     public async Task AbortMultipartUploadAsync(
@@ -152,44 +140,44 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
             await client.AbortMultipartUploadAsync(
                 new AbortMultipartUploadRequest
                 {
-                    Bucket = connection.Profile.BucketName,
+                    BucketName = connection.Profile.BucketName,
                     Key = session.ObjectKey,
                     UploadId = session.UploadId
                 },
-                cancellationToken: cancellationToken);
+                cancellationToken);
         }
         catch (Exception exception) when (IsMissingUpload(exception))
         {
-            // The remote upload session has already expired or been removed.
         }
     }
 
     private static async Task UploadSingleObjectAsync(
-        Client client,
+        IAmazonS3 client,
         ObjectStorageTransferRequest request,
         IProgress<ObjectStorageTransferProgress>? progress,
         CancellationToken cancellationToken)
     {
         await using var source = OpenSource(request.SourcePath);
-        var result = await client.PutObjectAsync(
-            new PutObjectRequest
-            {
-                Bucket = request.Connection.Profile.BucketName,
-                Key = request.ObjectKey,
-                Body = source,
-                ContentLength = request.Size,
-                ForbidOverwrite = true,
-                Metadata = CreateMetadata(request),
-                ProgressFn = (_, transferred, total) =>
-                    progress?.Report(new ObjectStorageTransferProgress(
-                        transferred,
-                        transferred,
-                        total,
-                        CompletedParts: transferred >= total ? 1 : 0,
-                        TotalParts: 1,
-                        "正在上传"))
-            },
-            cancellationToken: cancellationToken);
+        using var progressStream = new ProgressReadStream(
+            source,
+            transferred => progress?.Report(new ObjectStorageTransferProgress(
+                transferred,
+                transferred,
+                request.Size,
+                transferred >= request.Size ? 1 : 0,
+                TotalParts: 1,
+                "正在上传")));
+        var upload = new PutObjectRequest
+        {
+            BucketName = request.Connection.Profile.BucketName,
+            Key = request.ObjectKey,
+            InputStream = progressStream,
+            AutoCloseStream = false,
+            AutoResetStreamPosition = false,
+            IfNoneMatch = "*"
+        };
+        AddMetadata(upload.Metadata, request);
+        var result = await client.PutObjectAsync(upload, cancellationToken);
         progress?.Report(new ObjectStorageTransferProgress(
             request.Size,
             request.Size,
@@ -200,7 +188,7 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
     }
 
     private static async Task UploadMultipartAsync(
-        Client client,
+        IAmazonS3 client,
         ObjectStorageTransferRequest request,
         Func<MultipartUploadSession, CancellationToken, Task> saveCheckpoint,
         IProgress<ObjectStorageTransferProgress>? progress,
@@ -271,7 +259,7 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
                 continue;
             }
 
-            var partResult = await UploadPartAsync(
+            var etag = await UploadPartAsync(
                 client,
                 request,
                 session.UploadId,
@@ -284,13 +272,6 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
                 totalParts,
                 progress,
                 cancellationToken);
-            var etag = partResult.ETag;
-            if (string.IsNullOrWhiteSpace(etag))
-            {
-                throw new IOException(
-                    "OSS 分片上传响应缺少 ETag，已保留会话等待重试。");
-            }
-
             uploadedParts[partNumber] = new MultipartUploadPart(
                 partNumber,
                 etag,
@@ -314,36 +295,29 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
                 $"已上传分片 {partNumber:N0}/{totalParts:N0}"));
         }
 
-        var completeParts = uploadedParts.Values
+        var partEtags = uploadedParts.Values
             .OrderBy(part => part.PartNumber)
-            .Select(part => new UploadPart
-            {
-                PartNumber = part.PartNumber,
-                ETag = part.ETag
-            })
+            .Select(part => new PartETag(checked((int)part.PartNumber), part.ETag))
             .ToList();
-        if (completeParts.Count != totalParts)
+        if (partEtags.Count != totalParts)
         {
-            throw new IOException("OSS 分片数量不完整，保留会话等待重试。");
+            throw new IOException("七牛云 Kodo 分片数量不完整，保留会话等待重试。");
         }
 
         await client.CompleteMultipartUploadAsync(
             new CompleteMultipartUploadRequest
             {
-                Bucket = request.Connection.Profile.BucketName,
+                BucketName = request.Connection.Profile.BucketName,
                 Key = request.ObjectKey,
                 UploadId = session.UploadId,
-                ForbidOverwrite = true,
-                CompleteMultipartUpload = new CompleteMultipartUpload
-                {
-                    Parts = completeParts
-                }
+                PartETags = partEtags,
+                IfNoneMatch = "*"
             },
-            cancellationToken: cancellationToken);
+            cancellationToken);
     }
 
-    private static async Task<UploadPartResult> UploadPartAsync(
-        Client client,
+    private static async Task<string> UploadPartAsync(
+        IAmazonS3 client,
         ObjectStorageTransferRequest request,
         string uploadId,
         int partNumber,
@@ -356,47 +330,51 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
         IProgress<ObjectStorageTransferProgress>? progress,
         CancellationToken cancellationToken)
     {
-        await using var file = OpenSource(request.SourcePath);
-        using var body = new BoundedStream(file, offset, size);
-        return await client.UploadPartAsync(
+        await using var source = OpenSource(request.SourcePath);
+        source.Position = offset;
+        using var progressStream = new ProgressReadStream(
+            source,
+            transferred => progress?.Report(new ObjectStorageTransferProgress(
+                completedBytes + transferred,
+                currentRunTransferredBytes + transferred,
+                request.Size,
+                completedParts,
+                totalParts,
+                $"正在上传分片 {partNumber:N0}/{totalParts:N0}")));
+        var result = await client.UploadPartAsync(
             new UploadPartRequest
             {
-                Bucket = request.Connection.Profile.BucketName,
+                BucketName = request.Connection.Profile.BucketName,
                 Key = request.ObjectKey,
                 UploadId = uploadId,
                 PartNumber = partNumber,
-                ContentLength = size,
-                Body = body,
-                ProgressFn = (_, transferred, _) =>
-                    progress?.Report(new ObjectStorageTransferProgress(
-                        completedBytes + transferred,
-                        currentRunTransferredBytes + transferred,
-                        request.Size,
-                        completedParts,
-                        totalParts,
-                        $"正在上传分片 {partNumber:N0}/{totalParts:N0}"))
+                PartSize = size,
+                FilePosition = offset,
+                InputStream = progressStream
             },
-            cancellationToken: cancellationToken);
+            cancellationToken);
+        return string.IsNullOrWhiteSpace(result.ETag)
+            ? throw new IOException(
+                "七牛云 Kodo 分片上传响应缺少 ETag，已保留会话等待重试。")
+            : result.ETag;
     }
 
     private static async Task<MultipartUploadSession> InitiateMultipartUploadAsync(
-        Client client,
+        IAmazonS3 client,
         ObjectStorageTransferRequest request,
         long partSize,
         CancellationToken cancellationToken)
     {
-        var result = await client.InitiateMultipartUploadAsync(
-            new InitiateMultipartUploadRequest
-            {
-                Bucket = request.Connection.Profile.BucketName,
-                Key = request.ObjectKey,
-                ForbidOverwrite = true,
-                Metadata = CreateMetadata(request)
-            },
-            cancellationToken: cancellationToken);
+        var upload = new InitiateMultipartUploadRequest
+        {
+            BucketName = request.Connection.Profile.BucketName,
+            Key = request.ObjectKey
+        };
+        AddMetadata(upload.Metadata, request);
+        var result = await client.InitiateMultipartUploadAsync(upload, cancellationToken);
         if (string.IsNullOrWhiteSpace(result.UploadId))
         {
-            throw new IOException("OSS 未返回分片上传 ID。");
+            throw new IOException("七牛云 Kodo 未返回分片上传 ID。");
         }
 
         return new MultipartUploadSession(
@@ -414,22 +392,26 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
 
     private static async Task<Dictionary<long, MultipartUploadPart>>
         ListUploadedPartsAsync(
-            Client client,
+            IAmazonS3 client,
             string bucket,
             string objectKey,
             string uploadId,
             CancellationToken cancellationToken)
     {
         var parts = new Dictionary<long, MultipartUploadPart>();
-        var paginator = client.ListPartsPaginator(new ListPartsRequest
+        string? marker = null;
+        do
         {
-            Bucket = bucket,
-            Key = objectKey,
-            UploadId = uploadId
-        });
-        await foreach (var page in paginator.IterPageAsync(cancellationToken))
-        {
-            foreach (var part in page.Parts ?? [])
+            var response = await client.ListPartsAsync(
+                new ListPartsRequest
+                {
+                    BucketName = bucket,
+                    Key = objectKey,
+                    UploadId = uploadId,
+                    PartNumberMarker = marker
+                },
+                cancellationToken);
+            foreach (var part in response.Parts ?? [])
             {
                 if (part.PartNumber is null ||
                     part.Size is null ||
@@ -443,47 +425,39 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
                     part.ETag,
                     part.Size.Value);
             }
+
+            marker = response.IsTruncated == true
+                ? response.NextPartNumberMarker?.ToString(CultureInfo.InvariantCulture)
+                : null;
         }
+        while (marker is not null);
 
         return parts;
     }
 
     private static async Task<ObjectStorageObjectInfo?> StatWithClientAsync(
-        Client client,
+        IAmazonS3 client,
         string bucket,
         string objectKey,
         CancellationToken cancellationToken)
     {
         try
         {
-            var result = await client.HeadObjectAsync(
-                new HeadObjectRequest
+            var result = await client.GetObjectMetadataAsync(
+                new GetObjectMetadataRequest
                 {
-                    Bucket = bucket,
+                    BucketName = bucket,
                     Key = objectKey
                 },
-                cancellationToken: cancellationToken);
-            if (result.ContentLength is null)
-            {
-                throw new IOException("OSS 对象元数据缺少 Content-Length。");
-            }
-
-            DateTimeOffset? lastModified = null;
-            if (DateTimeOffset.TryParse(
-                    result.LastModified,
-                    CultureInfo.InvariantCulture,
-                    DateTimeStyles.AssumeUniversal,
-                    out var parsed))
-            {
-                lastModified = parsed;
-            }
-
+                cancellationToken);
             return new ObjectStorageObjectInfo(
                 objectKey,
-                result.ContentLength.Value,
+                result.ContentLength,
                 ReadMetadata(result.Metadata, Sha256MetadataKey),
                 result.ETag,
-                lastModified);
+                result.LastModified is null
+                    ? null
+                    : new DateTimeOffset(result.LastModified.Value, TimeSpan.Zero));
         }
         catch (Exception exception) when (IsMissingObject(exception))
         {
@@ -491,77 +465,56 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
         }
     }
 
-    private static Client CreateClient(ObjectStorageConnection connection)
+    private static IAmazonS3 CreateClient(ObjectStorageConnection connection)
     {
         var profile = connection.Profile;
-        var configuration = Configuration.LoadDefault();
-        configuration.CredentialsProvider = string.IsNullOrWhiteSpace(
-            connection.SecurityToken)
-            ? new StaticCredentialsProvider(
-                profile.AccessKeyId,
-                connection.AccessKeySecret)
-            : new StaticCredentialsProvider(
+        if (string.IsNullOrWhiteSpace(profile.Region))
+        {
+            throw new InvalidOperationException(
+                "七牛云 Kodo 配置缺少 Region ID，请在备份配置中补充。");
+        }
+
+        AWSCredentials credentials = string.IsNullOrWhiteSpace(connection.SecurityToken)
+            ? new BasicAWSCredentials(profile.AccessKeyId, connection.AccessKeySecret)
+            : new SessionAWSCredentials(
                 profile.AccessKeyId,
                 connection.AccessKeySecret,
                 connection.SecurityToken);
-        configuration.Region = ResolveRegion(profile);
-        configuration.Endpoint =
-            $"{(profile.UseHttps ? "https" : "http")}://{profile.Endpoint}";
-        configuration.DisableSsl = !profile.UseHttps;
-        configuration.RetryMaxAttempts = 3;
-        return new Client(configuration);
+        return new AmazonS3Client(credentials, new AmazonS3Config
+        {
+            ServiceURL = CreateServiceUrl(profile),
+            AuthenticationRegion = profile.Region,
+            ForcePathStyle = true,
+            UseHttp = !profile.UseHttps,
+            MaxErrorRetry = 3
+        });
     }
 
-    private static string ResolveRegion(ObjectStorageProfile profile)
+    internal static string CreateServiceUrl(ObjectStorageProfile profile)
     {
-        if (!string.IsNullOrWhiteSpace(profile.Region))
-        {
-            return profile.Region;
-        }
-
-        var endpointLabel = profile.Endpoint.Split('.', 2)[0];
-        if (endpointLabel.StartsWith("oss-", StringComparison.OrdinalIgnoreCase))
-        {
-            var region = endpointLabel[4..];
-            if (region.EndsWith("-internal", StringComparison.OrdinalIgnoreCase))
-            {
-                region = region[..^"-internal".Length];
-            }
-
-            if (!string.IsNullOrWhiteSpace(region))
-            {
-                return region;
-            }
-        }
-
-        throw new InvalidOperationException(
-            "无法从 Endpoint 推断 OSS 地域，请在备份配置中填写地域。");
+        ArgumentNullException.ThrowIfNull(profile);
+        return $"{(profile.UseHttps ? "https" : "http")}://{profile.Endpoint}";
     }
 
-    private static Dictionary<string, string> CreateMetadata(
+    private static void AddMetadata(
+        MetadataCollection metadata,
         ObjectStorageTransferRequest request)
     {
-        return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            [Sha256MetadataKey] = request.Sha256,
-            [AssetIdMetadataKey] = request.AssetId.ToString("D")
-        };
+        metadata[Sha256MetadataKey] = request.Sha256;
+        metadata[AssetIdMetadataKey] = request.AssetId.ToString("D");
     }
 
-    private static string? ReadMetadata(
-        IDictionary<string, string>? metadata,
-        string key)
+    private static string? ReadMetadata(MetadataCollection metadata, string key)
     {
-        if (metadata is null)
+        foreach (var candidate in metadata.Keys)
         {
-            return null;
-        }
-
-        foreach (var pair in metadata)
-        {
-            if (string.Equals(pair.Key, key, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(candidate, key, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(
+                    candidate,
+                    $"x-amz-meta-{key}",
+                    StringComparison.OrdinalIgnoreCase))
             {
-                return pair.Value;
+                return metadata[candidate];
             }
         }
 
@@ -586,10 +539,7 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
     {
         if (session.StorageProfileId != request.Connection.Profile.Id ||
             session.AssetId != request.AssetId ||
-            !string.Equals(
-                session.ObjectKey,
-                request.ObjectKey,
-                StringComparison.Ordinal) ||
+            !string.Equals(session.ObjectKey, request.ObjectKey, StringComparison.Ordinal) ||
             !PathsEqual(session.SourcePath, request.SourcePath) ||
             session.SourceSize != request.Size ||
             session.SourceModifiedAt != request.ModifiedAt ||
@@ -599,8 +549,7 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
         }
     }
 
-    private static FileInfo ReadAndValidateSource(
-        ObjectStorageTransferRequest request)
+    private static FileInfo ReadAndValidateSource(ObjectStorageTransferRequest request)
     {
         var info = new FileInfo(request.SourcePath);
         info.Refresh();
@@ -661,10 +610,9 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
 
     internal static bool IsMissingObject(Exception exception)
     {
-        ArgumentNullException.ThrowIfNull(exception);
-        return ContainsServiceException(
+        return ContainsS3Exception(
             exception,
-            serviceException => serviceException.StatusCode == 404 ||
+            serviceException => serviceException.StatusCode == HttpStatusCode.NotFound ||
                 string.Equals(
                     serviceException.ErrorCode,
                     "NoSuchKey",
@@ -673,21 +621,21 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
 
     internal static bool IsMissingUpload(Exception exception)
     {
-        ArgumentNullException.ThrowIfNull(exception);
-        return ContainsServiceException(
+        return ContainsS3Exception(
             exception,
-            serviceException => serviceException.StatusCode == 404 ||
+            serviceException => serviceException.StatusCode == HttpStatusCode.NotFound ||
                 string.Equals(
                     serviceException.ErrorCode,
                     "NoSuchUpload",
                     StringComparison.OrdinalIgnoreCase));
     }
 
-    private static bool ContainsServiceException(
+    private static bool ContainsS3Exception(
         Exception exception,
-        Func<ServiceException, bool> predicate)
+        Func<AmazonS3Exception, bool> predicate)
     {
-        if (exception is ServiceException serviceException)
+        ArgumentNullException.ThrowIfNull(exception);
+        if (exception is AmazonS3Exception serviceException)
         {
             return predicate(serviceException);
         }
@@ -695,11 +643,11 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
         if (exception is AggregateException aggregateException)
         {
             return aggregateException.Flatten().InnerExceptions.Any(
-                innerException => ContainsServiceException(innerException, predicate));
+                innerException => ContainsS3Exception(innerException, predicate));
         }
 
         return exception.InnerException is not null &&
-            ContainsServiceException(exception.InnerException, predicate);
+            ContainsS3Exception(exception.InnerException, predicate);
     }
 
     private static bool PathsEqual(string left, string right)
@@ -710,5 +658,70 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
             OperatingSystem.IsWindows()
                 ? StringComparison.OrdinalIgnoreCase
                 : StringComparison.Ordinal);
+    }
+
+    private sealed class ProgressReadStream(
+        Stream inner,
+        Action<long> reportProgress) : Stream
+    {
+        private long _transferred;
+
+        public override bool CanRead => inner.CanRead;
+        public override bool CanSeek => inner.CanSeek;
+        public override bool CanWrite => false;
+        public override long Length => inner.Length;
+        public override long Position
+        {
+            get => inner.Position;
+            set => inner.Position = value;
+        }
+
+        public override void Flush() => inner.Flush();
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            var read = inner.Read(buffer, offset, count);
+            Report(read);
+            return read;
+        }
+
+        public override int Read(Span<byte> buffer)
+        {
+            var read = inner.Read(buffer);
+            Report(read);
+            return read;
+        }
+
+        public override async ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default)
+        {
+            var read = await inner.ReadAsync(buffer, cancellationToken);
+            Report(read);
+            return read;
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) =>
+            inner.Seek(offset, origin);
+
+        public override void SetLength(long value) =>
+            throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) =>
+            throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+        }
+
+        private void Report(int count)
+        {
+            if (count <= 0)
+            {
+                return;
+            }
+
+            _transferred += count;
+            reportProgress(_transferred);
+        }
     }
 }

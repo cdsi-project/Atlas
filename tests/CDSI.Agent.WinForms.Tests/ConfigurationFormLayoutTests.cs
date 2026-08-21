@@ -58,7 +58,7 @@ public sealed class ConfigurationFormLayoutTests
 
         var storageGrid = Descendants(form)
             .OfType<DataGridView>()
-            .Single(grid => grid.AccessibleName == "OSS 配置列表");
+            .Single(grid => grid.AccessibleName == "备份配置列表");
 
         var openWebSourcesGrid = Descendants(form)
             .OfType<DataGridView>()
@@ -76,7 +76,7 @@ public sealed class ConfigurationFormLayoutTests
         Assert.Equal(5, tabs.TabPages.Count);
         Assert.Equal("工作目录", tabs.TabPages[0].Text);
         Assert.Equal("扫描目录", tabs.TabPages[1].Text);
-        Assert.Equal("OSS 配置", tabs.TabPages[2].Text);
+        Assert.Equal("备份配置", tabs.TabPages[2].Text);
         Assert.Equal("OpenWeb", tabs.TabPages[3].Text);
         Assert.Equal("Git 配置", tabs.TabPages[4].Text);
         Assert.Equal(5, openWebSourcesGrid.Columns.Count);
@@ -125,7 +125,13 @@ public sealed class ConfigurationFormLayoutTests
             item => Assert.Equal("移除", item.Text));
         Assert.Equal(DataGridViewAutoSizeColumnMode.Fill, rootsGrid.Columns[0].AutoSizeMode);
         Assert.True(rootsGrid.Columns[0].MinimumWidth >= 320);
-        Assert.Equal(5, storageGrid.Columns.Count);
+        Assert.Equal(6, storageGrid.Columns.Count);
+        Assert.Equal(
+            ["提供商", "名称", "Endpoint", "Bucket", "地域", "凭据"],
+            storageGrid.Columns
+                .Cast<DataGridViewColumn>()
+                .Select(column => column.HeaderText)
+                .ToArray());
         Assert.Equal(
             ["添加配置"],
             Descendants(tabs.TabPages[2])
@@ -251,6 +257,27 @@ public sealed class ConfigurationFormLayoutTests
         Assert.True(secretTextBox.UseSystemPasswordChar);
         Assert.Empty(secretTextBox.Text);
         Assert.Null(form.CreateRequest().AccessKeySecret);
+    }
+
+    [Fact]
+    public void OssProfileDialog_OffersAliyunAndQiniuProviders()
+    {
+        using var form = new OssProfileDialog();
+        form.CreateControl();
+        var providerComboBox = Descendants(form)
+            .OfType<ComboBox>()
+            .Single(control => control.AccessibleName == "提供商");
+
+        Assert.Equal(["阿里云 OSS", "七牛云 Kodo"], providerComboBox.Items
+            .Cast<object>()
+            .Select(item => item.ToString() ?? string.Empty)
+            .ToArray());
+
+        providerComboBox.SelectedIndex = 1;
+        var request = form.CreateRequest();
+        Assert.Equal(ObjectStorageProvider.QiniuKodo, request.Provider);
+        Assert.Equal("s3.cn-east-1.qiniucs.com", request.Endpoint);
+        Assert.Equal("cn-east-1", request.Region);
     }
 
     [Fact]

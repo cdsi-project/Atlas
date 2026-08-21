@@ -5,6 +5,7 @@ using CDSI.Agent.Application.Storage;
 using CDSI.Agent.Application.Workspaces;
 using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Scanning;
+using CDSI.Agent.Core.Storage;
 
 namespace CDSI.Agent.WinForms;
 
@@ -191,7 +192,7 @@ public sealed partial class SettingsForm : Form
 
     private TabPage CreateStoragePage()
     {
-        var page = new TabPage("OSS 配置")
+        var page = new TabPage("备份配置")
         {
             BackColor = Color.White,
             Padding = new Padding(16)
@@ -234,7 +235,12 @@ public sealed partial class SettingsForm : Form
         _storageGrid.RowHeadersVisible = false;
         _storageGrid.RowTemplate.Height = 30;
         _storageGrid.ColumnHeadersHeight = 36;
-        _storageGrid.AccessibleName = "OSS 配置列表";
+        _storageGrid.AccessibleName = "备份配置列表";
+        _storageGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "提供商",
+            Width = 120
+        });
         _storageGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             HeaderText = "名称",
@@ -623,6 +629,7 @@ public sealed partial class SettingsForm : Form
         {
             var profile = configured.Profile;
             var index = _storageGrid.Rows.Add(
+                FormatStorageProvider(profile.Provider),
                 profile.DisplayName,
                 $"{(profile.UseHttps ? "https" : "http")}://{profile.Endpoint}",
                 profile.BucketName,
@@ -674,7 +681,7 @@ public sealed partial class SettingsForm : Form
             }
             catch (Exception exception)
             {
-                ShowError("无法保存 OSS 配置", exception);
+                ShowError("无法保存备份配置", exception);
                 dialog.DialogResult = DialogResult.None;
             }
         }
@@ -696,7 +703,7 @@ public sealed partial class SettingsForm : Form
         }
         catch (Exception exception)
         {
-            ShowError("无法复制 OSS 配置信息", exception);
+            ShowError("无法复制备份配置信息", exception);
         }
     }
 
@@ -706,7 +713,7 @@ public sealed partial class SettingsForm : Form
             MessageBox.Show(
                 this,
                 "将删除本机配置和 Windows 凭据，不会删除 Bucket 或其中的对象。",
-                "删除 OSS 配置",
+                "删除备份配置",
                 MessageBoxButtons.OKCancel,
                 MessageBoxIcon.Warning) != DialogResult.OK)
         {
@@ -720,8 +727,18 @@ public sealed partial class SettingsForm : Form
         }
         catch (Exception exception)
         {
-            ShowError("无法删除 OSS 配置", exception);
+            ShowError("无法删除备份配置", exception);
         }
+    }
+
+    private static string FormatStorageProvider(ObjectStorageProvider provider)
+    {
+        return provider switch
+        {
+            ObjectStorageProvider.AliyunOss => "阿里云 OSS",
+            ObjectStorageProvider.QiniuKodo => "七牛云 Kodo",
+            _ => provider.ToString()
+        };
     }
 
     private static Button CreateButton(string text, Color background, Color foreground)

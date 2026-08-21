@@ -9,6 +9,8 @@ authors and contributors.
 | Component | Version | License | Project |
 | --- | --- | --- | --- |
 | AlibabaCloud.OSS.V2 | 0.2.0 | Apache-2.0 | <https://github.com/aliyun/alibabacloud-oss-csharp-sdk-v2> |
+| AWSSDK.Core | 4.0.102 | Apache-2.0 | <https://github.com/aws/aws-sdk-net> |
+| AWSSDK.S3 | 4.0.102.3 | Apache-2.0 | <https://github.com/aws/aws-sdk-net> |
 | Markdig | 1.3.2 | BSD-2-Clause | <https://github.com/xoofx/markdig> |
 | Microsoft.Data.Sqlite / Microsoft.Data.Sqlite.Core | 10.0.11 | MIT | <https://github.com/dotnet/efcore> |
 | SQLitePCLRaw.bundle_e_sqlite3 | 2.1.12 | Apache-2.0 | <https://github.com/ericsink/SQLitePCL.raw> |
@@ -50,5 +52,5 @@ intended to be shipped as application runtime dependencies.
 - MIT: <https://opensource.org/license/mit>
 
 This inventory reflects the dependency versions declared or resolved by the
-repository at version 0.142. It should be reviewed whenever dependencies or
+repository at version 0.184. It should be reviewed whenever dependencies or
 the publishing model change.
