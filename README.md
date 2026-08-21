@@ -107,6 +107,82 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 4. 使用“全部资产”页顶部的搜索条件定位文件，或切换到“资产目录”“重复文件”“项目管理”等页签查看不同视图。
 5. 复制、移动、OSS 备份、OSS 取回和 OpenWeb 发布都必须由用户从界面明确发起；取回时可选择本地目标和远端来源，发布文章时可确认或切换目标源站。单纯扫描或搜索不会修改、上传或下载文件。
 
+## 阿里云 OSS 配置与使用
+
+Atlas 当前支持使用阿里云 OSS 保存可校验的资产副本。Atlas 不会代替用户开通 OSS、创建 Bucket、创建 RAM 用户或修改云端权限，也不会因为保存配置而自动连接或上传文件。
+
+### 云端准备
+
+1. 在阿里云 OSS 控制台创建一个 Bucket。建议为 Atlas 使用独立的私有 Bucket，并根据数据所在地、访问延迟和费用选择地域及存储类型。
+2. 查询该 Bucket 对应的[地域 ID 和外网 Endpoint](https://help.aliyun.com/zh/oss/user-guide/regions-and-endpoints)。普通 Windows 电脑应使用外网 Endpoint；带 <code>-internal</code> 的内网 Endpoint 只适用于同地域的阿里云内网环境。
+3. 创建专用于 Atlas 的 [RAM 用户和 AccessKey](https://help.aliyun.com/zh/oss/developer-reference/use-the-accesskey-pair-of-a-ram-user-to-initiate-a-request)，不要使用阿里云主账号 AccessKey。AccessKey Secret 只在创建时显示一次，应立即妥善保存。
+4. 为 RAM 用户授予目标 Bucket 的最小权限。Atlas 需要写入和校验对象、断点续传以及取回文件；将下例中的 <code>YOUR_BUCKET</code> 替换为实际 Bucket 名称：
+
+~~~json
+{
+  "Version": "1",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "oss:GetObject",
+        "oss:PutObject",
+        "oss:ListParts",
+        "oss:AbortMultipartUpload"
+      ],
+      "Resource": [
+        "acs:oss:*:*:YOUR_BUCKET/*"
+      ]
+    }
+  ]
+}
+~~~
+
+其中 <code>oss:GetObject</code> 同时用于上传前后的 HEAD 元数据校验和文件取回；<code>oss:PutObject</code> 用于普通及分片上传；<code>oss:ListParts</code> 和 <code>oss:AbortMultipartUpload</code> 用于恢复或清理分片上传。Atlas 不需要列出全部 Bucket，也不需要删除 Object 的权限。阿里云的操作与权限对应关系可参考[分片上传权限说明](https://help.aliyun.com/zh/oss/user-guide/multipart-upload/)和 [HeadObject 权限说明](https://help.aliyun.com/zh/oss/developer-reference/headobject/)。
+
+### 在 Atlas 中添加配置
+
+打开“设置”一级菜单，进入“OSS 配置”页签，点击“添加配置”并填写：
+
+| 配置项 | 填写说明 | 示例 |
+| --- | --- | --- |
+| 配置名称 | 仅用于本机区分多个 OSS 配置 | 主 OSS |
+| Endpoint | Bucket 所在地域的访问节点，不包含 Bucket 名称、路径或查询参数 | <code>oss-cn-beijing.aliyuncs.com</code> |
+| Bucket | 已创建的 Bucket 完整名称 | <code>cdsi-assets</code> |
+| 地域 | 与 Bucket 和 Endpoint 对应的地域 ID；建议明确填写 | <code>cn-beijing</code> |
+| AccessKey ID | 专用 RAM 用户的 AccessKey ID | 由阿里云生成 |
+| AccessKey Secret | 首次保存必填；编辑时留空可保留原凭据 | 由阿里云生成 |
+| 使用 HTTPS | 建议始终勾选 | 已勾选 |
+
+Endpoint 可填写主机名，也可填写与“使用 HTTPS”选项一致的完整 URL，但不能填写 <code>Bucket.Endpoint</code> 形式的 Bucket 域名。保存后，非敏感字段写入本机 SQLite，AccessKey Secret 独立写入当前 Windows 用户的凭据管理器。当前版本保存配置时不执行连接测试；首次备份或取回成功，才表示 Endpoint、Bucket、凭据和权限可以协同工作。
+
+配置列表支持保存多个 Bucket。双击配置可编辑；右键可编辑、复制 Endpoint、复制 Bucket 名称或删除本机配置。删除配置不会删除 Bucket、云端 Object 或已经登记的资产记录。
+
+### 备份、同步与取回
+
+1. 在“全部资产”中单选或多选本地可用资产，右键选择“备份到 OSS”。
+2. 在确认窗口选择目标配置并核对 OSS 文件名。默认与本地文件名一致，也可逐项修改；确认后才开始上传。
+3. 单个或批量备份的对象键为 <code>assets/&lt;AssetId&gt;/&lt;OSS文件名&gt;</code>。大文件自动使用分片上传，失败或取消后可重试续传。
+4. 在“项目管理”中右键项目并选择“同步到 OSS”，项目名称作为 OSS 目录名，项目内文件名保持原样，即 <code>&lt;项目名称&gt;/&lt;原文件名&gt;</code>。同一项目存在同名文件时会拒绝同步，避免多个资产写入同一个对象。
+5. 上传完成后，Atlas 会通过对象大小和 <code>cdsi-sha256</code> 元数据校验结果；通过校验的备份在资产列表中以绿色显示。
+6. 需要恢复时，在“全部资产”中选择资产，右键选择“从 OSS 取回”。只能选择本机已登记且完整性状态正常的 OSS 副本；目标可选 CDSI 工作目录或用户指定目录。
+7. 下载先写入临时文件，大小和 SHA-256 校验通过后才登记为本地位置。目标存在相同内容时直接复用，存在不同内容时拒绝覆盖。
+
+Atlas 保存的是 Bucket、对象键、大小、SHA-256 和校验状态，不依赖公开 URL。Bucket 可以保持私有，无需为备份文件开放匿名访问。
+
+### 常见问题
+
+| 提示或现象 | 检查方法 |
+| --- | --- |
+| <code>403 AccessDenied</code> | 检查 AccessKey 所属 RAM 用户是否拥有上述四项权限，并确认策略中的 Bucket 名称正确。 |
+| <code>404 NoSuchKey</code> | 检查已登记的对象是否被其他工具删除或改名，以及当前配置是否指向原 Bucket。Atlas 不会自动删除云端对象。 |
+| <code>SignatureDoesNotMatch</code> 或凭据无效 | 重新核对 AccessKey ID/Secret；Secret 无法从阿里云再次查看，遗失后应创建并轮换新的 AccessKey。 |
+| Endpoint 错误、超时或无法连接 | 确认 Endpoint 与 Bucket 地域一致；普通电脑使用外网 Endpoint，不要使用带 <code>-internal</code> 的内网地址。 |
+| 提示缺少 AccessKey Secret | 双击配置重新编辑并填写 Secret；凭据按 Windows 用户保存，切换账户或迁移数据库不会自动迁移凭据。 |
+| 目标对象已存在且内容不同 | Atlas 默认拒绝覆盖。单独备份时改用其他 OSS 文件名；项目同步时处理项目内的同名文件后重试。 |
+
+OSS 存储容量、请求次数、下行流量、低频或归档数据取回等费用由阿里云按 Bucket 配置计费。Atlas 不会设置生命周期、版本控制、服务端加密或归档解冻策略；启用这些云端功能前，应确认不会导致备份被自动删除、无法直接取回或产生额外费用。
+
 ### Markdown 发布元数据
 
 Markdown 文件可在正文前使用 YAML Front Matter 设置 WordPress slug、分类和标签：
