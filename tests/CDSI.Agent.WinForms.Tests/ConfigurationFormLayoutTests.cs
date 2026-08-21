@@ -110,6 +110,22 @@ public sealed class ConfigurationFormLayoutTests
         Assert.True(rootsGrid.Columns[0].MinimumWidth >= 320);
         Assert.Equal(5, storageGrid.Columns.Count);
         Assert.Equal(
+            ["添加配置"],
+            Descendants(tabs.TabPages[2])
+                .OfType<Button>()
+                .Select(button => button.Text)
+                .ToArray());
+        var storageContextMenu = Assert.IsType<ContextMenuStrip>(
+            storageGrid.ContextMenuStrip);
+        Assert.Collection(
+            storageContextMenu.Items.Cast<ToolStripItem>(),
+            item => Assert.Equal("编辑配置", item.Text),
+            item => Assert.IsType<ToolStripSeparator>(item),
+            item => Assert.Equal("复制 Endpoint", item.Text),
+            item => Assert.Equal("复制 Bucket 名称", item.Text),
+            item => Assert.IsType<ToolStripSeparator>(item),
+            item => Assert.Equal("删除配置", item.Text));
+        Assert.Equal(
             [
                 "名称", "平台", "仓库地址", "默认分支", "访问方式",
                 "用户名 / SSH 公钥", "默认", "凭据"

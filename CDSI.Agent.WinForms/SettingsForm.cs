@@ -20,8 +20,11 @@ public sealed partial class SettingsForm : Form
     private readonly ToolStripMenuItem _removeRootMenuItem = new();
     private readonly Label _workspaceStatusLabel = new();
     private readonly DataGridView _storageGrid = new();
-    private readonly Button _editStorageButton = new();
-    private readonly Button _deleteStorageButton = new();
+    private readonly ContextMenuStrip _storageContextMenu = new();
+    private readonly ToolStripMenuItem _editStorageMenuItem = new();
+    private readonly ToolStripMenuItem _copyStorageEndpointMenuItem = new();
+    private readonly ToolStripMenuItem _copyStorageBucketMenuItem = new();
+    private readonly ToolStripMenuItem _deleteStorageMenuItem = new();
     private readonly Button _startScanButton = new();
     private readonly HashSet<Guid> _initialScanRootIds = [];
 
@@ -202,17 +205,6 @@ public sealed partial class SettingsForm : Form
         addButton.Click += AddStorageButton_Click;
         addButton.Size = new Size(104, 32);
 
-        _editStorageButton.Text = "编辑";
-        _editStorageButton.Size = new Size(88, 32);
-        _editStorageButton.FlatStyle = FlatStyle.Flat;
-        _editStorageButton.Click += EditStorageButton_Click;
-
-        _deleteStorageButton.Text = "删除";
-        _deleteStorageButton.Size = new Size(88, 32);
-        _deleteStorageButton.FlatStyle = FlatStyle.Flat;
-        _deleteStorageButton.ForeColor = Color.FromArgb(137, 49, 49);
-        _deleteStorageButton.Click += DeleteStorageButton_Click;
-
         var commands = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
@@ -221,8 +213,6 @@ public sealed partial class SettingsForm : Form
             Padding = new Padding(0, 4, 0, 8)
         };
         commands.Controls.Add(addButton);
-        commands.Controls.Add(_editStorageButton);
-        commands.Controls.Add(_deleteStorageButton);
 
         page.Controls.Add(_storageGrid);
         page.Controls.Add(commands);
@@ -272,7 +262,41 @@ public sealed partial class SettingsForm : Form
             HeaderText = "凭据",
             Width = 90
         });
-        _storageGrid.SelectionChanged += (_, _) => UpdateStorageCommands();
+        _editStorageMenuItem.Text = "编辑配置";
+        _editStorageMenuItem.Click += EditStorageMenuItem_Click;
+        _copyStorageEndpointMenuItem.Text = "复制 Endpoint";
+        _copyStorageEndpointMenuItem.Click += (_, _) =>
+            CopySelectedStorageValue(copyEndpoint: true);
+        _copyStorageBucketMenuItem.Text = "复制 Bucket 名称";
+        _copyStorageBucketMenuItem.Click += (_, _) =>
+            CopySelectedStorageValue(copyEndpoint: false);
+        _deleteStorageMenuItem.Text = "删除配置";
+        _deleteStorageMenuItem.ForeColor = Color.FromArgb(137, 49, 49);
+        _deleteStorageMenuItem.Click += DeleteStorageMenuItem_Click;
+        _storageContextMenu.Items.AddRange(
+        [
+            _editStorageMenuItem,
+            new ToolStripSeparator(),
+            _copyStorageEndpointMenuItem,
+            _copyStorageBucketMenuItem,
+            new ToolStripSeparator(),
+            _deleteStorageMenuItem
+        ]);
+        _storageContextMenu.Opening += (_, args) =>
+            args.Cancel =
+                _storageGrid.CurrentRow?.Tag is not ConfiguredObjectStorageProfile;
+        _storageGrid.ContextMenuStrip = _storageContextMenu;
+        _storageGrid.CellMouseDown += (_, args) =>
+        {
+            if (args.Button == MouseButtons.Right &&
+                args.RowIndex >= 0 &&
+                args.ColumnIndex >= 0)
+            {
+                _storageGrid.CurrentCell =
+                    _storageGrid.Rows[args.RowIndex].Cells[args.ColumnIndex];
+            }
+        };
+        _storageGrid.CellDoubleClick += StorageGrid_CellDoubleClick;
     }
     private void ConfigureRootsGrid()
     {
@@ -606,8 +630,6 @@ public sealed partial class SettingsForm : Form
                 configured.HasStoredSecret ? "已保存" : "缺失");
             _storageGrid.Rows[index].Tag = configured;
         }
-
-        UpdateStorageCommands();
     }
 
     private async void AddStorageButton_Click(object? sender, EventArgs e)
@@ -615,7 +637,22 @@ public sealed partial class SettingsForm : Form
         await ShowStorageDialogAsync(null);
     }
 
-    private async void EditStorageButton_Click(object? sender, EventArgs e)
+    private async void EditStorageMenuItem_Click(object? sender, EventArgs e)
+    {
+        await EditSelectedStorageAsync();
+    }
+
+    private async void StorageGrid_CellDoubleClick(
+        object? sender,
+        DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex >= 0)
+        {
+            await EditSelectedStorageAsync();
+        }
+    }
+
+    private async Task EditSelectedStorageAsync()
     {
         if (_storageGrid.CurrentRow?.Tag is ConfiguredObjectStorageProfile configured)
         {
@@ -643,7 +680,27 @@ public sealed partial class SettingsForm : Form
         }
     }
 
-    private async void DeleteStorageButton_Click(object? sender, EventArgs e)
+    private void CopySelectedStorageValue(bool copyEndpoint)
+    {
+        if (_storageGrid.CurrentRow?.Tag is not ConfiguredObjectStorageProfile configured)
+        {
+            return;
+        }
+
+        try
+        {
+            var profile = configured.Profile;
+            Clipboard.SetText(copyEndpoint
+                ? $"{(profile.UseHttps ? "https" : "http")}://{profile.Endpoint}"
+                : profile.BucketName);
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法复制 OSS 配置信息", exception);
+        }
+    }
+
+    private async void DeleteStorageMenuItem_Click(object? sender, EventArgs e)
     {
         if (_storageGrid.CurrentRow?.Tag is not ConfiguredObjectStorageProfile configured ||
             MessageBox.Show(
@@ -667,12 +724,6 @@ public sealed partial class SettingsForm : Form
         }
     }
 
-    private void UpdateStorageCommands()
-    {
-        var selected = _storageGrid.CurrentRow?.Tag is ConfiguredObjectStorageProfile;
-        _editStorageButton.Enabled = selected;
-        _deleteStorageButton.Enabled = selected;
-    }
     private static Button CreateButton(string text, Color background, Color foreground)
     {
         return new Button
