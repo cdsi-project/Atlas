@@ -995,6 +995,18 @@ public sealed class MainFormLayoutTests
         Assert.Equal(sha256, grid.Rows[0].Cells[0].Value);
     }
 
+    [Theory]
+    [InlineData(null, "-")]
+    [InlineData("", "-")]
+    [InlineData("  ", "-")]
+    [InlineData("0123456789abcdef", "0123456789abcdef")]
+    public void Sha256ListValue_UsesDashWhenChecksumIsUnavailable(
+        string? sha256,
+        string expected)
+    {
+        Assert.Equal(expected, MainForm.FormatSha256ForList(sha256));
+    }
+
     [Fact]
     public void AssetGridColumns_IncludeIndexTimeAndExcludeExtractedText()
     {

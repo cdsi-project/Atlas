@@ -636,6 +636,11 @@ public sealed partial class MainForm : Form
         return column;
     }
 
+    internal static string FormatSha256ForList(string? sha256)
+    {
+        return string.IsNullOrWhiteSpace(sha256) ? "-" : sha256;
+    }
+
     internal static DataGridViewColumn CreateRowNumberColumn()
     {
         var column = CreateColumn("行号", 62, minimumWidth: 54);
@@ -1012,7 +1017,7 @@ public sealed partial class MainForm : Form
                 string.Join("、", asset.Tags),
                 asset.MimeType ?? "未知",
                 asset.Size,
-                asset.Sha256 ?? "未计算",
+                FormatSha256ForList(asset.Sha256),
                 asset.ModifiedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
                 asset.DiscoveredAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
                 asset.Path,
