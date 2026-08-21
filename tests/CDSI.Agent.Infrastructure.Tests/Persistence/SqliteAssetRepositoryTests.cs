@@ -47,6 +47,53 @@ public sealed class SqliteAssetRepositoryTests
     }
 
     [Fact]
+    public async Task ListAssetsAsync_AggregatesHealthyBackupProviderAndLatestTime()
+    {
+        using var directory = new TestDirectory();
+        var repository = new SqliteAssetRepository(Path.Combine(directory.Path, "cdsi.db"));
+        await repository.InitializeAsync();
+        var deviceId = await repository.GetOrCreateDeviceIdAsync();
+        var file = CreateFile(Path.Combine(directory.Path, "asset.txt"), "asset.txt");
+        var registration = Assert.Single(await repository.RegisterLocalFilesAsync(
+            deviceId,
+            [file],
+            DateTimeOffset.UtcNow));
+        var firstBackupAt = DateTimeOffset.Parse("2026-08-20T01:00:00Z");
+        var latestBackupAt = DateTimeOffset.Parse("2026-08-21T02:30:00Z");
+        var ignoredUnhealthyAt = DateTimeOffset.Parse("2026-08-22T03:45:00Z");
+        var firstProfile = CreateStorageProfile("第一 OSS", firstBackupAt);
+        var secondProfile = CreateStorageProfile("第二 OSS", latestBackupAt);
+        await repository.SaveStorageProfileAsync(firstProfile);
+        await repository.SaveStorageProfileAsync(secondProfile);
+        await repository.SaveObjectStorageLocationAsync(CreateStorageLocation(
+            registration.AssetId,
+            firstProfile.Id,
+            "assets/first/asset.txt",
+            StorageVerificationStatus.Healthy,
+            firstBackupAt));
+        await repository.SaveObjectStorageLocationAsync(CreateStorageLocation(
+            registration.AssetId,
+            secondProfile.Id,
+            "assets/second/asset.txt",
+            StorageVerificationStatus.Healthy,
+            latestBackupAt));
+        await repository.SaveObjectStorageLocationAsync(CreateStorageLocation(
+            registration.AssetId,
+            secondProfile.Id,
+            "assets/unhealthy/asset.txt",
+            StorageVerificationStatus.ChecksumMismatch,
+            ignoredUnhealthyAt));
+
+        var asset = Assert.Single(await repository.ListAssetsAsync(100));
+
+        Assert.True(asset.HasHealthyObjectStorageBackup);
+        Assert.Equal(["AliyunOss"], asset.HealthyBackupProviders);
+        Assert.Equal(latestBackupAt, asset.LatestHealthyBackupAt);
+
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
     public async Task MarkMissingLocalLocationsAsync_MarksOnlyLocationsNotSeenByTheScan()
     {
         using var directory = new TestDirectory();
@@ -1032,6 +1079,44 @@ public sealed class SqliteAssetRepositoryTests
         Assert.Equal(60_000, statisticsAfterChange.VideoDurationMilliseconds);
 
         SqliteConnection.ClearAllPools();
+    }
+
+    private static ObjectStorageProfile CreateStorageProfile(
+        string displayName,
+        DateTimeOffset createdAt)
+    {
+        return new ObjectStorageProfile(
+            Guid.NewGuid(),
+            displayName,
+            ObjectStorageProvider.AliyunOss,
+            "oss-cn-hangzhou.aliyuncs.com",
+            "test-assets",
+            "cn-hangzhou",
+            true,
+            "test-access-key-id",
+            createdAt,
+            createdAt);
+    }
+
+    private static ObjectStorageLocation CreateStorageLocation(
+        Guid assetId,
+        Guid storageProfileId,
+        string objectKey,
+        StorageVerificationStatus status,
+        DateTimeOffset verifiedAt)
+    {
+        return new ObjectStorageLocation(
+            Guid.NewGuid(),
+            assetId,
+            storageProfileId,
+            objectKey,
+            status,
+            5,
+            null,
+            "test-etag",
+            verifiedAt,
+            verifiedAt,
+            verifiedAt);
     }
 
     private static DiscoveredFile CreateFile(string path, string filename)

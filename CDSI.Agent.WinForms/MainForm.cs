@@ -526,7 +526,8 @@ public sealed partial class MainForm : Form
             DataGridViewAutoSizeColumnMode.Fill,
             34,
             minimumWidth: 220));
-        grid.Columns.Add(CreateObjectStorageStatusColumn());
+        grid.Columns.Add(CreateBackupStatusColumn());
+        grid.Columns.Add(CreateBackupTimeColumn());
         grid.Columns.Add(CreateColumn("状态", 80));
         grid.AllowUserToOrderColumns = true;
     }
@@ -697,6 +698,56 @@ public sealed partial class MainForm : Form
         return column;
     }
 
+    internal static DataGridViewColumn CreateBackupStatusColumn()
+    {
+        var column = CreateColumn("备份状态", 120);
+        column.Name = "BackupStatus";
+        return column;
+    }
+
+    internal static DataGridViewColumn CreateBackupTimeColumn()
+    {
+        var column = CreateColumn("备份时间", 145);
+        column.Name = "BackupTime";
+        return column;
+    }
+
+    internal static string FormatBackupStatus(
+        bool hasHealthyBackup,
+        IReadOnlyList<string> providers)
+    {
+        ArgumentNullException.ThrowIfNull(providers);
+        if (!hasHealthyBackup)
+        {
+            return "未备份";
+        }
+
+        var labels = providers
+            .Where(provider => !string.IsNullOrWhiteSpace(provider))
+            .Select(FormatBackupProvider)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return labels.Length == 0
+            ? "已备份"
+            : string.Join("、", labels);
+    }
+
+    internal static string FormatBackupTime(DateTimeOffset? backupTime)
+    {
+        return backupTime?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "-";
+    }
+
+    private static string FormatBackupProvider(string provider)
+    {
+        return provider.Trim().ToUpperInvariant() switch
+        {
+            "ALIYUNOSS" or "ALIYUN OSS" or "OSS" => "OSS",
+            "QINIU" or "QINIUKODO" or "QINIU KODO" => "七牛",
+            "S3" or "AMAZONS3" or "S3COMPATIBLE" => "S3",
+            _ => provider.Trim()
+        };
+    }
+
     internal static void Grid_CellFormatting(
         object? sender,
         DataGridViewCellFormattingEventArgs e)
@@ -720,14 +771,16 @@ public sealed partial class MainForm : Form
             return;
         }
 
-        if (string.Equals(
-                columnName,
-                "ObjectStorageStatus",
-                StringComparison.Ordinal) &&
-            string.Equals(
-                e.Value as string,
-                "已备份",
-                StringComparison.Ordinal))
+        if ((string.Equals(
+                 columnName,
+                 "BackupStatus",
+                 StringComparison.Ordinal) ||
+             string.Equals(
+                 columnName,
+                 "ObjectStorageStatus",
+                 StringComparison.Ordinal)) &&
+            e.Value is string backupStatus &&
+            !string.Equals(backupStatus, "未备份", StringComparison.Ordinal))
         {
             var healthyColor = Color.FromArgb(24, 121, 78);
             e.CellStyle.ForeColor = healthyColor;
@@ -1022,7 +1075,10 @@ public sealed partial class MainForm : Form
                 asset.DiscoveredAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
                 asset.Path,
                 FormatMetadata(asset.Metadata),
-                asset.HasHealthyObjectStorageBackup ? "已备份" : "未备份",
+                FormatBackupStatus(
+                    asset.HasHealthyObjectStorageBackup,
+                    asset.HealthyBackupProviders),
+                FormatBackupTime(asset.LatestHealthyBackupAt),
                 FormatStatus(asset));
             _assetGrid.Rows[rowIndex].Tag = asset;
             _assetGrid.Rows[rowIndex].Cells["AssetId"].ToolTipText =

@@ -1020,12 +1020,18 @@ public sealed class MainFormLayoutTests
             .ToArray();
         Assert.Contains("索引时间", headers);
         Assert.Contains("文件校验值（SHA256）", headers);
+        Assert.Contains("备份状态", headers);
+        Assert.Contains("备份时间", headers);
         Assert.Contains("标签", headers);
         Assert.Contains("所属项目", headers);
         Assert.DoesNotContain("文本", headers);
         Assert.Equal("IndexedAt", grid.Columns["IndexedAt"]?.Name);
         Assert.Equal("Sha256", grid.Columns["Sha256"]?.Name);
         Assert.Equal("Projects", grid.Columns["Projects"]?.Name);
+        Assert.Equal(
+            "备份状态",
+            grid.Columns["BackupStatus"]?.HeaderText);
+        Assert.Equal("备份时间", grid.Columns["BackupTime"]?.HeaderText);
         Assert.True(grid.AllowUserToOrderColumns);
         Assert.True(
             grid.Columns["Projects"]!.DisplayIndex <

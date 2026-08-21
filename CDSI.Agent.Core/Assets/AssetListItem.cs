@@ -21,4 +21,8 @@ public sealed record AssetListItem(
     public IReadOnlyList<string> Tags { get; init; } = [];
 
     public IReadOnlyList<string> ProjectNames { get; init; } = [];
+
+    public IReadOnlyList<string> HealthyBackupProviders { get; init; } = [];
+
+    public DateTimeOffset? LatestHealthyBackupAt { get; init; }
 }

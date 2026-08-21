@@ -5,15 +5,15 @@ namespace CDSI.Agent.WinForms.Tests;
 public sealed class AssetGridPresentationTests
 {
     [Fact]
-    public void GridCellFormatting_UsesGreenForHealthyOssBackups()
+    public void GridCellFormatting_UsesGreenForHealthyBackups()
     {
         using var grid = new DataGridView();
-        grid.Columns.Add(MainForm.CreateObjectStorageStatusColumn());
+        grid.Columns.Add(MainForm.CreateBackupStatusColumn());
         var style = new DataGridViewCellStyle();
         var args = new DataGridViewCellFormattingEventArgs(
             0,
             0,
-            "已备份",
+            "OSS、S3",
             typeof(string),
             style);
 
@@ -22,6 +22,36 @@ public sealed class AssetGridPresentationTests
         var expected = Color.FromArgb(24, 121, 78);
         Assert.Equal(expected, style.ForeColor);
         Assert.Equal(expected, style.SelectionForeColor);
+    }
+
+    [Fact]
+    public void BackupStatus_UsesProviderLabels()
+    {
+        Assert.Equal(
+            "未备份",
+            MainForm.FormatBackupStatus(false, []));
+        Assert.Equal(
+            "已备份",
+            MainForm.FormatBackupStatus(true, []));
+        Assert.Equal(
+            "OSS",
+            MainForm.FormatBackupStatus(true, ["AliyunOss"]));
+        Assert.Equal(
+            "OSS、七牛、S3",
+            MainForm.FormatBackupStatus(
+                true,
+                ["AliyunOss", "Qiniu", "S3", "AliyunOss"]));
+    }
+
+    [Fact]
+    public void BackupTime_UsesDashOrLocalTimestamp()
+    {
+        var value = DateTimeOffset.Parse("2026-08-21T08:30:00+08:00");
+
+        Assert.Equal("-", MainForm.FormatBackupTime(null));
+        Assert.Equal(
+            value.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+            MainForm.FormatBackupTime(value));
     }
 
     [Fact]

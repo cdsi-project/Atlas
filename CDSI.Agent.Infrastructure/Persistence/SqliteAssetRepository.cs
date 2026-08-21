@@ -1063,7 +1063,35 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                         WHERE ci.asset_id = a.id
                         ORDER BY c.name COLLATE NOCASE, c.id
                     )
-                ), '[]') AS project_names_json
+                ), '[]') AS project_names_json,
+                COALESCE((
+                    SELECT json_group_array(provider)
+                    FROM (
+                        SELECT DISTINCT sp.provider AS provider
+                        FROM object_storage_locations osl
+                        INNER JOIN storage_profiles sp
+                            ON sp.id = osl.storage_profile_id
+                        WHERE osl.asset_id = a.id
+                          AND osl.status = 'Healthy'
+                        ORDER BY sp.provider COLLATE NOCASE
+                    )
+                ), '[]') AS backup_providers_json,
+                (
+                    SELECT COALESCE(
+                        osl.last_verified_at,
+                        osl.updated_at,
+                        osl.created_at)
+                    FROM object_storage_locations osl
+                    WHERE osl.asset_id = a.id
+                      AND osl.status = 'Healthy'
+                    ORDER BY
+                        julianday(COALESCE(
+                            osl.last_verified_at,
+                            osl.updated_at,
+                            osl.created_at)) DESC,
+                        osl.id
+                    LIMIT 1
+                ) AS latest_healthy_backup_at
             FROM assets a
             INNER JOIN asset_locations l ON l.asset_id = a.id
             LEFT JOIN asset_metadata m
@@ -1109,7 +1137,11 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                 ReadMetadata(reader, Guid.Parse(reader.GetString(0)), 13))
             {
                 Tags = ReadJsonStringArray(reader, 21),
-                ProjectNames = ReadJsonStringArray(reader, 22)
+                ProjectNames = ReadJsonStringArray(reader, 22),
+                HealthyBackupProviders = ReadJsonStringArray(reader, 23),
+                LatestHealthyBackupAt = reader.IsDBNull(24)
+                    ? null
+                    : ParseTimestamp(reader.GetString(24))
             });
         }
 
