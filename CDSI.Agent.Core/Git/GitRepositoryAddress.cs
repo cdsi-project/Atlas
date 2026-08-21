@@ -43,7 +43,7 @@ public static class GitRepositoryAddress
 
             if (uri.Scheme == Uri.UriSchemeHttps && !string.IsNullOrEmpty(uri.UserInfo))
             {
-                errorMessage = "仓库地址中不能包含账号或访问令牌。";
+                errorMessage = "仓库地址中不能包含账号或密码等凭据。";
                 return false;
             }
 

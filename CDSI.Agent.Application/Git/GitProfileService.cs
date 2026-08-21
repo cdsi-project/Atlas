@@ -22,13 +22,15 @@ public sealed class GitProfileService
         CancellationToken cancellationToken = default)
     {
         var profiles = await _repository.ListGitProfilesAsync(cancellationToken);
+        await MigrateLegacySecretsAsync(profiles, cancellationToken);
         var configured = new List<ConfiguredGitProfile>(profiles.Count);
         foreach (var profile in profiles)
         {
             configured.Add(new ConfiguredGitProfile(
                 profile,
+                profile.AuthenticationMethod == GitAuthenticationMethod.Password &&
                 await _secretStore.ExistsAsync(
-                    CreateSecretKey(profile.Id),
+                    CreatePasswordSecretKey(profile.Id),
                     cancellationToken)));
         }
 
@@ -47,7 +49,15 @@ public sealed class GitProfileService
                 "不支持该 Git 托管平台。");
         }
 
+        if (!Enum.IsDefined(request.AuthenticationMethod))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(request),
+                "不支持该 Git 访问方式。");
+        }
+
         var profiles = await _repository.ListGitProfilesAsync(cancellationToken);
+        await MigrateLegacySecretsAsync(profiles, cancellationToken);
         var existing = request.Id is null
             ? null
             : profiles.SingleOrDefault(profile => profile.Id == request.Id.Value);
@@ -68,6 +78,9 @@ public sealed class GitProfileService
                 nameof(request));
         }
 
+        ValidateRepositoryAddressForAuthentication(
+            request.AuthenticationMethod,
+            repositoryUrl);
         if (profiles.Any(profile =>
                 profile.Id != request.Id &&
                 profile.Provider == request.Provider &&
@@ -80,57 +93,55 @@ public sealed class GitProfileService
         }
 
         var id = existing?.Id ?? Guid.NewGuid();
-        var secretKey = CreateSecretKey(id);
-        var accessToken = NormalizeAccessToken(request.AccessToken);
-        var hasStoredToken = await _secretStore.ExistsAsync(
-            secretKey,
+        var password = NormalizePassword(request.Password);
+        var passwordSecretKey = CreatePasswordSecretKey(id);
+        var hasStoredPassword = await _secretStore.ExistsAsync(
+            passwordSecretKey,
             cancellationToken);
+        if (request.AuthenticationMethod == GitAuthenticationMethod.Password &&
+            password is null &&
+            !hasStoredPassword)
+        {
+            throw new ArgumentException(
+                "首次使用密码方式或从 SSH 切换到密码方式时必须填写密码。",
+                nameof(request));
+        }
+
+        var username = request.AuthenticationMethod == GitAuthenticationMethod.Password
+            ? RequireValue(request.Username, "用户名", 100)
+            : string.Empty;
+        var sshPublicKeyPath = request.AuthenticationMethod == GitAuthenticationMethod.Ssh
+            ? NormalizeSshPublicKeyPath(request.SshPublicKeyPath)
+            : null;
         var now = DateTimeOffset.UtcNow;
         var profile = new GitProfile(
             id,
             RequireValue(request.DisplayName, "配置名称", 100),
             request.Provider,
             repositoryUrl,
-            RequireValue(request.AccountName, "账号", 100),
             NormalizeBranch(request.DefaultBranch),
+            request.AuthenticationMethod,
+            username,
+            sshPublicKeyPath,
             request.IsDefault || existing?.IsDefault == true || profiles.Count == 0,
             existing?.CreatedAt ?? now,
             now);
 
-        if (existing is null && accessToken is not null)
+        if (profile.AuthenticationMethod == GitAuthenticationMethod.Password)
         {
-            await _secretStore.StoreAsync(secretKey, accessToken, cancellationToken);
-            try
-            {
-                await _repository.SaveGitProfileAsync(profile, cancellationToken);
-            }
-            catch (Exception saveException)
-            {
-                try
-                {
-                    await _secretStore.DeleteAsync(secretKey, CancellationToken.None);
-                }
-                catch (Exception cleanupException)
-                {
-                    throw new InvalidOperationException(
-                        "Git 配置保存失败，且临时凭据未能清理。",
-                        new AggregateException(saveException, cleanupException));
-                }
-
-                throw;
-            }
-
+            await SavePasswordProfileAsync(
+                profile,
+                password,
+                passwordSecretKey,
+                cancellationToken);
             return new ConfiguredGitProfile(profile, true);
         }
 
-        await _repository.SaveGitProfileAsync(profile, cancellationToken);
-        if (accessToken is not null)
-        {
-            await _secretStore.StoreAsync(secretKey, accessToken, cancellationToken);
-            return new ConfiguredGitProfile(profile, true);
-        }
-
-        return new ConfiguredGitProfile(profile, hasStoredToken);
+        await SaveSshProfileAsync(
+            profile,
+            passwordSecretKey,
+            cancellationToken);
+        return new ConfiguredGitProfile(profile, false);
     }
 
     public Task SetDefaultAsync(
@@ -144,22 +155,27 @@ public sealed class GitProfileService
         Guid profileId,
         CancellationToken cancellationToken = default)
     {
-        var secretKey = CreateSecretKey(profileId);
-        var previousToken = await _secretStore.RetrieveAsync(
+        var profiles = await _repository.ListGitProfilesAsync(cancellationToken);
+        await MigrateLegacySecretsAsync(profiles, cancellationToken);
+        var secretKey = CreatePasswordSecretKey(profileId);
+        var previousPassword = await _secretStore.RetrieveAsync(
             secretKey,
             cancellationToken);
-        await _secretStore.DeleteAsync(secretKey, cancellationToken);
         try
         {
+            await _secretStore.DeleteAsync(secretKey, cancellationToken);
+            await _secretStore.DeleteAsync(
+                CreateLegacySecretKey(profileId),
+                cancellationToken);
             await _repository.DeleteGitProfileAsync(profileId, cancellationToken);
         }
         catch
         {
-            if (!string.IsNullOrWhiteSpace(previousToken))
+            if (!string.IsNullOrWhiteSpace(previousPassword))
             {
                 await _secretStore.StoreAsync(
                     secretKey,
-                    previousToken,
+                    previousPassword,
                     CancellationToken.None);
             }
 
@@ -167,20 +183,147 @@ public sealed class GitProfileService
         }
     }
 
-    public async Task<string?> GetAccessTokenAsync(
+    public async Task<string?> GetPasswordAsync(
         Guid profileId,
         CancellationToken cancellationToken = default)
     {
-        var profileExists = (await _repository.ListGitProfilesAsync(cancellationToken))
-            .Any(profile => profile.Id == profileId);
-        if (!profileExists)
+        var profiles = await _repository.ListGitProfilesAsync(cancellationToken);
+        await MigrateLegacySecretsAsync(profiles, cancellationToken);
+        var profile = profiles.SingleOrDefault(item => item.Id == profileId)
+            ?? throw new InvalidOperationException("Git 配置不存在或已被删除。");
+        if (profile.AuthenticationMethod != GitAuthenticationMethod.Password)
         {
-            throw new InvalidOperationException("Git 配置不存在或已被删除。");
+            return null;
         }
 
         return await _secretStore.RetrieveAsync(
-            CreateSecretKey(profileId),
+            CreatePasswordSecretKey(profileId),
             cancellationToken);
+    }
+
+    private async Task SavePasswordProfileAsync(
+        GitProfile profile,
+        string? password,
+        string secretKey,
+        CancellationToken cancellationToken)
+    {
+        if (password is null)
+        {
+            await _repository.SaveGitProfileAsync(profile, cancellationToken);
+            return;
+        }
+
+        var previousPassword = await _secretStore.RetrieveAsync(
+            secretKey,
+            cancellationToken);
+        await _secretStore.StoreAsync(secretKey, password, cancellationToken);
+        try
+        {
+            await _repository.SaveGitProfileAsync(profile, cancellationToken);
+        }
+        catch
+        {
+            if (previousPassword is null)
+            {
+                await _secretStore.DeleteAsync(secretKey, CancellationToken.None);
+            }
+            else
+            {
+                await _secretStore.StoreAsync(
+                    secretKey,
+                    previousPassword,
+                    CancellationToken.None);
+            }
+
+            throw;
+        }
+    }
+
+    private async Task SaveSshProfileAsync(
+        GitProfile profile,
+        string secretKey,
+        CancellationToken cancellationToken)
+    {
+        var previousPassword = await _secretStore.RetrieveAsync(
+            secretKey,
+            cancellationToken);
+        try
+        {
+            await _secretStore.DeleteAsync(secretKey, cancellationToken);
+            await _secretStore.DeleteAsync(
+                CreateLegacySecretKey(profile.Id),
+                cancellationToken);
+            await _repository.SaveGitProfileAsync(profile, cancellationToken);
+        }
+        catch
+        {
+            if (previousPassword is not null)
+            {
+                await _secretStore.StoreAsync(
+                    secretKey,
+                    previousPassword,
+                    CancellationToken.None);
+            }
+
+            throw;
+        }
+    }
+
+    private async Task MigrateLegacySecretsAsync(
+        IReadOnlyList<GitProfile> profiles,
+        CancellationToken cancellationToken)
+    {
+        foreach (var profile in profiles)
+        {
+            var legacyKey = CreateLegacySecretKey(profile.Id);
+            if (profile.AuthenticationMethod == GitAuthenticationMethod.Ssh)
+            {
+                await _secretStore.DeleteAsync(legacyKey, cancellationToken);
+                await _secretStore.DeleteAsync(
+                    CreatePasswordSecretKey(profile.Id),
+                    cancellationToken);
+                continue;
+            }
+
+            if (!await _secretStore.ExistsAsync(legacyKey, cancellationToken))
+            {
+                continue;
+            }
+
+            var passwordKey = CreatePasswordSecretKey(profile.Id);
+            if (!await _secretStore.ExistsAsync(passwordKey, cancellationToken))
+            {
+                var legacySecret = await _secretStore.RetrieveAsync(
+                    legacyKey,
+                    cancellationToken);
+                if (!string.IsNullOrWhiteSpace(legacySecret))
+                {
+                    await _secretStore.StoreAsync(
+                        passwordKey,
+                        legacySecret,
+                        cancellationToken);
+                }
+            }
+
+            await _secretStore.DeleteAsync(legacyKey, cancellationToken);
+        }
+    }
+
+    private static void ValidateRepositoryAddressForAuthentication(
+        GitAuthenticationMethod authenticationMethod,
+        string repositoryUrl)
+    {
+        var isSsh = repositoryUrl.StartsWith("git@", StringComparison.OrdinalIgnoreCase) ||
+            repositoryUrl.StartsWith("ssh://", StringComparison.OrdinalIgnoreCase);
+        if (authenticationMethod == GitAuthenticationMethod.Password && isSsh)
+        {
+            throw new ArgumentException("密码访问方式必须使用 HTTPS 仓库地址。");
+        }
+
+        if (authenticationMethod == GitAuthenticationMethod.Ssh && !isSsh)
+        {
+            throw new ArgumentException("SSH 访问方式必须使用 SSH 仓库地址。");
+        }
     }
 
     private static string NormalizeBranch(string? value)
@@ -200,20 +343,40 @@ public sealed class GitProfileService
         return branch;
     }
 
-    private static string? NormalizeAccessToken(string? value)
+    private static string? NormalizePassword(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (string.IsNullOrEmpty(value))
         {
             return null;
         }
 
-        var token = value.Trim();
-        if (token.Length > 1024 || token.Any(char.IsWhiteSpace))
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 1024)
         {
-            throw new ArgumentException("访问令牌格式无效。", nameof(value));
+            throw new ArgumentException("密码格式无效。", nameof(value));
         }
 
-        return token;
+        return value;
+    }
+
+    private static string NormalizeSshPublicKeyPath(string? value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+        var publicKeyPath = Path.GetFullPath(value.Trim());
+        if (!publicKeyPath.EndsWith(".pub", StringComparison.OrdinalIgnoreCase) ||
+            !File.Exists(publicKeyPath))
+        {
+            throw new ArgumentException("请选择存在的 SSH 公钥文件（.pub）。", nameof(value));
+        }
+
+        var privateKeyPath = publicKeyPath[..^4];
+        if (!File.Exists(privateKeyPath))
+        {
+            throw new ArgumentException(
+                "所选公钥缺少对应的私钥文件，Atlas 不会读取该私钥。",
+                nameof(value));
+        }
+
+        return publicKeyPath;
     }
 
     private static string RequireValue(
@@ -233,7 +396,12 @@ public sealed class GitProfileService
         return normalized;
     }
 
-    private static string CreateSecretKey(Guid profileId)
+    private static string CreatePasswordSecretKey(Guid profileId)
+    {
+        return $"git-password-{profileId:N}";
+    }
+
+    private static string CreateLegacySecretKey(Guid profileId)
     {
         return $"git-access-token-{profileId:N}";
     }
@@ -244,11 +412,13 @@ public sealed record SaveGitProfileRequest(
     string DisplayName,
     GitHostingProvider Provider,
     string RepositoryUrl,
-    string AccountName,
     string DefaultBranch,
-    string? AccessToken,
+    GitAuthenticationMethod AuthenticationMethod,
+    string? Username,
+    string? Password,
+    string? SshPublicKeyPath,
     bool IsDefault);
 
 public sealed record ConfiguredGitProfile(
     GitProfile Profile,
-    bool HasAccessToken);
+    bool HasPassword);

@@ -96,7 +96,10 @@ public sealed class ConfigurationFormLayoutTests
         Assert.True(rootsGrid.Columns[0].MinimumWidth >= 320);
         Assert.Equal(5, storageGrid.Columns.Count);
         Assert.Equal(
-            ["名称", "平台", "仓库地址", "账号", "默认分支", "默认", "凭据"],
+            [
+                "名称", "平台", "仓库地址", "默认分支", "访问方式",
+                "用户名 / SSH 公钥", "默认", "凭据"
+            ],
             gitProfilesGrid.Columns
                 .Cast<DataGridViewColumn>()
                 .Select(column => column.HeaderText)
@@ -204,7 +207,7 @@ public sealed class ConfigurationFormLayoutTests
     }
 
     [Fact]
-    public void GitProfileDialog_SupportsGitHubAndGiteeWithoutRevealingTokens()
+    public void GitProfileDialog_SupportsProvidersAndDoesNotRevealPasswords()
     {
         var now = DateTimeOffset.UtcNow;
         var profile = new CDSI.Agent.Core.Git.GitProfile(
@@ -212,17 +215,22 @@ public sealed class ConfigurationFormLayoutTests
             "主仓库",
             CDSI.Agent.Core.Git.GitHostingProvider.Gitee,
             "https://gitee.com/cdsi-project/atlas.git",
-            "cdsi-project",
             "master",
+            CDSI.Agent.Core.Git.GitAuthenticationMethod.Password,
+            "cdsi-project",
+            null,
             true,
             now,
             now);
         using var form = new GitProfileDialog(profile);
         form.CreateControl();
 
-        var tokenTextBox = Descendants(form)
+        var passwordTextBox = Descendants(form)
             .OfType<TextBox>()
-            .Single(control => control.AccessibleName == "Git 访问令牌");
+            .Single(control => control.AccessibleName == "Git 密码");
+        var openWebsiteButton = Descendants(form)
+            .OfType<Button>()
+            .Single(control => control.AccessibleName == "打开 Git 托管平台网站");
         var providers = GitProfileDialog.ProviderOptions
             .Select(option => option.Value)
             .ToArray();
@@ -233,12 +241,78 @@ public sealed class ConfigurationFormLayoutTests
                 CDSI.Agent.Core.Git.GitHostingProvider.Gitee
             ],
             providers);
-        Assert.True(tokenTextBox.UseSystemPasswordChar);
-        Assert.Empty(tokenTextBox.Text);
-        Assert.Null(form.CreateRequest().AccessToken);
+        Assert.Equal(
+            [
+                CDSI.Agent.Core.Git.GitAuthenticationMethod.Password,
+                CDSI.Agent.Core.Git.GitAuthenticationMethod.Ssh
+            ],
+            GitProfileDialog.AuthenticationOptions.Select(option => option.Value));
+        Assert.True(openWebsiteButton.Enabled);
+        Assert.True(passwordTextBox.UseSystemPasswordChar);
+        Assert.Empty(passwordTextBox.Text);
+        Assert.Null(form.CreateRequest().Password);
+        Assert.Equal(
+            CDSI.Agent.Core.Git.GitAuthenticationMethod.Password,
+            form.CreateRequest().AuthenticationMethod);
         Assert.Equal(
             CDSI.Agent.Core.Git.GitHostingProvider.Gitee,
             form.CreateRequest().Provider);
+    }
+
+    [Theory]
+    [InlineData(
+        CDSI.Agent.Core.Git.GitHostingProvider.GitHub,
+        "https://github.com/")]
+    [InlineData(
+        CDSI.Agent.Core.Git.GitHostingProvider.Gitee,
+        "https://gitee.com/")]
+    public void GitWebsiteCommand_OpensTheSelectedProvider(
+        CDSI.Agent.Core.Git.GitHostingProvider provider,
+        string expectedUrl)
+    {
+        var startInfo = SshKeySupport.CreateOpenWebsiteStartInfo(provider);
+
+        Assert.Equal(expectedUrl, startInfo.FileName);
+        Assert.True(startInfo.UseShellExecute);
+    }
+
+    [Fact]
+    public void SshKeySupport_FindsOnlyACompletePreferredKeyPair()
+    {
+        var sshDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"cdsi-ssh-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(sshDirectory);
+        try
+        {
+            File.WriteAllText(Path.Combine(sshDirectory, "id_rsa"), "private");
+            File.WriteAllText(Path.Combine(sshDirectory, "id_rsa.pub"), "public");
+            File.WriteAllText(Path.Combine(sshDirectory, "id_ed25519.pub"), "orphan");
+
+            var pair = SshKeySupport.FindDefaultKeyPair(sshDirectory);
+
+            Assert.NotNull(pair);
+            Assert.EndsWith("id_rsa.pub", pair.PublicKeyPath, StringComparison.Ordinal);
+            Assert.EndsWith("id_rsa", pair.PrivateKeyPath, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(sshDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void SshKeyGenerationCommand_IsInteractiveAndDoesNotChooseAFile()
+    {
+        var startInfo = SshKeySupport.CreateSshKeyGenerationStartInfo(
+            "creator@example.com");
+
+        Assert.Equal("ssh-keygen.exe", startInfo.FileName);
+        Assert.True(startInfo.UseShellExecute);
+        Assert.Equal(
+            ["-t", "ed25519", "-C", "creator@example.com"],
+            startInfo.ArgumentList.ToArray());
+        Assert.DoesNotContain("-f", startInfo.ArgumentList);
     }
 
     private static IEnumerable<Control> Descendants(Control parent)

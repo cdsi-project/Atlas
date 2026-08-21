@@ -5,8 +5,10 @@ public sealed record GitProfile(
     string DisplayName,
     GitHostingProvider Provider,
     string RepositoryUrl,
-    string AccountName,
     string DefaultBranch,
+    GitAuthenticationMethod AuthenticationMethod,
+    string Username,
+    string? SshPublicKeyPath,
     bool IsDefault,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);

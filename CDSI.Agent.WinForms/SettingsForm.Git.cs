@@ -109,13 +109,18 @@ public sealed partial class SettingsForm
         });
         _gitProfilesGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
-            HeaderText = "账号",
-            Width = 120
+            HeaderText = "默认分支",
+            Width = 100
         });
         _gitProfilesGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
-            HeaderText = "默认分支",
-            Width = 100
+            HeaderText = "访问方式",
+            Width = 88
+        });
+        _gitProfilesGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "用户名 / SSH 公钥",
+            Width = 120
         });
         _gitProfilesGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
@@ -142,10 +147,16 @@ public sealed partial class SettingsForm
                 profile.DisplayName,
                 FormatGitProvider(profile.Provider),
                 profile.RepositoryUrl,
-                profile.AccountName,
                 profile.DefaultBranch,
+                GitProfileDialog.GetAuthenticationDisplayName(
+                    profile.AuthenticationMethod),
+                profile.AuthenticationMethod == GitAuthenticationMethod.Password
+                    ? profile.Username
+                    : Path.GetFileName(profile.SshPublicKeyPath) ?? string.Empty,
                 profile.IsDefault ? "是" : string.Empty,
-                configured.HasAccessToken ? "已保存" : "未设置");
+                profile.AuthenticationMethod == GitAuthenticationMethod.Password
+                    ? configured.HasPassword ? "已保存" : "缺失"
+                    : "本机密钥");
             _gitProfilesGrid.Rows[index].Tag = configured;
         }
 

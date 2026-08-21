@@ -14,7 +14,8 @@ public sealed partial class SqliteAssetRepository : IGitProfileRepository
         command.CommandText =
             """
             SELECT id, display_name, provider, repository_url, account_name,
-                   default_branch, is_default, created_at, updated_at
+                   default_branch, authentication_method, ssh_public_key_path,
+                   is_default, created_at, updated_at
             FROM git_profiles
             ORDER BY is_default DESC, display_name COLLATE NOCASE, created_at;
             """;
@@ -54,16 +55,20 @@ public sealed partial class SqliteAssetRepository : IGitProfileRepository
             """
             INSERT INTO git_profiles(
                 id, display_name, provider, repository_url, account_name,
-                default_branch, is_default, created_at, updated_at)
+                default_branch, authentication_method, ssh_public_key_path,
+                is_default, created_at, updated_at)
             VALUES(
                 $id, $display_name, $provider, $repository_url, $account_name,
-                $default_branch, $is_default, $created_at, $updated_at)
+                $default_branch, $authentication_method, $ssh_public_key_path,
+                $is_default, $created_at, $updated_at)
             ON CONFLICT(id) DO UPDATE SET
                 display_name = excluded.display_name,
                 provider = excluded.provider,
                 repository_url = excluded.repository_url,
                 account_name = excluded.account_name,
                 default_branch = excluded.default_branch,
+                authentication_method = excluded.authentication_method,
+                ssh_public_key_path = excluded.ssh_public_key_path,
                 is_default = excluded.is_default,
                 updated_at = excluded.updated_at;
             """;
@@ -71,8 +76,14 @@ public sealed partial class SqliteAssetRepository : IGitProfileRepository
         command.Parameters.AddWithValue("$display_name", profile.DisplayName);
         command.Parameters.AddWithValue("$provider", profile.Provider.ToString());
         command.Parameters.AddWithValue("$repository_url", profile.RepositoryUrl);
-        command.Parameters.AddWithValue("$account_name", profile.AccountName);
+        command.Parameters.AddWithValue("$account_name", profile.Username);
         command.Parameters.AddWithValue("$default_branch", profile.DefaultBranch);
+        command.Parameters.AddWithValue(
+            "$authentication_method",
+            profile.AuthenticationMethod.ToString());
+        command.Parameters.AddWithValue(
+            "$ssh_public_key_path",
+            (object?)profile.SshPublicKeyPath ?? DBNull.Value);
         command.Parameters.AddWithValue("$is_default", makeDefault ? 1 : 0);
         command.Parameters.AddWithValue("$created_at", profile.CreatedAt.ToString("O"));
         command.Parameters.AddWithValue("$updated_at", profile.UpdatedAt.ToString("O"));
@@ -165,11 +176,13 @@ public sealed partial class SqliteAssetRepository : IGitProfileRepository
             reader.GetString(1),
             Enum.Parse<GitHostingProvider>(reader.GetString(2)),
             reader.GetString(3),
-            reader.GetString(4),
             reader.GetString(5),
-            reader.GetInt32(6) != 0,
-            ParseTimestamp(reader.GetString(7)),
-            ParseTimestamp(reader.GetString(8)));
+            Enum.Parse<GitAuthenticationMethod>(reader.GetString(6)),
+            reader.GetString(4),
+            reader.IsDBNull(7) ? null : reader.GetString(7),
+            reader.GetInt32(8) != 0,
+            ParseTimestamp(reader.GetString(9)),
+            ParseTimestamp(reader.GetString(10)));
     }
 
     private static async Task<bool> HasGitProfilesAsync(
