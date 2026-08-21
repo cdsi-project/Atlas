@@ -1,6 +1,7 @@
 using CDSI.Agent.Application.Collections;
 using CDSI.Agent.Core.Collections;
 using CDSI.Agent.Core.Scanning;
+using CDSI.Agent.Core.Storage;
 using CDSI.Agent.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 
@@ -28,9 +29,26 @@ public sealed class AssetCollectionServiceTests
             [file],
             DateTimeOffset.UtcNow));
         var service = new AssetCollectionService(repository);
+        var backupProfileId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        await repository.SaveStorageProfileAsync(new ObjectStorageProfile(
+            backupProfileId,
+            "阿里云主存储",
+            ObjectStorageProvider.AliyunOss,
+            "https://oss-cn-beijing.aliyuncs.com",
+            "atlas-assets",
+            "oss-cn-beijing",
+            UseHttps: true,
+            "access-key-id",
+            now,
+            now));
 
-        var collection = await service.CreateAsync("  Episode 01  ", AssetCollectionType.Video);
+        var collection = await service.CreateAsync(
+            "  Episode 01  ",
+            AssetCollectionType.Video,
+            backupProfileId);
         Assert.Equal("Episode 01", collection.Name);
+        Assert.Equal(backupProfileId, collection.BackupProfileId);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.CreateAsync("episode 01", AssetCollectionType.Mixed));
         var membershipError = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -44,6 +62,7 @@ public sealed class AssetCollectionServiceTests
         Assert.Single(plan.Members);
         Assert.Single(plan.Assets);
         Assert.Equal(0, plan.UnavailableAssetCount);
+        Assert.Equal(backupProfileId, plan.Collection.BackupProfileId);
         var selectedPlan = await service.PrepareSelectedSyncAsync(
             collection.Id,
             [registered.AssetId, registered.AssetId]);

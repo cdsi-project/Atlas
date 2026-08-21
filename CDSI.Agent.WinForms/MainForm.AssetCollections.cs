@@ -1,6 +1,8 @@
 using CDSI.Agent.Application.Collections;
+using CDSI.Agent.Application.Storage;
 using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Collections;
+using CDSI.Agent.Core.Storage;
 
 namespace CDSI.Agent.WinForms;
 
@@ -125,6 +127,7 @@ public sealed partial class MainForm
             45,
             minimumWidth: 120));
         projectGrid.Columns.Add(CreateColumn("类型", 64));
+        projectGrid.Columns.Add(CreateColumn("云端备份", 170));
         projectGrid.Columns.Add(CreateColumn("创建时间", 145));
         projectGrid.Columns.Add(CreateColumn("资产", 58));
         projectGrid.Columns.Add(CreateFileSizeColumn());
@@ -257,7 +260,18 @@ public sealed partial class MainForm
 
     private async Task<Guid?> CreateCollectionWithDialogAsync()
     {
-        using var dialog = new AssetCollectionDialog();
+        IReadOnlyList<ConfiguredObjectStorageProfile> backupProfiles;
+        try
+        {
+            backupProfiles = await _storageService.ListAsync();
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法读取备份配置", exception);
+            return null;
+        }
+
+        using var dialog = new AssetCollectionDialog(backupProfiles);
         if (dialog.ShowDialog(this) != DialogResult.OK)
         {
             return null;
@@ -267,7 +281,8 @@ public sealed partial class MainForm
         {
             var collection = await _assetCollectionService.CreateAsync(
                 dialog.CollectionName,
-                dialog.CollectionType);
+                dialog.CollectionType,
+                dialog.BackupProfileId);
             _statusLabel.Text = $"已创建项目：{collection.Name}";
             return collection.Id;
         }
@@ -684,7 +699,8 @@ public sealed partial class MainForm
             await BackupProjectAssetsAsync(
                 plan.Assets,
                 $"正在同步项目：{plan.Collection.Name}",
-                plan.Collection.Name);
+                plan.Collection.Name,
+                plan.Collection.BackupProfileId);
         }
         catch (Exception exception)
         {
@@ -768,6 +784,7 @@ public sealed partial class MainForm
                 var rowIndex = _collectionGrid.Rows.Add(
                     collection.Name,
                     FormatCollectionType(collection.Type),
+                    FormatProjectBackupTarget(collection),
                     collection.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
                     collection.AssetCount,
                     collection.TotalSizeBytes,
@@ -793,6 +810,27 @@ public sealed partial class MainForm
 
         _collectionsTabPage.Text = $"项目管理 ({collections.Count:N0})";
         await RefreshSelectedCollectionMembersAsync();
+    }
+
+    internal static string FormatProjectBackupTarget(
+        AssetCollectionSummary collection)
+    {
+        ArgumentNullException.ThrowIfNull(collection);
+        if (collection.BackupProfileId is null ||
+            collection.BackupProvider is null ||
+            string.IsNullOrWhiteSpace(collection.BackupProfileName))
+        {
+            return "未绑定";
+        }
+
+        var provider = collection.BackupProvider.Value switch
+        {
+            ObjectStorageProvider.AliyunOss => "阿里云 OSS",
+            ObjectStorageProvider.TencentCos => "腾讯云 COS",
+            ObjectStorageProvider.QiniuKodo => "七牛云 Kodo",
+            _ => collection.BackupProvider.Value.ToString()
+        };
+        return $"{provider} · {collection.BackupProfileName}";
     }
 
     private async Task RefreshSelectedCollectionMembersAsync()

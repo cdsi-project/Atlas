@@ -1,5 +1,6 @@
 using CDSI.Agent.Core.Collections;
 using CDSI.Agent.Core.Scanning;
+using CDSI.Agent.Core.Storage;
 using CDSI.Agent.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 
@@ -7,6 +8,53 @@ namespace CDSI.Agent.Infrastructure.Tests.Persistence;
 
 public sealed class SqliteAssetCollectionRepositoryTests
 {
+    [Fact]
+    public async Task CollectionBackupBinding_PersistsAndClearsWithItsProfile()
+    {
+        using var directory = new TestDirectory();
+        var repository = new SqliteAssetRepository(Path.Combine(directory.Path, "cdsi.db"));
+        await repository.InitializeAsync();
+        var now = DateTimeOffset.UtcNow;
+        var profile = new ObjectStorageProfile(
+            Guid.NewGuid(),
+            "腾讯归档",
+            ObjectStorageProvider.TencentCos,
+            "https://cos.ap-beijing.myqcloud.com",
+            "atlas-assets",
+            "ap-beijing",
+            UseHttps: true,
+            "secret-id",
+            now,
+            now);
+        await repository.SaveStorageProfileAsync(profile);
+        var collection = new AssetCollection(
+            Guid.NewGuid(),
+            "项目 A",
+            AssetCollectionType.Mixed,
+            now,
+            now,
+            profile.Id);
+
+        Assert.True(await repository.CreateAssetCollectionAsync(collection));
+
+        var loaded = await repository.GetAssetCollectionAsync(collection.Id);
+        var summary = Assert.Single(await repository.ListAssetCollectionsAsync());
+        Assert.Equal(profile.Id, loaded?.BackupProfileId);
+        Assert.Equal(profile.Id, summary.BackupProfileId);
+        Assert.Equal("腾讯归档", summary.BackupProfileName);
+        Assert.Equal(ObjectStorageProvider.TencentCos, summary.BackupProvider);
+
+        Assert.True(await repository.DeleteStorageProfileAsync(profile.Id));
+
+        loaded = await repository.GetAssetCollectionAsync(collection.Id);
+        summary = Assert.Single(await repository.ListAssetCollectionsAsync());
+        Assert.Null(loaded?.BackupProfileId);
+        Assert.Null(summary.BackupProfileId);
+        Assert.Null(summary.BackupProfileName);
+        Assert.Null(summary.BackupProvider);
+        SqliteConnection.ClearAllPools();
+    }
+
     [Fact]
     public async Task CollectionMembership_IsIdempotentAndDoesNotDeleteAssets()
     {

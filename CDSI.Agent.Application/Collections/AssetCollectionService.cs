@@ -11,6 +11,7 @@ public sealed class AssetCollectionService(IAssetCollectionRepository repository
     public async Task<AssetCollection> CreateAsync(
         string name,
         AssetCollectionType type,
+        Guid? backupProfileId = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(name);
@@ -38,7 +39,8 @@ public sealed class AssetCollectionService(IAssetCollectionRepository repository
             normalizedName,
             type,
             now,
-            now);
+            now,
+            backupProfileId);
         if (!await repository.CreateAssetCollectionAsync(collection, cancellationToken))
         {
             throw new InvalidOperationException("已存在同名资产清单。请使用其他名称。");

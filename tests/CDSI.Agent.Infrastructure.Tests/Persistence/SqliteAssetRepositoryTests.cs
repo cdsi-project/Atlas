@@ -864,7 +864,7 @@ public sealed class SqliteAssetRepositoryTests
             var locationVisibilityColumnCount = Convert.ToInt32(
                 await locationVisibilityColumnCommand.ExecuteScalarAsync());
 
-            Assert.Equal(23, version);
+            Assert.Equal(24, version);
             Assert.Equal(23, tableCount);
             Assert.Equal(8, filterIndexCount);
             Assert.Equal(3, scanFilterColumnCount);

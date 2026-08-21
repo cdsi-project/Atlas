@@ -912,6 +912,57 @@ internal static class DatabaseMigrator
             await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
+        if (currentVersion < 24)
+        {
+            var hasAssetCollections = await TableExistsAsync(
+                connection,
+                "asset_collections",
+                cancellationToken);
+            var hasStorageProfiles = await TableExistsAsync(
+                connection,
+                "storage_profiles",
+                cancellationToken);
+            var hasBackupProfileColumn = hasAssetCollections &&
+                await ColumnExistsAsync(
+                    connection,
+                    "asset_collections",
+                    "backup_profile_id",
+                    cancellationToken);
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await using var migrationCommand = connection.CreateCommand();
+            migrationCommand.Transaction = (SqliteTransaction)transaction;
+            if (hasAssetCollections && hasStorageProfiles && !hasBackupProfileColumn)
+            {
+                migrationCommand.CommandText =
+                    """
+                ALTER TABLE asset_collections
+                    ADD COLUMN backup_profile_id TEXT NULL
+                    REFERENCES storage_profiles(id) ON DELETE SET NULL;
+                """;
+                await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            if (hasAssetCollections && hasStorageProfiles)
+            {
+                migrationCommand.CommandText =
+                    """
+                CREATE INDEX IF NOT EXISTS ix_asset_collections_backup_profile_id
+                ON asset_collections(backup_profile_id);
+                """;
+                await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            migrationCommand.CommandText =
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (24, $applied_at);
+                """;
+            migrationCommand.Parameters.AddWithValue(
+                "$applied_at",
+                DateTimeOffset.UtcNow.ToString("O"));
+            await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     private static async Task<bool> TableExistsAsync(
@@ -944,6 +995,26 @@ internal static class DatabaseMigrator
                 FROM pragma_table_info('asset_locations')
                 WHERE name = 'ownership');
             """;
+        return Convert.ToInt32(
+            await command.ExecuteScalarAsync(cancellationToken)) != 0;
+    }
+
+    private static async Task<bool> ColumnExistsAsync(
+        SqliteConnection connection,
+        string tableName,
+        string columnName,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT EXISTS(
+                SELECT 1
+                FROM pragma_table_info($table_name)
+                WHERE name = $column_name);
+            """;
+        command.Parameters.AddWithValue("$table_name", tableName);
+        command.Parameters.AddWithValue("$column_name", columnName);
         return Convert.ToInt32(
             await command.ExecuteScalarAsync(cancellationToken)) != 0;
     }

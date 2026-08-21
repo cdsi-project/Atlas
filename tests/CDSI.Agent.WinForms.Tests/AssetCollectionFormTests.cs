@@ -1,5 +1,7 @@
+using CDSI.Agent.Application.Storage;
 using CDSI.Agent.Core.Collections;
 using CDSI.Agent.Core.Assets;
+using CDSI.Agent.Core.Storage;
 using CDSI.Agent.WinForms;
 
 namespace CDSI.Agent.WinForms.Tests;
@@ -16,6 +18,49 @@ public sealed class AssetCollectionFormTests
             Enum.GetValues<AssetCollectionType>(),
             AssetCollectionDialog.CollectionTypeChoices.Select(choice => choice.Type));
         Assert.Equal(AssetCollectionType.Mixed, form.CollectionType);
+    }
+
+    [Fact]
+    public void CreateDialog_OffersConfiguredCloudBackupProvidersAndNoBinding()
+    {
+        var profiles = new[]
+        {
+            CreateBackupProfile("阿里主存储", ObjectStorageProvider.AliyunOss),
+            CreateBackupProfile("腾讯归档", ObjectStorageProvider.TencentCos),
+            CreateBackupProfile("七牛分发", ObjectStorageProvider.QiniuKodo)
+        };
+        using var form = new AssetCollectionDialog(profiles);
+        form.CreateControl();
+        var backupComboBox = Assert.Single(Descendants(form).OfType<ComboBox>(),
+            comboBox => comboBox.AccessibleName == "云端备份");
+
+        Assert.Equal(4, backupComboBox.Items.Count);
+        Assert.Equal("暂不绑定", backupComboBox.GetItemText(backupComboBox.Items[0]));
+        Assert.Contains("阿里云 OSS · 阿里主存储", backupComboBox.GetItemText(backupComboBox.Items[1]));
+        Assert.Contains("腾讯云 COS · 腾讯归档", backupComboBox.GetItemText(backupComboBox.Items[2]));
+        Assert.Contains("七牛云 Kodo · 七牛分发", backupComboBox.GetItemText(backupComboBox.Items[3]));
+        Assert.Null(form.BackupProfileId);
+
+        backupComboBox.SelectedIndex = 2;
+        Assert.Equal(profiles[1].Profile.Id, form.BackupProfileId);
+    }
+
+    [Fact]
+    public void ProjectBackupBinding_RestrictsSyncToTheBoundProfile()
+    {
+        var profiles = new[]
+        {
+            CreateBackupProfile("阿里主存储", ObjectStorageProvider.AliyunOss),
+            CreateBackupProfile("腾讯归档", ObjectStorageProvider.TencentCos),
+            CreateBackupProfile("七牛分发", ObjectStorageProvider.QiniuKodo)
+        };
+
+        var selected = MainForm.SelectBackupProfiles(
+            profiles,
+            profiles[1].Profile.Id);
+
+        Assert.Equal(profiles[1].Profile.Id, Assert.Single(selected).Profile.Id);
+        Assert.Equal(3, MainForm.SelectBackupProfiles(profiles, null).Count);
     }
 
     [Fact]
@@ -276,6 +321,26 @@ public sealed class AssetCollectionFormTests
             BackedUpAssetCount: 0,
             CreatedAt: DateTimeOffset.UtcNow,
             UpdatedAt: DateTimeOffset.UtcNow);
+    }
+
+    private static ConfiguredObjectStorageProfile CreateBackupProfile(
+        string name,
+        ObjectStorageProvider provider)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new ConfiguredObjectStorageProfile(
+            new ObjectStorageProfile(
+                Guid.NewGuid(),
+                name,
+                provider,
+                "https://storage.example.com",
+                "atlas-assets",
+                "region-1",
+                UseHttps: true,
+                "access-key-id",
+                now,
+                now),
+            HasStoredSecret: true);
     }
 
     private static AssetListItem CreateAsset(

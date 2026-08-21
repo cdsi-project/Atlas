@@ -16,15 +16,18 @@ public sealed partial class SqliteAssetRepository : IAssetCollectionRepository
         command.CommandText =
             """
             INSERT OR IGNORE INTO asset_collections (
-                id, name, type, created_at, updated_at)
+                id, name, type, created_at, updated_at, backup_profile_id)
             VALUES (
-                $id, $name, $type, $created_at, $updated_at);
+                $id, $name, $type, $created_at, $updated_at, $backup_profile_id);
             """;
         command.Parameters.AddWithValue("$id", collection.Id.ToString("D"));
         command.Parameters.AddWithValue("$name", collection.Name);
         command.Parameters.AddWithValue("$type", collection.Type.ToString());
         command.Parameters.AddWithValue("$created_at", collection.CreatedAt.ToString("O"));
         command.Parameters.AddWithValue("$updated_at", collection.UpdatedAt.ToString("O"));
+        command.Parameters.AddWithValue(
+            "$backup_profile_id",
+            (object?)collection.BackupProfileId?.ToString("D") ?? DBNull.Value);
         return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
     }
 
@@ -36,7 +39,7 @@ public sealed partial class SqliteAssetRepository : IAssetCollectionRepository
         await using var command = connection.CreateCommand();
         command.CommandText =
             """
-            SELECT id, name, type, created_at, updated_at
+            SELECT id, name, type, created_at, updated_at, backup_profile_id
             FROM asset_collections
             WHERE id = $id
             LIMIT 1;
@@ -70,11 +73,17 @@ public sealed partial class SqliteAssetRepository : IAssetCollectionRepository
                       AND osl.status = 'Healthy'
                 ) THEN 1 ELSE 0 END), 0),
                 c.created_at,
-                c.updated_at
+                c.updated_at,
+                c.backup_profile_id,
+                sp.display_name,
+                sp.provider
             FROM asset_collections c
             LEFT JOIN asset_collection_items ci ON ci.collection_id = c.id
             LEFT JOIN assets a ON a.id = ci.asset_id
-            GROUP BY c.id, c.name, c.type, c.created_at, c.updated_at
+            LEFT JOIN storage_profiles sp ON sp.id = c.backup_profile_id
+            GROUP BY
+                c.id, c.name, c.type, c.created_at, c.updated_at,
+                c.backup_profile_id, sp.display_name, sp.provider
             ORDER BY c.updated_at DESC, c.name;
             """;
 
@@ -89,7 +98,13 @@ public sealed partial class SqliteAssetRepository : IAssetCollectionRepository
                 reader.GetInt64(4),
                 reader.GetInt32(5),
                 ParseTimestamp(reader.GetString(6)),
-                ParseTimestamp(reader.GetString(7))));
+                ParseTimestamp(reader.GetString(7)),
+                reader.IsDBNull(8) ? null : Guid.Parse(reader.GetString(8)),
+                reader.IsDBNull(9) ? null : reader.GetString(9),
+                reader.IsDBNull(10)
+                    ? null
+                    : Enum.Parse<CDSI.Agent.Core.Storage.ObjectStorageProvider>(
+                        reader.GetString(10))));
         }
 
         return collections;
@@ -373,7 +388,8 @@ public sealed partial class SqliteAssetRepository : IAssetCollectionRepository
             reader.GetString(1),
             Enum.Parse<AssetCollectionType>(reader.GetString(2)),
             ParseTimestamp(reader.GetString(3)),
-            ParseTimestamp(reader.GetString(4)));
+            ParseTimestamp(reader.GetString(4)),
+            reader.IsDBNull(5) ? null : Guid.Parse(reader.GetString(5)));
     }
 
     private static async Task UpdateAssetCollectionTimestampAsync(

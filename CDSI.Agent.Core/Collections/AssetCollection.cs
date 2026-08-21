@@ -1,4 +1,5 @@
 using CDSI.Agent.Core.Assets;
+using CDSI.Agent.Core.Storage;
 
 namespace CDSI.Agent.Core.Collections;
 
@@ -16,7 +17,8 @@ public sealed record AssetCollection(
     string Name,
     AssetCollectionType Type,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    Guid? BackupProfileId = null);
 
 public sealed record AssetCollectionSummary(
     Guid Id,
@@ -26,7 +28,10 @@ public sealed record AssetCollectionSummary(
     long TotalSizeBytes,
     int BackedUpAssetCount,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    Guid? BackupProfileId = null,
+    string? BackupProfileName = null,
+    ObjectStorageProvider? BackupProvider = null);
 
 public sealed record AssetCollectionMember(
     Guid CollectionId,

@@ -127,7 +127,8 @@ public sealed partial class MainForm
             await BackupProjectAssetsAsync(
                 plan.Assets,
                 $"正在同步项目：{plan.Collection.Name}",
-                plan.Collection.Name);
+                plan.Collection.Name,
+                plan.Collection.BackupProfileId);
         }
         catch (Exception exception)
         {
@@ -138,7 +139,8 @@ public sealed partial class MainForm
     private async Task BackupProjectAssetsAsync(
         IReadOnlyCollection<AssetListItem> assets,
         string progressStatus,
-        string projectDirectory)
+        string projectDirectory,
+        Guid? backupProfileId)
     {
         ArgumentNullException.ThrowIfNull(assets);
         ArgumentException.ThrowIfNullOrWhiteSpace(projectDirectory);
@@ -158,9 +160,8 @@ public sealed partial class MainForm
         IReadOnlyList<ConfiguredObjectStorageProfile> profiles;
         try
         {
-            profiles = (await _storageService.ListAsync())
-                .Where(profile => profile.HasStoredSecret)
-                .ToArray();
+            var configuredProfiles = await _storageService.ListAsync();
+            profiles = SelectBackupProfiles(configuredProfiles, backupProfileId);
         }
         catch (Exception exception)
         {
@@ -172,7 +173,9 @@ public sealed partial class MainForm
         {
             MessageBox.Show(
                 this,
-                "尚未配置带有效凭据的备份存储。请先在“设置”的“备份配置”中添加配置。",
+                backupProfileId is null
+                    ? "尚未配置带有效凭据的备份存储。请先在“设置”的“备份配置”中添加配置。"
+                    : "该项目绑定的云端备份配置不存在或缺少有效凭据。请检查“设置”的“备份配置”。",
                 "CDSI Atlas",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
@@ -237,6 +240,19 @@ public sealed partial class MainForm
             _progressBar.Style = ProgressBarStyle.Blocks;
             SetBusy(false);
         }
+    }
+
+    internal static IReadOnlyList<ConfiguredObjectStorageProfile> SelectBackupProfiles(
+        IReadOnlyList<ConfiguredObjectStorageProfile> configuredProfiles,
+        Guid? backupProfileId)
+    {
+        ArgumentNullException.ThrowIfNull(configuredProfiles);
+        return configuredProfiles
+            .Where(profile =>
+                profile.HasStoredSecret &&
+                (backupProfileId is null ||
+                    profile.Profile.Id == backupProfileId.Value))
+            .ToArray();
     }
 
     private void UpdateBackupProgress(ObjectStorageBackupProgress progress)
