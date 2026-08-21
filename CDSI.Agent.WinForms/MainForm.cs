@@ -507,6 +507,8 @@ public sealed partial class MainForm : Form
         var projectsColumn = CreateColumn("所属项目", 180);
         projectsColumn.Name = "Projects";
         grid.Columns.Add(projectsColumn);
+        grid.Columns.Add(CreateBackupStatusColumn());
+        grid.Columns.Add(CreateBackupTimeColumn());
         grid.Columns.Add(CreateColumn("标签", 180));
         grid.Columns.Add(CreateColumn("类型", 125));
         grid.Columns.Add(CreateFileSizeColumn());
@@ -526,8 +528,6 @@ public sealed partial class MainForm : Form
             DataGridViewAutoSizeColumnMode.Fill,
             34,
             minimumWidth: 220));
-        grid.Columns.Add(CreateBackupStatusColumn());
-        grid.Columns.Add(CreateBackupTimeColumn());
         grid.Columns.Add(CreateColumn("状态", 80));
         grid.AllowUserToOrderColumns = true;
     }
@@ -1067,6 +1067,10 @@ public sealed partial class MainForm : Form
                 FormatAssetIdForList(asset.AssetId),
                 asset.OriginalFilename,
                 FormatAssetProjects(asset.ProjectNames),
+                FormatBackupStatus(
+                    asset.HasHealthyObjectStorageBackup,
+                    asset.HealthyBackupProviders),
+                FormatBackupTime(asset.LatestHealthyBackupAt),
                 string.Join("、", asset.Tags),
                 asset.MimeType ?? "未知",
                 asset.Size,
@@ -1075,10 +1079,6 @@ public sealed partial class MainForm : Form
                 asset.DiscoveredAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
                 asset.Path,
                 FormatMetadata(asset.Metadata),
-                FormatBackupStatus(
-                    asset.HasHealthyObjectStorageBackup,
-                    asset.HealthyBackupProviders),
-                FormatBackupTime(asset.LatestHealthyBackupAt),
                 FormatStatus(asset));
             _assetGrid.Rows[rowIndex].Tag = asset;
             _assetGrid.Rows[rowIndex].Cells["AssetId"].ToolTipText =
@@ -1166,15 +1166,29 @@ public sealed partial class MainForm : Form
         }
 
         _assetDetailTitleLabel.Text = asset.OriginalFilename;
+        _assetDetailSummaryLabel.Text = FormatAssetDetailSummary(asset);
+    }
+
+    internal static string FormatAssetDetailSummary(AssetListItem asset)
+    {
+        ArgumentNullException.ThrowIfNull(asset);
         var tagSummary = asset.Tags.Count == 0
             ? "无标签"
             : $"标签：{string.Join("、", asset.Tags)}";
-        _assetDetailSummaryLabel.Text = string.Join(
+        var backupStatus = FormatBackupStatus(
+            asset.HasHealthyObjectStorageBackup,
+            asset.HealthyBackupProviders);
+        var backupSummary = asset.HasHealthyObjectStorageBackup
+            ? $"备份：{backupStatus} · 时间 {FormatBackupTime(asset.LatestHealthyBackupAt)}"
+            : "备份：未备份";
+        return string.Join(
             Environment.NewLine,
             $"{asset.MimeType ?? "未知类型"} · {FormatFileSize(asset.Size)} · 修改 {asset.ModifiedAt.ToLocalTime():yyyy-MM-dd HH:mm} · 索引 {asset.DiscoveredAt.ToLocalTime():yyyy-MM-dd HH:mm}",
             tagSummary,
+            backupSummary,
             asset.Path);
     }
+
     private void SetBusy(bool busy, bool allowCancel = true)
     {
         _isBusy = busy;

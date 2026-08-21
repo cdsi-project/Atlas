@@ -1037,6 +1037,12 @@ public sealed class MainFormLayoutTests
             grid.Columns["Projects"]!.DisplayIndex <
             grid.Columns.Cast<DataGridViewColumn>()
                 .Single(column => column.HeaderText == "标签").DisplayIndex);
+        Assert.Equal(
+            grid.Columns["Projects"]!.DisplayIndex + 1,
+            grid.Columns["BackupStatus"]!.DisplayIndex);
+        Assert.Equal(
+            grid.Columns["BackupStatus"]!.DisplayIndex + 1,
+            grid.Columns["BackupTime"]!.DisplayIndex);
     }
 
     [Fact]

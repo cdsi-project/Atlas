@@ -220,7 +220,7 @@ public sealed partial class MainForm
                 confirmation.SelectedProfileId,
                 backupProgress,
                 _scanCancellation.Token);
-            await RefreshAssetsAsync();
+            await RefreshAssetPageAsync();
             ShowBackupResult(result);
         }
         catch (OperationCanceledException)

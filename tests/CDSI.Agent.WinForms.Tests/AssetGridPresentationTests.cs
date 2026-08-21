@@ -1,3 +1,4 @@
+using CDSI.Agent.Core.Assets;
 using CDSI.Agent.WinForms;
 
 namespace CDSI.Agent.WinForms.Tests;
@@ -52,6 +53,37 @@ public sealed class AssetGridPresentationTests
         Assert.Equal(
             value.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
             MainForm.FormatBackupTime(value));
+    }
+
+    [Fact]
+    public void AssetDetails_ShowHealthyBackupProviderAndTime()
+    {
+        var backupTime = DateTimeOffset.Parse("2026-08-21T08:30:00+08:00");
+        var asset = new AssetListItem(
+            Guid.NewGuid(),
+            "video.mp4",
+            ".mp4",
+            "video/mp4",
+            1_024,
+            null,
+            backupTime,
+            backupTime,
+            @"D:\Creator\video.mp4",
+            AssetLocationOwnership.External,
+            AssetLocationStatus.Available,
+            AssetStatus.Indexed,
+            HasHealthyObjectStorageBackup: true)
+        {
+            HealthyBackupProviders = ["AliyunOss"],
+            LatestHealthyBackupAt = backupTime
+        };
+
+        var summary = MainForm.FormatAssetDetailSummary(asset);
+
+        Assert.Contains("备份：OSS", summary);
+        Assert.Contains(
+            $"时间 {backupTime.ToLocalTime():yyyy-MM-dd HH:mm}",
+            summary);
     }
 
     [Fact]
