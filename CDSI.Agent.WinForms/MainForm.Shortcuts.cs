@@ -161,7 +161,8 @@ public sealed partial class MainForm
     private void FocusAssetFilter()
     {
         _mainTabControl.SelectedTab = _assetsTabPage;
-        _assetFileTypeFilterComboBox.Focus();
+        _assetFilenameFilterTextBox.Focus();
+        _assetFilenameFilterTextBox.SelectAll();
     }
 
     private bool HasFocusedAsset()

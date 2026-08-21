@@ -504,6 +504,7 @@ public sealed class MainFormLayoutTests
     [Fact]
     public void CreateAssetFilterPanel_ContainsTypeDatesAndExplicitCommands()
     {
+        using var filenameTextBox = new TextBox();
         using var fileTypeComboBox = new ComboBox();
         using var extensionComboBox = new ComboBox();
         using var tagComboBox = new ComboBox();
@@ -513,6 +514,7 @@ public sealed class MainFormLayoutTests
         using var resetButton = new Button { Text = "重置" };
         using var resultLabel = new Label();
         using var panel = MainForm.CreateAssetFilterPanel(
+            filenameTextBox,
             fileTypeComboBox,
             extensionComboBox,
             tagComboBox,
@@ -521,7 +523,11 @@ public sealed class MainFormLayoutTests
             applyButton,
             resetButton,
             resultLabel);
+        panel.Size = new Size(920, 82);
+        panel.CreateControl();
+        panel.PerformLayout();
 
+        Assert.Contains(filenameTextBox, panel.Controls.Cast<Control>());
         Assert.Contains(fileTypeComboBox, panel.Controls.Cast<Control>());
         Assert.Contains(extensionComboBox, panel.Controls.Cast<Control>());
         Assert.Contains(tagComboBox, panel.Controls.Cast<Control>());
@@ -531,6 +537,11 @@ public sealed class MainFormLayoutTests
         Assert.Contains(resetButton, panel.Controls.Cast<Control>());
         Assert.Contains(resultLabel, panel.Controls.Cast<Control>());
         Assert.True(Assert.IsType<FlowLayoutPanel>(panel).WrapContents);
+        Assert.All(
+            panel.Controls.Cast<Control>(),
+            control => Assert.True(
+                control.Bottom <= panel.ClientSize.Height,
+                $"{control.GetType().Name} '{control.Text}' 超出搜索区域。"));
         Assert.Equal("搜索", applyButton.Text);
         Assert.Equal(
             Enum.GetValues<CDSI.Agent.Core.Assets.AssetFileTypeFilter>(),
@@ -551,7 +562,8 @@ public sealed class MainFormLayoutTests
             createdToEnabled: true,
             to,
             extension: "MP4",
-            tagId: tagId);
+            tagId: tagId,
+            filenameContains: "  Final Cut  ");
 
         Assert.Equal(
             from,
@@ -564,6 +576,7 @@ public sealed class MainFormLayoutTests
             filter.FileType);
         Assert.Equal(".mp4", filter.Extension);
         Assert.Equal(tagId, filter.TagId);
+        Assert.Equal("Final Cut", filter.FilenameContains);
         Assert.Throws<ArgumentException>(() => MainForm.BuildAssetListFilter(
             CDSI.Agent.Core.Assets.AssetFileTypeFilter.All,
             createdFromEnabled: true,

@@ -21,6 +21,7 @@ public sealed partial class MainForm
     private readonly ComboBox _assetFileTypeFilterComboBox = new();
     private readonly ComboBox _assetExtensionFilterComboBox = new();
     private readonly ComboBox _assetTagFilterComboBox = new();
+    private readonly TextBox _assetFilenameFilterTextBox = new();
     private readonly DateTimePicker _assetCreatedFromDatePicker = new();
     private readonly DateTimePicker _assetCreatedToDatePicker = new();
     private readonly Button _applyAssetFilterButton = new();
@@ -31,6 +32,20 @@ public sealed partial class MainForm
 
     private Control ConfigureAssetFilterPanel()
     {
+        _assetFilenameFilterTextBox.Width = 180;
+        _assetFilenameFilterTextBox.AccessibleName = "文件名搜索";
+        _assetFilenameFilterTextBox.PlaceholderText = "输入文件名关键词";
+        _assetFilenameFilterTextBox.KeyDown += async (_, eventArgs) =>
+        {
+            if (eventArgs.KeyCode != Keys.Enter)
+            {
+                return;
+            }
+
+            eventArgs.SuppressKeyPress = true;
+            await ApplyAssetFilterAsync();
+        };
+
         _assetFileTypeFilterComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
         _assetFileTypeFilterComboBox.Width = 108;
         _assetFileTypeFilterComboBox.AccessibleName = "文件类型过滤";
@@ -85,6 +100,7 @@ public sealed partial class MainForm
         _assetFilterResultLabel.AccessibleName = "资产过滤结果";
 
         return CreateAssetFilterPanel(
+            _assetFilenameFilterTextBox,
             _assetFileTypeFilterComboBox,
             _assetExtensionFilterComboBox,
             _assetTagFilterComboBox,
@@ -96,6 +112,7 @@ public sealed partial class MainForm
     }
 
     internal static Control CreateAssetFilterPanel(
+        TextBox filenameTextBox,
         ComboBox fileTypeComboBox,
         ComboBox extensionComboBox,
         ComboBox tagComboBox,
@@ -114,6 +131,8 @@ public sealed partial class MainForm
             Padding = new Padding(8, 8, 8, 6),
             BackColor = Color.FromArgb(247, 248, 250)
         };
+        panel.Controls.Add(CreateFilterLabel("文件名"));
+        panel.Controls.Add(filenameTextBox);
         panel.Controls.Add(CreateFilterLabel("文件类型"));
         panel.Controls.Add(fileTypeComboBox);
         panel.Controls.Add(CreateFilterLabel("扩展名", leftMargin: 14));
@@ -137,7 +156,8 @@ public sealed partial class MainForm
         bool createdToEnabled,
         DateTime createdTo,
         string? extension = null,
-        Guid? tagId = null)
+        Guid? tagId = null,
+        string? filenameContains = null)
     {
         if (createdFromEnabled &&
             createdToEnabled &&
@@ -157,7 +177,8 @@ public sealed partial class MainForm
             createdFromBoundary,
             createdBeforeBoundary,
             extension,
-            tagId);
+            tagId,
+            filenameContains);
     }
 
     private static DateTimeOffset StartOfLocalDay(DateTime value)
@@ -227,7 +248,8 @@ public sealed partial class MainForm
                 _assetExtensionFilterComboBox.SelectedIndex > 0
                     ? _assetExtensionFilterComboBox.SelectedItem as string
                     : null,
-                (_assetTagFilterComboBox.SelectedItem as AssetTagFilterChoice)?.TagId);
+                (_assetTagFilterComboBox.SelectedItem as AssetTagFilterChoice)?.TagId,
+                _assetFilenameFilterTextBox.Text);
         }
         catch (ArgumentException exception)
         {
@@ -249,6 +271,7 @@ public sealed partial class MainForm
         _assetFileTypeFilterComboBox.SelectedIndex = 0;
         _assetExtensionFilterComboBox.SelectedIndex = 0;
         _assetTagFilterComboBox.SelectedIndex = 0;
+        _assetFilenameFilterTextBox.Clear();
         _assetCreatedFromDatePicker.Checked = false;
         _assetCreatedToDatePicker.Checked = false;
         _assetListFilter = AssetListFilter.Empty;
@@ -268,6 +291,7 @@ public sealed partial class MainForm
     private void UpdateAssetFilterControlState()
     {
         var enabled = !_isBusy && !_refreshingAssetPage;
+        _assetFilenameFilterTextBox.Enabled = enabled;
         _assetFileTypeFilterComboBox.Enabled = enabled;
         _assetExtensionFilterComboBox.Enabled = enabled;
         _assetTagFilterComboBox.Enabled = enabled;

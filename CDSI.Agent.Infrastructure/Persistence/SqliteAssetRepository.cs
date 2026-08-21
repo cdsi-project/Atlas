@@ -1515,6 +1515,12 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
             conditions.Add("lower(a.extension) = $extension");
         }
 
+        if (filter.FilenameContains is not null)
+        {
+            conditions.Add(
+                "instr(lower(a.original_filename), $filename_contains) > 0");
+        }
+
         if (filter.TagId is not null)
         {
             conditions.Add(
@@ -1582,6 +1588,13 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
         if (filter.Extension is not null)
         {
             command.Parameters.AddWithValue("$extension", filter.Extension);
+        }
+
+        if (filter.FilenameContains is not null)
+        {
+            command.Parameters.AddWithValue(
+                "$filename_contains",
+                filter.FilenameContains.ToLowerInvariant());
         }
 
         if (filter.TagId is not null)

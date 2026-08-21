@@ -378,7 +378,9 @@ public sealed class SqliteAssetRepositoryTests
         var januaryFirst = DateTimeOffset.Parse("2026-01-01T08:00:00+08:00");
         DiscoveredFile[] files =
         [
-            CreateFile(Path.Combine(directory.Path, "video.mp4"), "video.mp4") with
+            CreateFile(
+                Path.Combine(directory.Path, "filename-parent-only", "video.mp4"),
+                "video.mp4") with
             {
                 MimeType = "video/mp4",
                 CreatedAt = januaryFirst
@@ -422,6 +424,10 @@ public sealed class SqliteAssetRepositoryTests
         var extensionFilter = new AssetListFilter(
             AssetFileTypeFilter.Document,
             extension: "PDF");
+        var filenameFilter = new AssetListFilter(
+            filenameContains: "TICLE.P");
+        var pathOnlyFilter = new AssetListFilter(
+            filenameContains: "filename-parent-only");
 
         Assert.Equal(
             [".mp3", ".mp4", ".pdf", ".png", ".zip"],
@@ -462,6 +468,12 @@ public sealed class SqliteAssetRepositoryTests
             "article.pdf",
             Assert.Single(await repository.ListAssetsAsync(extensionFilter, 100))
                 .OriginalFilename);
+        Assert.Equal(1, await repository.GetAssetListCountAsync(filenameFilter));
+        Assert.Equal(
+            "article.pdf",
+            Assert.Single(await repository.ListAssetsAsync(filenameFilter, 100))
+                .OriginalFilename);
+        Assert.Empty(await repository.ListAssetsAsync(pathOnlyFilter, 100));
 
         SqliteConnection.ClearAllPools();
     }

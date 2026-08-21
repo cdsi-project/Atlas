@@ -61,4 +61,24 @@ public sealed class AssetListFilterTests
         Assert.False(filter.IsEmpty);
         Assert.Equal(tagId, filter.TagId);
     }
+
+    [Theory]
+    [InlineData("  Final Cut  ", "Final Cut")]
+    [InlineData("素材_01.MP4", "素材_01.MP4")]
+    public void Constructor_NormalizesFilenameSearch(
+        string input,
+        string expected)
+    {
+        var filter = new AssetListFilter(filenameContains: input);
+
+        Assert.Equal(expected, filter.FilenameContains);
+        Assert.False(filter.IsEmpty);
+    }
+
+    [Fact]
+    public void Constructor_RejectsAnOversizedFilenameSearch()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new AssetListFilter(filenameContains: new string('a', 256)));
+    }
 }
