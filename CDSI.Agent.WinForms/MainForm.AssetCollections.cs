@@ -328,6 +328,19 @@ public sealed partial class MainForm
             .ToArray();
     }
 
+    internal static IReadOnlyList<AssetCollectionSummary> FindProjectsForAsset(
+        IReadOnlyList<AssetCollectionSummary> projects,
+        AssetListItem asset)
+    {
+        ArgumentNullException.ThrowIfNull(projects);
+        ArgumentNullException.ThrowIfNull(asset);
+        return projects
+            .Where(project => asset.ProjectNames.Contains(
+                project.Name,
+                StringComparer.OrdinalIgnoreCase))
+            .ToArray();
+    }
+
     internal static void PopulateSyncToProjectMenu(
         ToolStripMenuItem menuItem,
         IReadOnlyList<AssetCollectionSummary> commonProjects,
@@ -457,6 +470,72 @@ public sealed partial class MainForm
         }
 
         await SyncSelectedAssetsToProjectAsync();
+    }
+
+    private async Task OpenCurrentAssetProjectAsync()
+    {
+        if (_assetGrid.CurrentRow?.Tag is not AssetListItem asset)
+        {
+            return;
+        }
+
+        var projects = FindProjectsForAsset(_availableCollections, asset);
+        if (projects.Count == 0)
+        {
+            return;
+        }
+
+        Guid? projectId;
+        if (projects.Count == 1)
+        {
+            projectId = projects[0].Id;
+        }
+        else
+        {
+            using var selection = new AssetCollectionSelectionForm(
+                projects,
+                selectedAssetCount: 1,
+                AssetCollectionSelectionPurpose.Open);
+            projectId = selection.ShowDialog(this) == DialogResult.OK
+                ? selection.SelectedCollectionId
+                : null;
+        }
+
+        if (projectId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _mainTabControl.SelectedTab = _collectionsTabPage;
+            await RefreshAssetCollectionsAsync(projectId.Value);
+            SelectProjectMember(_collectionMemberGrid, asset.AssetId);
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法打开所在项目", exception);
+        }
+    }
+
+    internal static bool SelectProjectMember(
+        DataGridView memberGrid,
+        Guid assetId)
+    {
+        ArgumentNullException.ThrowIfNull(memberGrid);
+        var row = memberGrid.Rows
+            .Cast<DataGridViewRow>()
+            .FirstOrDefault(candidate =>
+                (candidate.Tag as AssetCollectionMember)?.Asset.AssetId == assetId);
+        if (row is null)
+        {
+            return false;
+        }
+
+        memberGrid.ClearSelection();
+        memberGrid.CurrentCell = row.Cells[0];
+        row.Selected = true;
+        return true;
     }
 
     private async Task AddSelectedAssetsToCollectionAsync()

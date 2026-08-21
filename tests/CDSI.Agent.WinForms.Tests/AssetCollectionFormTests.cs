@@ -193,6 +193,55 @@ public sealed class AssetCollectionFormTests
     }
 
     [Fact]
+    public void OpenSelection_UsesProjectNavigationWording()
+    {
+        using var form = new AssetCollectionSelectionForm(
+            [CreateProject("项目 A"), CreateProject("项目 B")],
+            selectedAssetCount: 1,
+            AssetCollectionSelectionPurpose.Open);
+        form.CreateControl();
+
+        Assert.Equal("打开所在项目", form.Text);
+        Assert.Contains(
+            Descendants(form).OfType<Label>(),
+            label => label.Text == "选择要打开的所在项目");
+        Assert.Contains(
+            Descendants(form).OfType<Button>(),
+            button => button.Text == "打开");
+    }
+
+    [Fact]
+    public void ProjectNavigation_FindsMembershipAndSelectsTheAsset()
+    {
+        var matchingProject = CreateProject("项目 A");
+        var projects = new[] { matchingProject, CreateProject("项目 B") };
+        var asset = CreateAsset("video.mp4", ["项目 a"]);
+        var otherAsset = CreateAsset("other.mp4", ["项目 A"]);
+
+        var matching = MainForm.FindProjectsForAsset(projects, asset);
+        using var grid = new DataGridView { AllowUserToAddRows = false };
+        grid.Columns.Add("File", "文件");
+        var otherRow = grid.Rows.Add(otherAsset.OriginalFilename);
+        grid.Rows[otherRow].Tag = new AssetCollectionMember(
+            matchingProject.Id,
+            otherAsset,
+            DateTimeOffset.UtcNow);
+        var assetRow = grid.Rows.Add(asset.OriginalFilename);
+        grid.Rows[assetRow].Tag = new AssetCollectionMember(
+            matchingProject.Id,
+            asset,
+            DateTimeOffset.UtcNow);
+
+        var selected = MainForm.SelectProjectMember(grid, asset.AssetId);
+
+        Assert.Equal(matchingProject.Id, Assert.Single(matching).Id);
+        Assert.True(selected);
+        Assert.Same(grid.Rows[assetRow], grid.CurrentRow);
+        Assert.True(grid.Rows[assetRow].Selected);
+        Assert.False(grid.Rows[otherRow].Selected);
+    }
+
+    [Fact]
     public void ProjectDeletionConfirmation_ListsTheScopeAndPreservesAssets()
     {
         var project = new AssetCollectionSummary(

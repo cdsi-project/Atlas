@@ -6,7 +6,8 @@ internal enum AssetCollectionSelectionPurpose
 {
     Add,
     Sync,
-    AddAndSync
+    AddAndSync,
+    Open
 }
 
 internal sealed class AssetCollectionSelectionForm : Form
@@ -28,6 +29,7 @@ internal sealed class AssetCollectionSelectionForm : Form
         {
             AssetCollectionSelectionPurpose.Sync => "同步到 OSS",
             AssetCollectionSelectionPurpose.AddAndSync => "加入项目并备份",
+            AssetCollectionSelectionPurpose.Open => "打开所在项目",
             _ => "加入项目"
         };
         StartPosition = FormStartPosition.CenterParent;
@@ -57,6 +59,7 @@ internal sealed class AssetCollectionSelectionForm : Form
                     $"选择 {selectedAssetCount:N0} 个资产所属的目标项目",
                 AssetCollectionSelectionPurpose.AddAndSync =>
                     $"先将 {selectedAssetCount:N0} 个资产加入项目，再同步到 OSS",
+                AssetCollectionSelectionPurpose.Open => "选择要打开的所在项目",
                 _ => $"将 {selectedAssetCount:N0} 个资产加入"
             },
             Font = new Font("Segoe UI Semibold", 10F),
@@ -91,9 +94,12 @@ internal sealed class AssetCollectionSelectionForm : Form
         };
         var confirmButton = new Button
         {
-            Text = purpose == AssetCollectionSelectionPurpose.Add
-                ? "加入"
-                : "继续",
+            Text = purpose switch
+            {
+                AssetCollectionSelectionPurpose.Add => "加入",
+                AssetCollectionSelectionPurpose.Open => "打开",
+                _ => "继续"
+            },
             DialogResult = DialogResult.OK,
             Size = new Size(96, 32),
             BackColor = Color.FromArgb(24, 121, 78),

@@ -8,6 +8,7 @@ namespace CDSI.Agent.WinForms;
 public sealed partial class MainForm
 {
     private readonly ToolStripMenuItem _openFileLocationMenuItem = new();
+    private readonly ToolStripMenuItem _openAssetProjectMenuItem = new();
     private readonly ToolStripMenuItem _showAssetDetailsMenuItem = new();
     private readonly ToolStripMenuItem _hideAssetsFromListMenuItem = new();
     private readonly ToolStripMenuItem _restoreFromOssMenuItem = new();
@@ -18,6 +19,7 @@ public sealed partial class MainForm
     {
         _openFileLocationMenuItem.Text = "打开文件位置";
         _openFileLocationMenuItem.ShortcutKeyDisplayString = "Enter";
+        _openAssetProjectMenuItem.Text = "打开所在项目";
         _showAssetDetailsMenuItem.Text = "资产详情";
         _showAssetDetailsMenuItem.ShortcutKeyDisplayString = "Alt+Enter";
         _addToCollectionMenuItem.Text = "加入项目";
@@ -28,6 +30,8 @@ public sealed partial class MainForm
         _publishToOpenWebMenuItem.Text = "发布到 OpenWeb";
         _hideAssetsFromListMenuItem.Text = "从资产列表中移除（不删除）";
         _openFileLocationMenuItem.Click += (_, _) => OpenCurrentAssetFileLocation();
+        _openAssetProjectMenuItem.Click += async (_, _) =>
+            await OpenCurrentAssetProjectAsync();
         _showAssetDetailsMenuItem.Click += (_, _) => ShowCurrentAssetDetails();
         _copyToWorkspaceMenuItem.Click += async (_, _) =>
             await TransferSelectedAssetsAsync(ManagedAssetTransferAction.Copy);
@@ -43,6 +47,7 @@ public sealed partial class MainForm
         _assetContextMenu.Items.AddRange(
             [
                 _openFileLocationMenuItem,
+                _openAssetProjectMenuItem,
                 _showAssetDetailsMenuItem,
                 new ToolStripSeparator(),
                 _assetTagsMenuItem,
@@ -69,6 +74,9 @@ public sealed partial class MainForm
             ConfigureAddToProjectMenu(selected);
             ConfigureSyncToProjectMenu(selected);
             _openFileLocationMenuItem.Enabled = _assetGrid.CurrentRow?.Tag is AssetListItem;
+            _openAssetProjectMenuItem.Enabled =
+                _assetGrid.CurrentRow?.Tag is AssetListItem currentAsset &&
+                FindProjectsForAsset(_availableCollections, currentAsset).Count > 0;
             _showAssetDetailsMenuItem.Enabled = _assetGrid.CurrentRow?.Tag is AssetListItem;
             _copyToWorkspaceMenuItem.Enabled = canOperate;
             _moveToWorkspaceMenuItem.Enabled = canOperate;
