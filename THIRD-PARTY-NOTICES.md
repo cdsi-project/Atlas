@@ -52,5 +52,5 @@ intended to be shipped as application runtime dependencies.
 - MIT: <https://opensource.org/license/mit>
 
 This inventory reflects the dependency versions declared or resolved by the
-repository at version 0.186. It should be reviewed whenever dependencies or
+repository at version 0.187. It should be reviewed whenever dependencies or
 the publishing model change.

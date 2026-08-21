@@ -31,6 +31,7 @@ static class Program
         var dataDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "CDSI");
+        RuntimeLogService? runtimeLog = null;
         try
         {
             using var singleInstance = new SingleInstanceCoordinator("CDSI.Atlas");
@@ -41,6 +42,7 @@ static class Program
             }
 
             ApplicationConfiguration.Initialize();
+            runtimeLog = new RuntimeLogService(dataDirectory);
 
             var repository = new SqliteAssetRepository(Path.Combine(dataDirectory, "cdsi.db"));
             var fingerprintEngine = new Sha256FileFingerprintService();
@@ -121,13 +123,16 @@ static class Program
                 assetCollectionService,
                 assetTagService,
                 transferService,
-                dataDirectory);
+                dataDirectory,
+                runtimeLog);
             mainForm.Shown += (_, _) => singleInstance.StartListening(
                 () => MainWindowActivator.RequestActivation(mainForm));
             System.Windows.Forms.Application.Run(mainForm);
+            runtimeLog.WriteInformation("CDSI Atlas 正常退出");
         }
         catch (Exception exception)
         {
+            runtimeLog?.WriteError("应用发生未处理异常", exception);
             StartupFailureReporter.Show(dataDirectory, exception);
         }
     }

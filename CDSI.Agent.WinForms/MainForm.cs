@@ -29,6 +29,7 @@ public sealed partial class MainForm : Form
     private readonly ObjectStorageBackupService _objectStorageBackupService;
     private readonly ObjectStorageRestoreService _objectStorageRestoreService;
     private readonly ManagedAssetTransferService _transferService;
+    private readonly RuntimeLogService _runtimeLog;
     private readonly FingerprintApplicationService _fingerprintService;
     private readonly MetadataExtractionApplicationService _metadataService;
     private readonly TableLayoutPanel _progressPanel = new();
@@ -73,7 +74,8 @@ public sealed partial class MainForm : Form
         AssetCollectionService assetCollectionService,
         AssetTagService assetTagService,
         ManagedAssetTransferService transferService,
-        string dataDirectory)
+        string dataDirectory,
+        RuntimeLogService runtimeLog)
     {
         _dataDirectory = Path.GetFullPath(dataDirectory);
         _scanService = scanService;
@@ -91,6 +93,7 @@ public sealed partial class MainForm : Form
         _assetCollectionService = assetCollectionService;
         _assetTagService = assetTagService;
         _transferService = transferService;
+        _runtimeLog = runtimeLog ?? throw new ArgumentNullException(nameof(runtimeLog));
         InitializeLayout(_dataDirectory);
 
         Shown += MainForm_Shown;
@@ -1353,6 +1356,7 @@ public sealed partial class MainForm : Form
 
     private void ShowError(string title, Exception exception)
     {
+        _runtimeLog.WriteError(title, exception);
         MessageBox.Show(
             this,
             exception.Message,

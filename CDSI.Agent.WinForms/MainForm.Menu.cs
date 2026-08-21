@@ -102,7 +102,9 @@ public sealed partial class MainForm
             ShortcutKeys = Keys.Control | Keys.J
         };
         taskCenterItem.Click += (_, _) => ShowTaskCenter();
-        toolsMenu.DropDownItems.Add(taskCenterItem);
+        var runtimeLogItem = new ToolStripMenuItem("运行日志(&L)");
+        runtimeLogItem.Click += (_, _) => ShowRuntimeLog();
+        toolsMenu.DropDownItems.AddRange([taskCenterItem, runtimeLogItem]);
         toolsMenu.DropDownOpening += (_, _) => UpdateMainMenuState();
 
         _settingsMenuItem.Text = "设置(&O)";
@@ -397,6 +399,13 @@ public sealed partial class MainForm
         using var dialog = new TaskCenterForm(
             CreateTaskCenterSnapshot,
             () => _scanCancellation?.Cancel());
+        dialog.ShowDialog(this);
+    }
+
+    private void ShowRuntimeLog()
+    {
+        _runtimeLog.WriteInformation("打开运行日志窗口");
+        using var dialog = new RuntimeLogForm(_runtimeLog);
         dialog.ShowDialog(this);
     }
 
