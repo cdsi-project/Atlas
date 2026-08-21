@@ -23,7 +23,7 @@ public sealed partial class MainForm
         _addToCollectionMenuItem.Text = "加入项目";
         _copyToWorkspaceMenuItem.Text = "复制到 CDSI 工作目录";
         _moveToWorkspaceMenuItem.Text = "移动到 CDSI 工作目录";
-        _backupToOssMenuItem.Text = "备份到 OSS";
+        _backupToOssMenuItem.Text = "同步到 OSS";
         _restoreFromOssMenuItem.Text = "从 OSS 取回";
         _publishToOpenWebMenuItem.Text = "发布到 OpenWeb";
         _hideAssetsFromListMenuItem.Text = "从资产列表中移除（不删除）";
@@ -33,8 +33,6 @@ public sealed partial class MainForm
             await TransferSelectedAssetsAsync(ManagedAssetTransferAction.Copy);
         _moveToWorkspaceMenuItem.Click += async (_, _) =>
             await TransferSelectedAssetsAsync(ManagedAssetTransferAction.Move);
-        _backupToOssMenuItem.Click += async (_, _) =>
-            await BackupSelectedAssetsAsync();
         _restoreFromOssMenuItem.Click += async (_, _) =>
             await RestoreSelectedAssetsFromOssAsync();
         _publishToOpenWebMenuItem.Click += async (_, _) =>
@@ -69,6 +67,7 @@ public sealed partial class MainForm
             args.Cancel = selected.Count == 0;
             ConfigureAssetTagMenu(_assetTagsMenuItem, selected);
             ConfigureAddToProjectMenu(selected);
+            ConfigureSyncToProjectMenu(selected);
             _openFileLocationMenuItem.Enabled = _assetGrid.CurrentRow?.Tag is AssetListItem;
             _showAssetDetailsMenuItem.Enabled = _assetGrid.CurrentRow?.Tag is AssetListItem;
             _copyToWorkspaceMenuItem.Enabled = canOperate;
@@ -85,8 +84,6 @@ public sealed partial class MainForm
                 $"复制到 CDSI 工作目录 ({selected.Count:N0})";
             _moveToWorkspaceMenuItem.Text =
                 $"移动到 CDSI 工作目录 ({selected.Count:N0})";
-            _backupToOssMenuItem.Text =
-                $"备份到 OSS ({selected.Count:N0})";
             _restoreFromOssMenuItem.Text =
                 $"从 OSS 取回 ({selected.Count:N0})";
             _hideAssetsFromListMenuItem.Text =

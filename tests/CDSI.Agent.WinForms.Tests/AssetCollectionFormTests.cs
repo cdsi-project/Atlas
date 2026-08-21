@@ -1,4 +1,5 @@
 using CDSI.Agent.Core.Collections;
+using CDSI.Agent.Core.Assets;
 using CDSI.Agent.WinForms;
 
 namespace CDSI.Agent.WinForms.Tests;
@@ -119,6 +120,79 @@ public sealed class AssetCollectionFormTests
     }
 
     [Fact]
+    public void SyncToProjectMenu_ListsOnlyCommonProjectsAndThenMore()
+    {
+        var projects = Enumerable.Range(1, 4)
+            .Select(index => CreateProject($"项目 {index}"))
+            .ToArray();
+        var firstAsset = CreateAsset(
+            "first.mp4",
+            projects.Select(project => project.Name).ToArray());
+        var secondAsset = CreateAsset(
+            "second.mp4",
+            projects.Select(project => project.Name).ToArray());
+        var commonProjects = MainForm.FindCommonProjects(
+            projects,
+            [firstAsset, secondAsset]);
+        using var menuItem = new ToolStripMenuItem();
+
+        MainForm.PopulateSyncToProjectMenu(
+            menuItem,
+            commonProjects,
+            selectedAssetCount: 2);
+
+        Assert.Equal("同步到 OSS (2)", menuItem.Text);
+        Assert.Collection(
+            menuItem.DropDownItems.Cast<ToolStripItem>(),
+            item => Assert.Equal(projects[0].Id, item.Tag),
+            item => Assert.Equal(projects[1].Id, item.Tag),
+            item => Assert.Equal(projects[2].Id, item.Tag),
+            item => Assert.IsType<ToolStripSeparator>(item),
+            item => Assert.Equal("更多...", item.Text));
+    }
+
+    [Fact]
+    public void SyncToProjectMenu_RequiresJoiningAProjectWhenNoneIsCommon()
+    {
+        var projects = new[] { CreateProject("项目 1"), CreateProject("项目 2") };
+        var selectedAssets = new[]
+        {
+            CreateAsset("first.mp4", ["项目 1"]),
+            CreateAsset("second.mp4", ["项目 2"])
+        };
+        var commonProjects = MainForm.FindCommonProjects(projects, selectedAssets);
+        using var menuItem = new ToolStripMenuItem();
+
+        MainForm.PopulateSyncToProjectMenu(
+            menuItem,
+            commonProjects,
+            selectedAssets.Length);
+
+        Assert.Empty(commonProjects);
+        var action = Assert.Single(
+            menuItem.DropDownItems.Cast<ToolStripItem>());
+        Assert.Equal("加入项目并备份...", action.Text);
+    }
+
+    [Fact]
+    public void AddAndSyncSelection_OffersExistingOrNewProject()
+    {
+        using var form = new AssetCollectionSelectionForm(
+            [CreateProject("现有项目")],
+            selectedAssetCount: 2,
+            AssetCollectionSelectionPurpose.AddAndSync);
+        form.CreateControl();
+        var comboBox = Assert.Single(Descendants(form).OfType<ComboBox>());
+
+        Assert.Equal("加入项目并备份", form.Text);
+        Assert.Equal(2, comboBox.Items.Count);
+        Assert.Equal("新建项目...", comboBox.GetItemText(comboBox.Items[1]));
+        comboBox.SelectedIndex = 1;
+        Assert.True(form.CreateNewProject);
+        Assert.Null(form.SelectedCollectionId);
+    }
+
+    [Fact]
     public void ProjectDeletionConfirmation_ListsTheScopeAndPreservesAssets()
     {
         var project = new AssetCollectionSummary(
@@ -149,6 +223,30 @@ public sealed class AssetCollectionFormTests
             TotalSizeBytes: 0,
             BackedUpAssetCount: 0,
             UpdatedAt: DateTimeOffset.UtcNow);
+    }
+
+    private static AssetListItem CreateAsset(
+        string filename,
+        IReadOnlyList<string> projectNames)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new AssetListItem(
+            Guid.NewGuid(),
+            filename,
+            Path.GetExtension(filename),
+            "video/mp4",
+            42,
+            null,
+            now,
+            now,
+            Path.Combine(Path.GetTempPath(), filename),
+            AssetLocationOwnership.External,
+            AssetLocationStatus.Available,
+            AssetStatus.Indexed,
+            HasHealthyObjectStorageBackup: false)
+        {
+            ProjectNames = projectNames
+        };
     }
 
     private static IEnumerable<Control> Descendants(Control parent)

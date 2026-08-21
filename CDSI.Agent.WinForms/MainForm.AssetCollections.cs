@@ -286,6 +286,88 @@ public sealed partial class MainForm
         }
     }
 
+    private void ConfigureSyncToProjectMenu(
+        IReadOnlyList<AssetListItem> selectedAssets)
+    {
+        var commonProjects = FindCommonProjects(
+            _availableCollections,
+            selectedAssets);
+        PopulateSyncToProjectMenu(
+            _backupToOssMenuItem,
+            commonProjects,
+            selectedAssets.Count);
+        foreach (var item in _backupToOssMenuItem.DropDownItems
+                     .OfType<ToolStripMenuItem>())
+        {
+            item.Click += SyncToProjectMenuItem_Click;
+        }
+    }
+
+    internal static IReadOnlyList<AssetCollectionSummary> FindCommonProjects(
+        IReadOnlyList<AssetCollectionSummary> projects,
+        IReadOnlyList<AssetListItem> selectedAssets)
+    {
+        ArgumentNullException.ThrowIfNull(projects);
+        ArgumentNullException.ThrowIfNull(selectedAssets);
+        if (selectedAssets.Count == 0)
+        {
+            return [];
+        }
+
+        return projects
+            .Where(project => selectedAssets.All(asset =>
+                asset.ProjectNames.Contains(
+                    project.Name,
+                    StringComparer.OrdinalIgnoreCase)))
+            .ToArray();
+    }
+
+    internal static void PopulateSyncToProjectMenu(
+        ToolStripMenuItem menuItem,
+        IReadOnlyList<AssetCollectionSummary> commonProjects,
+        int selectedAssetCount)
+    {
+        ArgumentNullException.ThrowIfNull(menuItem);
+        ArgumentNullException.ThrowIfNull(commonProjects);
+        if (selectedAssetCount < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(selectedAssetCount));
+        }
+
+        foreach (var existingItem in menuItem.DropDownItems
+                     .Cast<ToolStripItem>()
+                     .ToArray())
+        {
+            existingItem.Dispose();
+        }
+
+        menuItem.DropDownItems.Clear();
+        menuItem.Text = $"同步到 OSS ({selectedAssetCount:N0})";
+        menuItem.Enabled = selectedAssetCount > 0;
+        if (commonProjects.Count == 0)
+        {
+            menuItem.DropDownItems.Add(
+                new ToolStripMenuItem("加入项目并备份..."));
+            return;
+        }
+
+        foreach (var project in commonProjects.Take(3))
+        {
+            menuItem.DropDownItems.Add(new ToolStripMenuItem(
+                FormatQuickProjectMenuName(project.Name))
+            {
+                Tag = project.Id,
+                ToolTipText = project.Name
+            });
+        }
+
+        if (commonProjects.Count > 3)
+        {
+            menuItem.DropDownItems.Add(new ToolStripSeparator());
+            menuItem.DropDownItems.Add(new ToolStripMenuItem("更多..."));
+        }
+    }
+
     internal static void PopulateAddToProjectMenu(
         ToolStripMenuItem menuItem,
         IReadOnlyList<AssetCollectionSummary> projects,
@@ -349,6 +431,26 @@ public sealed partial class MainForm
         }
 
         await AddSelectedAssetsToCollectionAsync();
+    }
+
+    private async void SyncToProjectMenuItem_Click(object? sender, EventArgs e)
+    {
+        if ((sender as ToolStripMenuItem)?.Tag is Guid projectId)
+        {
+            await SyncSelectedAssetsToProjectAsync(projectId);
+            return;
+        }
+
+        if (string.Equals(
+                (sender as ToolStripMenuItem)?.Text,
+                "加入项目并备份...",
+                StringComparison.Ordinal))
+        {
+            await AddSelectedAssetsToProjectAndSyncAsync();
+            return;
+        }
+
+        await SyncSelectedAssetsToProjectAsync();
     }
 
     private async Task AddSelectedAssetsToCollectionAsync()
@@ -439,7 +541,7 @@ public sealed partial class MainForm
             {
                 MessageBox.Show(
                     this,
-                    "该资产清单还没有资产。",
+                    "该项目还没有资产。",
                     "CDSI Atlas",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
@@ -450,21 +552,21 @@ public sealed partial class MainForm
             {
                 MessageBox.Show(
                     this,
-                    $"清单中有 {plan.UnavailableAssetCount:N0} 个本地位置缺失的资产。请恢复这些文件后再同步整个清单。",
+                    $"项目中有 {plan.UnavailableAssetCount:N0} 个本地位置缺失的资产。请恢复这些文件后再同步整个项目。",
                     "CDSI Atlas",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
                 return;
             }
 
-            await BackupAssetsAsync(
+            await BackupProjectAssetsAsync(
                 plan.Assets,
-                $"正在同步清单：{plan.Collection.Name}",
-                objectDirectory: plan.Collection.Name);
+                $"正在同步项目：{plan.Collection.Name}",
+                plan.Collection.Name);
         }
         catch (Exception exception)
         {
-            ShowError("无法同步资产清单", exception);
+            ShowError("无法同步项目", exception);
         }
     }
 

@@ -116,6 +116,37 @@ public sealed class AssetCollectionService(IAssetCollectionRepository repository
         return new AssetCollectionSyncPlan(collection, members);
     }
 
+    public async Task<AssetCollectionSyncPlan> PrepareSelectedSyncAsync(
+        Guid collectionId,
+        IReadOnlyCollection<Guid> assetIds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(assetIds);
+        var requestedIds = assetIds.Distinct().ToArray();
+        if (requestedIds.Length == 0)
+        {
+            throw new ArgumentException("至少选择一个待同步资产。", nameof(assetIds));
+        }
+
+        var collection = await GetRequiredAsync(collectionId, cancellationToken);
+        var members = await repository.ListAssetCollectionMembersAsync(
+            collectionId,
+            cancellationToken);
+        var membersByAssetId = members.ToDictionary(member => member.Asset.AssetId);
+        var missingAssetIds = requestedIds
+            .Where(assetId => !membersByAssetId.ContainsKey(assetId))
+            .ToArray();
+        if (missingAssetIds.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"只有项目内资产可以同步到 OSS；有 {missingAssetIds.Length:N0} 个所选资产不属于项目“{collection.Name}”。");
+        }
+
+        return new AssetCollectionSyncPlan(
+            collection,
+            requestedIds.Select(assetId => membersByAssetId[assetId]).ToArray());
+    }
+
     private async Task<AssetCollection> GetRequiredAsync(
         Guid collectionId,
         CancellationToken cancellationToken)

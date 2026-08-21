@@ -8,7 +8,7 @@ public sealed partial class MainForm
 {
     private readonly TransferSpeedTracker _backupSpeedTracker = new();
 
-    private async Task BackupSelectedAssetsAsync()
+    private async Task SyncSelectedAssetsToProjectAsync()
     {
         var selected = GetSelectedAssets();
         if (selected.Count == 0)
@@ -16,15 +16,132 @@ public sealed partial class MainForm
             return;
         }
 
-        await BackupAssetsAsync(selected, "正在备份到 OSS");
+        var commonProjects = FindCommonProjects(_availableCollections, selected);
+        if (commonProjects.Count == 0)
+        {
+            await AddSelectedAssetsToProjectAndSyncAsync();
+            return;
+        }
+
+        Guid? projectId;
+        if (commonProjects.Count == 1)
+        {
+            projectId = commonProjects[0].Id;
+        }
+        else
+        {
+            using var selection = new AssetCollectionSelectionForm(
+                commonProjects,
+                selected.Count,
+                AssetCollectionSelectionPurpose.Sync);
+            projectId = selection.ShowDialog(this) == DialogResult.OK
+                ? selection.SelectedCollectionId
+                : null;
+        }
+
+        if (projectId is not null)
+        {
+            await SyncSelectedAssetsToProjectAsync(projectId.Value);
+        }
     }
 
-    private async Task BackupAssetsAsync(
+    private async Task SyncSelectedAssetsToProjectAsync(Guid projectId)
+    {
+        var selected = GetSelectedAssets();
+        if (selected.Count == 0)
+        {
+            return;
+        }
+
+        await SyncAssetsToProjectAsync(
+            projectId,
+            selected.Select(asset => asset.AssetId).ToArray());
+    }
+
+    private async Task AddSelectedAssetsToProjectAndSyncAsync()
+    {
+        var selected = GetSelectedAssets();
+        if (selected.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var projects = await _assetCollectionService.ListAsync();
+            Guid? projectId;
+            if (projects.Count == 0)
+            {
+                projectId = await CreateCollectionWithDialogAsync();
+            }
+            else
+            {
+                using var selection = new AssetCollectionSelectionForm(
+                    projects,
+                    selected.Count,
+                    AssetCollectionSelectionPurpose.AddAndSync);
+                if (selection.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                projectId = selection.CreateNewProject
+                    ? await CreateCollectionWithDialogAsync()
+                    : selection.SelectedCollectionId;
+            }
+
+            if (projectId is null)
+            {
+                return;
+            }
+
+            var assetIds = selected
+                .Select(asset => asset.AssetId)
+                .Distinct()
+                .ToArray();
+            var added = await _assetCollectionService.AddAssetsAsync(
+                projectId.Value,
+                assetIds);
+            await RefreshAssetCollectionsAsync(projectId);
+            await RefreshAssetPageAsync();
+            _statusLabel.Text = added == 0
+                ? "所选资产已在目标项目中，准备同步"
+                : $"已将 {added:N0} 个资产加入项目，准备同步";
+            await SyncAssetsToProjectAsync(projectId.Value, assetIds);
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法加入项目并同步到 OSS", exception);
+        }
+    }
+
+    private async Task SyncAssetsToProjectAsync(
+        Guid projectId,
+        IReadOnlyCollection<Guid> assetIds)
+    {
+        try
+        {
+            var plan = await _assetCollectionService.PrepareSelectedSyncAsync(
+                projectId,
+                assetIds);
+            await BackupProjectAssetsAsync(
+                plan.Assets,
+                $"正在同步项目：{plan.Collection.Name}",
+                plan.Collection.Name);
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法同步项目资产到 OSS", exception);
+        }
+    }
+
+    private async Task BackupProjectAssetsAsync(
         IReadOnlyCollection<AssetListItem> assets,
         string progressStatus,
-        string? objectDirectory = null)
+        string projectDirectory)
     {
         ArgumentNullException.ThrowIfNull(assets);
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectDirectory);
 
         if (assets.Any(asset =>
                 asset.LocationStatus != AssetLocationStatus.Available))
@@ -69,7 +186,7 @@ public sealed partial class MainForm
         using var confirmation = new OssBackupConfirmationForm(
             profiles,
             uniqueAssets,
-            objectDirectory);
+            projectDirectory);
         if (confirmation.ShowDialog(this) != DialogResult.OK)
         {
             return;
@@ -96,7 +213,7 @@ public sealed partial class MainForm
                     asset.AssetId,
                     asset.Path,
                     confirmation.SelectedObjectNames[asset.AssetId],
-                    ObjectDirectory: objectDirectory))
+                    ObjectDirectory: projectDirectory))
                 .ToArray();
             var result = await _objectStorageBackupService.BackupAsync(
                 requests,

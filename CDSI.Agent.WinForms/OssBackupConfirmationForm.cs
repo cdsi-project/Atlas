@@ -30,7 +30,7 @@ internal sealed partial class OssBackupConfirmationForm : Form
         }
         _objectDirectory = objectDirectory;
 
-        Text = objectDirectory is null ? "确认备份到 OSS" : "确认同步清单到 OSS";
+        Text = objectDirectory is null ? "确认备份到 OSS" : "确认同步项目到 OSS";
         StartPosition = FormStartPosition.CenterParent;
         MinimumSize = new Size(650, 430);
         Size = new Size(790, 540);

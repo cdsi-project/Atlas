@@ -33,6 +33,9 @@ public sealed class AssetCollectionServiceTests
         Assert.Equal("Episode 01", collection.Name);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.CreateAsync("episode 01", AssetCollectionType.Mixed));
+        var membershipError = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.PrepareSelectedSyncAsync(collection.Id, [registered.AssetId]));
+        Assert.Contains("只有项目内资产可以同步到 OSS", membershipError.Message);
         Assert.Equal(1, await service.AddAssetsAsync(
             collection.Id,
             [registered.AssetId, registered.AssetId]));
@@ -41,6 +44,11 @@ public sealed class AssetCollectionServiceTests
         Assert.Single(plan.Members);
         Assert.Single(plan.Assets);
         Assert.Equal(0, plan.UnavailableAssetCount);
+        var selectedPlan = await service.PrepareSelectedSyncAsync(
+            collection.Id,
+            [registered.AssetId, registered.AssetId]);
+        Assert.Single(selectedPlan.Assets);
+        Assert.Equal(collection.Id, selectedPlan.Collection.Id);
 
         Assert.Equal(1, await service.RemoveAssetsAsync(
             collection.Id,

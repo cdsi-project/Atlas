@@ -2,13 +2,21 @@ using CDSI.Agent.Core.Collections;
 
 namespace CDSI.Agent.WinForms;
 
+internal enum AssetCollectionSelectionPurpose
+{
+    Add,
+    Sync,
+    AddAndSync
+}
+
 internal sealed class AssetCollectionSelectionForm : Form
 {
     private readonly ComboBox _collectionComboBox = new();
 
     public AssetCollectionSelectionForm(
         IReadOnlyCollection<AssetCollectionSummary> collections,
-        int selectedAssetCount)
+        int selectedAssetCount,
+        AssetCollectionSelectionPurpose purpose = AssetCollectionSelectionPurpose.Add)
     {
         ArgumentNullException.ThrowIfNull(collections);
         if (collections.Count == 0)
@@ -16,7 +24,12 @@ internal sealed class AssetCollectionSelectionForm : Form
             throw new ArgumentException("至少需要一个资产清单。", nameof(collections));
         }
 
-        Text = "加入项目";
+        Text = purpose switch
+        {
+            AssetCollectionSelectionPurpose.Sync => "同步到 OSS",
+            AssetCollectionSelectionPurpose.AddAndSync => "加入项目并备份",
+            _ => "加入项目"
+        };
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(520, 180);
         MinimumSize = new Size(460, 180);
@@ -38,7 +51,14 @@ internal sealed class AssetCollectionSelectionForm : Form
         layout.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
-            Text = $"将 {selectedAssetCount:N0} 个资产加入",
+            Text = purpose switch
+            {
+                AssetCollectionSelectionPurpose.Sync =>
+                    $"选择 {selectedAssetCount:N0} 个资产所属的目标项目",
+                AssetCollectionSelectionPurpose.AddAndSync =>
+                    $"先将 {selectedAssetCount:N0} 个资产加入项目，再同步到 OSS",
+                _ => $"将 {selectedAssetCount:N0} 个资产加入"
+            },
             Font = new Font("Segoe UI Semibold", 10F),
             TextAlign = ContentAlignment.MiddleLeft,
             ForeColor = Color.FromArgb(31, 37, 43)
@@ -49,10 +69,16 @@ internal sealed class AssetCollectionSelectionForm : Form
         _collectionComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
         _collectionComboBox.DisplayMember = nameof(CollectionChoice.DisplayName);
         _collectionComboBox.AccessibleName = "目标项目";
-        _collectionComboBox.Items.AddRange(collections
+        var choices = collections
             .Select(collection => new CollectionChoice(collection))
-            .Cast<object>()
-            .ToArray());
+            .Cast<CollectionSelectionChoice>()
+            .ToList();
+        if (purpose == AssetCollectionSelectionPurpose.AddAndSync)
+        {
+            choices.Add(new NewCollectionChoice());
+        }
+
+        _collectionComboBox.Items.AddRange(choices.Cast<object>().ToArray());
         _collectionComboBox.SelectedIndex = 0;
         layout.Controls.Add(_collectionComboBox, 0, 1);
 
@@ -65,7 +91,9 @@ internal sealed class AssetCollectionSelectionForm : Form
         };
         var confirmButton = new Button
         {
-            Text = "加入",
+            Text = purpose == AssetCollectionSelectionPurpose.Add
+                ? "加入"
+                : "继续",
             DialogResult = DialogResult.OK,
             Size = new Size(96, 32),
             BackColor = Color.FromArgb(24, 121, 78),
@@ -89,13 +117,27 @@ internal sealed class AssetCollectionSelectionForm : Form
         Controls.Add(layout);
     }
 
-    public Guid SelectedCollectionId =>
-        ((CollectionChoice)_collectionComboBox.SelectedItem!).Summary.Id;
+    public Guid? SelectedCollectionId =>
+        (_collectionComboBox.SelectedItem as CollectionChoice)?.Summary.Id;
+
+    public bool CreateNewProject =>
+        _collectionComboBox.SelectedItem is NewCollectionChoice;
+
+    private abstract record CollectionSelectionChoice
+    {
+        public abstract string DisplayName { get; }
+    }
 
     private sealed record CollectionChoice(AssetCollectionSummary Summary)
+        : CollectionSelectionChoice
     {
-        public string DisplayName =>
+        public override string DisplayName =>
             $"{Summary.Name} · {FormatCollectionType(Summary.Type)} · {Summary.AssetCount:N0} 个资产";
+    }
+
+    private sealed record NewCollectionChoice : CollectionSelectionChoice
+    {
+        public override string DisplayName => "新建项目...";
     }
 
     private static string FormatCollectionType(AssetCollectionType type)

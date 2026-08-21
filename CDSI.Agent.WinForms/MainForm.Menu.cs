@@ -219,8 +219,8 @@ public sealed partial class MainForm
         var moveItem = new ToolStripMenuItem("移动到 CDSI 工作目录(&M)");
         moveItem.Click += async (_, _) =>
             await TransferSelectedAssetsAsync(ManagedAssetTransferAction.Move);
-        var backupItem = new ToolStripMenuItem("备份到 OSS(&B)");
-        backupItem.Click += async (_, _) => await BackupSelectedAssetsAsync();
+        var backupItem = new ToolStripMenuItem("同步到 OSS(&B)");
+        backupItem.Click += async (_, _) => await SyncSelectedAssetsToProjectAsync();
         var restoreItem = new ToolStripMenuItem("从 OSS 取回(&R)");
         restoreItem.Click += async (_, _) => await RestoreSelectedAssetsFromOssAsync();
         var hideItem = new ToolStripMenuItem("从资产列表中移除（不删除）(&H)")
