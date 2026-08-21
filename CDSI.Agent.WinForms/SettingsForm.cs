@@ -737,6 +737,7 @@ public sealed partial class SettingsForm : Form
         {
             ObjectStorageProvider.AliyunOss => "阿里云 OSS",
             ObjectStorageProvider.QiniuKodo => "七牛云 Kodo",
+            ObjectStorageProvider.TencentCos => "腾讯云 COS",
             _ => provider.ToString()
         };
     }

@@ -45,7 +45,7 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 - Windows 下使用 Volume GUID 和卷序列号识别本地卷；移动设备盘符变化时只更新 SQLite 路径映射，不重新扫描或哈希文件
 - 运行期间监听设备到达和移除通知；设备拔出后资产位置标记为“设备离线”而不是“位置缺失”，重新插入后进入待确认状态
 - 检测嵌套或重叠扫描目录并提示，位置身份仍按设备和规范化路径保持幂等
-- 在“备份配置”中添加多个阿里云 OSS 或七牛云 Kodo 配置；双击配置可编辑，右键可编辑、复制 Endpoint 或 Bucket 名称以及删除本机配置
+- 在“备份配置”中添加多个阿里云 OSS、七牛云 Kodo 或腾讯云 COS 配置；双击配置可编辑，右键可编辑、复制 Endpoint 或 Bucket 名称以及删除本机配置
 - 在设置页添加多个 OpenWeb 源站；双击源站可编辑，右键可编辑、打开、复制域名、设为默认或删除本机配置；域名规范化后持久化到本机 SQLite
 - 在设置页添加多个 GitHub 或 Gitee（码云）仓库配置；双击配置可编辑，右键可编辑、打开平台网站、复制仓库地址、设为默认或删除本机配置，支持密码与 SSH 两种访问方式
 - 密码方式使用 HTTPS 仓库地址，用户名和密码分别配置；GitHub 可将个人访问令牌作为密码。SSH 方式使用 SSH 仓库地址，默认查找用户 <code>.ssh</code> 目录中的 Ed25519、ECDSA 或 RSA 密钥对
@@ -113,7 +113,7 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 
 ## 备份配置与使用
 
-Atlas 当前支持使用阿里云 OSS 或七牛云 Kodo 保存可校验的资产副本。Atlas 不会代替用户开通云服务、创建 Bucket、创建访问凭据或修改云端权限，也不会因为保存配置而自动连接或上传文件。
+Atlas 当前支持使用阿里云 OSS、七牛云 Kodo 或腾讯云 COS 保存可校验的资产副本。Atlas 不会代替用户开通云服务、创建 Bucket、创建访问凭据或修改云端权限，也不会因为保存配置而自动连接或上传文件。
 
 ### 阿里云 OSS 云端准备
 
@@ -151,19 +151,26 @@ Atlas 当前支持使用阿里云 OSS 或七牛云 Kodo 保存可校验的资产
 3. 创建或选择具有目标空间读写权限的 AccessKey / SecretKey。Atlas 通过七牛云的 [S3 兼容 API](https://developer.qiniu.com/kodo/4087/compatible-s3-api)执行 HeadObject、GetObject、PutObject 和分片上传；凭据必须允许读取对象、写入对象、列出已上传分片和中止分片上传。Atlas 不需要删除对象权限。
 4. 在空间概览中确认“空间 S3 域名”对应的 S3 空间名称，并将它作为 Atlas 的 Bucket 填写；它可能与常规空间名称不同。当前版本使用路径式 S3 访问，并将 Region ID 用于请求签名；Endpoint、S3 空间名称、空间区域和 Region ID 必须相互对应。
 
+### 腾讯云 COS 云端准备
+
+1. 在腾讯云 COS 控制台创建一个私有存储桶，并在存储桶概览中确认地域与完整存储桶名称。Atlas 的 Bucket 必须填写带 APPID 后缀的全名，例如 <code>examplebucket-1250000000</code>。
+2. 根据腾讯云的[地域和访问域名](https://cloud.tencent.com/document/product/436/6224)填写服务 Endpoint 与 Region ID。广州地域示例为 Endpoint <code>cos.ap-guangzhou.myqcloud.com</code>、Region ID <code>ap-guangzhou</code>；Endpoint 不包含 Bucket 名称。
+3. 在访问管理 CAM 中为 Atlas 创建专用子账号密钥，AccessKey ID 一栏填写 SecretId，AccessKey Secret 一栏填写 SecretKey。按最小权限原则授予目标存储桶的 <code>cos:HeadObject</code>、<code>cos:GetObject</code>、<code>cos:PutObject</code>、<code>cos:InitiateMultipartUpload</code>、<code>cos:ListParts</code>、<code>cos:UploadPart</code>、<code>cos:CompleteMultipartUpload</code> 和 <code>cos:AbortMultipartUpload</code> 权限。
+4. Atlas 按腾讯云的 [AWS S3 SDK 兼容方式](https://cloud.tencent.com/document/product/436/37421)访问 COS，并使用虚拟主机式域名。2024 年及以后创建的 COS 存储桶不支持路径式域名，因此不要把 Bucket 拼到 Endpoint 路径中。
+
 ### 在 Atlas 中添加配置
 
 打开“设置”一级菜单，进入“备份配置”页签，点击“添加配置”并填写：
 
 | 配置项 | 填写说明 | 示例 |
 | --- | --- | --- |
-| 提供商 | 选择“阿里云 OSS”或“七牛云 Kodo” | 七牛云 Kodo |
+| 提供商 | 选择“阿里云 OSS”“七牛云 Kodo”或“腾讯云 COS” | 腾讯云 COS |
 | 配置名称 | 仅用于本机区分多个备份配置 | 七牛主备份 |
 | Endpoint | Bucket 所在地域的访问节点，不包含 Bucket 名称、路径或查询参数 | <code>s3.cn-east-1.qiniucs.com</code> |
-| Bucket | 阿里云 Bucket 名称或七牛 S3 空间名称 | <code>cdsi-assets</code> |
-| 地域 / Region ID | 与 Bucket 和 Endpoint 对应；七牛云 Kodo 必填 | <code>cn-east-1</code> |
-| AccessKey ID | 阿里云 AccessKey ID 或七牛 AccessKey | 由云服务商生成 |
-| AccessKey Secret | 阿里云 AccessKey Secret 或七牛 SecretKey；首次保存必填 | 由云服务商生成 |
+| Bucket | 阿里云 Bucket、七牛 S3 空间名称，或腾讯 COS 的 <code>BucketName-APPID</code> | <code>examplebucket-1250000000</code> |
+| 地域 / Region ID | 与 Bucket 和 Endpoint 对应；七牛云 Kodo、腾讯云 COS 必填 | <code>ap-guangzhou</code> |
+| AccessKey ID / SecretId | 阿里云 AccessKey ID、七牛 AccessKey 或腾讯 SecretId | 由云服务商生成 |
+| AccessKey Secret / SecretKey | 阿里云 AccessKey Secret、七牛 SecretKey 或腾讯 SecretKey；首次保存必填 | 由云服务商生成 |
 | 使用 HTTPS | 建议始终勾选 | 已勾选 |
 
 Endpoint 可填写主机名，也可填写与“使用 HTTPS”选项一致的完整 URL，但不能填写 <code>Bucket.Endpoint</code> 形式的 Bucket 域名。切换提供商时必须重新填写 Secret，防止沿用另一家服务商的旧凭据。保存后，非敏感字段写入本机 SQLite，Secret 独立写入当前 Windows 用户的凭据管理器。当前版本保存配置时不执行连接测试；首次备份或取回成功，才表示提供商、Endpoint、Bucket、区域、凭据和权限可以协同工作。
@@ -189,7 +196,7 @@ Atlas 保存的是 Bucket、对象键、大小、SHA-256 和校验状态，不�
 | <code>403 AccessDenied</code> | 检查 AccessKey 是否拥有目标 Bucket 的读写及分片上传权限，并确认 Bucket 名称正确。 |
 | <code>404 NoSuchKey</code> | 检查已登记的对象是否被其他工具删除或改名，以及当前配置是否指向原 Bucket。Atlas 不会自动删除云端对象。 |
 | <code>SignatureDoesNotMatch</code> 或凭据无效 | 重新核对提供商、AccessKey ID/Secret 和 Region ID；遗失 Secret 后应在云服务商控制台创建并轮换新的访问凭据。 |
-| Endpoint 错误、超时或无法连接 | 确认 Endpoint 与 Bucket 地域一致；阿里云普通电脑使用外网 Endpoint，七牛云使用对应区域的 S3 Endpoint。 |
+| Endpoint 错误、超时或无法连接 | 确认 Endpoint 与 Bucket 地域一致；阿里云普通电脑使用外网 Endpoint，七牛云使用对应区域的 S3 Endpoint，腾讯云使用 <code>cos.&lt;Region&gt;.myqcloud.com</code>。 |
 | 提示缺少 AccessKey Secret | 双击配置重新编辑并填写 Secret；凭据按 Windows 用户保存，切换账户或迁移数据库不会自动迁移凭据。 |
 | 目标对象已存在且内容不同 | Atlas 默认拒绝覆盖。检查项目内的同名文件或云端已有对象，处理冲突后重试。 |
 

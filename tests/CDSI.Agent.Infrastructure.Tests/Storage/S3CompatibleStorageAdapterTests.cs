@@ -5,14 +5,19 @@ using CDSI.Agent.Infrastructure.Storage;
 
 namespace CDSI.Agent.Infrastructure.Tests.Storage;
 
-public sealed class QiniuKodoStorageAdapterTests
+public sealed class S3CompatibleStorageAdapterTests
 {
-    [Fact]
-    public void Provider_IsQiniuKodo()
+    [Theory]
+    [InlineData(ObjectStorageProvider.QiniuKodo, true)]
+    [InlineData(ObjectStorageProvider.TencentCos, false)]
+    public void Constructor_ConfiguresProviderAndAddressingStyle(
+        ObjectStorageProvider provider,
+        bool forcePathStyle)
     {
-        Assert.Equal(
-            ObjectStorageProvider.QiniuKodo,
-            new QiniuKodoStorageAdapter().Provider);
+        var adapter = new S3CompatibleStorageAdapter(provider);
+
+        Assert.Equal(provider, adapter.Provider);
+        Assert.Equal(forcePathStyle, adapter.ForcePathStyle);
     }
 
     [Fact]
@@ -22,7 +27,7 @@ public sealed class QiniuKodoStorageAdapterTests
 
         Assert.Equal(
             "https://s3.cn-east-1.qiniucs.com",
-            QiniuKodoStorageAdapter.CreateServiceUrl(profile));
+            S3CompatibleStorageAdapter.CreateServiceUrl(profile));
     }
 
     [Fact]
@@ -41,10 +46,10 @@ public sealed class QiniuKodoStorageAdapterTests
             ErrorCode = "AccessDenied"
         };
 
-        Assert.True(QiniuKodoStorageAdapter.IsMissingObject(missingObject));
-        Assert.True(QiniuKodoStorageAdapter.IsMissingUpload(missingObject));
-        Assert.False(QiniuKodoStorageAdapter.IsMissingObject(forbidden));
-        Assert.False(QiniuKodoStorageAdapter.IsMissingUpload(forbidden));
+        Assert.True(S3CompatibleStorageAdapter.IsMissingObject(missingObject));
+        Assert.True(S3CompatibleStorageAdapter.IsMissingUpload(missingObject));
+        Assert.False(S3CompatibleStorageAdapter.IsMissingObject(forbidden));
+        Assert.False(S3CompatibleStorageAdapter.IsMissingUpload(forbidden));
     }
 
     private static ObjectStorageProfile CreateProfile(bool useHttps)

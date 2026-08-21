@@ -138,8 +138,19 @@ public sealed class ObjectStorageProfileServiceTests
         Assert.Empty(secrets.Values);
     }
 
-    [Fact]
-    public async Task SaveAsync_PersistsQiniuProviderAndRequiresRegion()
+    [Theory]
+    [InlineData(
+        ObjectStorageProvider.QiniuKodo,
+        "s3.cn-east-1.qiniucs.com",
+        "cn-east-1")]
+    [InlineData(
+        ObjectStorageProvider.TencentCos,
+        "cos.ap-guangzhou.myqcloud.com",
+        "ap-guangzhou")]
+    public async Task SaveAsync_PersistsS3CompatibleProviderAndRequiresRegion(
+        ObjectStorageProvider provider,
+        string endpoint,
+        string region)
     {
         using var directory = new TestDirectory();
         var repository = new SqliteAssetRepository(
@@ -152,29 +163,29 @@ public sealed class ObjectStorageProfileServiceTests
         var missingRegion = await Assert.ThrowsAsync<ArgumentException>(
             () => service.SaveAsync(new SaveObjectStorageProfileRequest(
                 null,
-                "七牛备份",
-                "s3.cn-east-1.qiniucs.com",
+                "对象存储备份",
+                endpoint,
                 "cdsi-assets",
                 null,
                 true,
                 "access-key-id",
                 "access-key-secret",
-                ObjectStorageProvider.QiniuKodo)));
+                provider)));
         Assert.Contains("Region ID", missingRegion.Message);
 
         var saved = await service.SaveAsync(new SaveObjectStorageProfileRequest(
             null,
-            "七牛备份",
-            "s3.cn-east-1.qiniucs.com",
+            "对象存储备份",
+            endpoint,
             "cdsi-assets",
-            "cn-east-1",
+            region,
             true,
             "access-key-id",
             "access-key-secret",
-            ObjectStorageProvider.QiniuKodo));
+            provider));
 
-        Assert.Equal(ObjectStorageProvider.QiniuKodo, saved.Profile.Provider);
-        Assert.Equal("cn-east-1", saved.Profile.Region);
+        Assert.Equal(provider, saved.Profile.Provider);
+        Assert.Equal(region, saved.Profile.Region);
         SqliteConnection.ClearAllPools();
     }
 

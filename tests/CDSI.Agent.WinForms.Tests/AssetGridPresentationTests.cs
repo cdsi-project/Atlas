@@ -38,10 +38,10 @@ public sealed class AssetGridPresentationTests
             "OSS",
             MainForm.FormatBackupStatus(true, ["AliyunOss"]));
         Assert.Equal(
-            "OSS、七牛、S3",
+            "OSS、七牛、COS、S3",
             MainForm.FormatBackupStatus(
                 true,
-                ["AliyunOss", "Qiniu", "S3", "AliyunOss"]));
+                ["AliyunOss", "Qiniu", "TencentCos", "S3", "AliyunOss"]));
     }
 
     [Fact]

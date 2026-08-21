@@ -15,5 +15,6 @@ public sealed record ObjectStorageProfile(
 public enum ObjectStorageProvider
 {
     AliyunOss,
-    QiniuKodo
+    QiniuKodo,
+    TencentCos
 }

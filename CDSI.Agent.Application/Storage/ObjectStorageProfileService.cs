@@ -90,9 +90,12 @@ public sealed class ObjectStorageProfileService
         }
 
         var region = NormalizeOptional(request.Region, 100, "地域");
-        if (request.Provider == ObjectStorageProvider.QiniuKodo && region is null)
+        if ((request.Provider is ObjectStorageProvider.QiniuKodo or
+                ObjectStorageProvider.TencentCos) &&
+            region is null)
         {
-            throw new ArgumentException("七牛云 Kodo 配置必须填写 Region ID。");
+            throw new ArgumentException(
+                $"{FormatProvider(request.Provider)} 配置必须填写 Region ID。");
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -239,6 +242,17 @@ public sealed class ObjectStorageProfileService
     private static string CreateSecretKey(Guid profileId)
     {
         return $"oss-{profileId:N}";
+    }
+
+    private static string FormatProvider(ObjectStorageProvider provider)
+    {
+        return provider switch
+        {
+            ObjectStorageProvider.AliyunOss => "阿里云 OSS",
+            ObjectStorageProvider.QiniuKodo => "七牛云 Kodo",
+            ObjectStorageProvider.TencentCos => "腾讯云 COS",
+            _ => provider.ToString()
+        };
     }
 }
 

@@ -9,6 +9,7 @@ using CDSI.Agent.Application.Storage;
 using CDSI.Agent.Application.Transfers;
 using CDSI.Agent.Application.Workspaces;
 using CDSI.Agent.Core.Abstractions;
+using CDSI.Agent.Core.Storage;
 using CDSI.Agent.Infrastructure.FileSystem;
 using CDSI.Agent.Infrastructure.Fingerprints;
 using CDSI.Agent.Infrastructure.Metadata;
@@ -73,7 +74,8 @@ static class Program
             IObjectStorageAdapter[] objectStorageAdapters =
             [
                 new AliyunOssStorageAdapter(),
-                new QiniuKodoStorageAdapter()
+                new S3CompatibleStorageAdapter(ObjectStorageProvider.QiniuKodo),
+                new S3CompatibleStorageAdapter(ObjectStorageProvider.TencentCos)
             ];
             var objectStorageBackupService = new ObjectStorageBackupService(
                 repository,

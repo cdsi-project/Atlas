@@ -51,15 +51,16 @@ public sealed class OssProfileDialog : Form
         _providerComboBox.Items.AddRange(
         [
             new ProviderChoice("阿里云 OSS", ObjectStorageProvider.AliyunOss),
-            new ProviderChoice("七牛云 Kodo", ObjectStorageProvider.QiniuKodo)
+            new ProviderChoice("七牛云 Kodo", ObjectStorageProvider.QiniuKodo),
+            new ProviderChoice("腾讯云 COS", ObjectStorageProvider.TencentCos)
         ]);
         AddField(layout, 0, "提供商", _providerComboBox);
         AddField(layout, 1, "配置名称", _displayNameTextBox);
         AddField(layout, 2, "Endpoint", _endpointTextBox);
         AddField(layout, 3, "Bucket", _bucketTextBox);
         AddField(layout, 4, "地域 / Region ID", _regionTextBox);
-        AddField(layout, 5, "AccessKey ID", _accessKeyIdTextBox);
-        AddField(layout, 6, "AccessKey Secret", _accessKeySecretTextBox);
+        AddField(layout, 5, "AccessKey ID /\nSecretId", _accessKeyIdTextBox);
+        AddField(layout, 6, "AccessKey Secret /\nSecretKey", _accessKeySecretTextBox);
 
         _accessKeySecretTextBox.UseSystemPasswordChar = true;
         _accessKeySecretTextBox.AccessibleName = "AccessKey Secret";
@@ -76,7 +77,7 @@ public sealed class OssProfileDialog : Form
 
         var securityNote = new Label
         {
-            Text = "AccessKey Secret 仅保存到 Windows 凭据管理器，不写入 CDSI 数据库。",
+            Text = "Secret 仅保存到 Windows 凭据管理器，不写入 CDSI 数据库。",
             Dock = DockStyle.Fill,
             ForeColor = Color.FromArgb(88, 98, 106),
             TextAlign = ContentAlignment.TopLeft,
@@ -197,34 +198,56 @@ public sealed class OssProfileDialog : Form
 
     private void ApplyProviderDefaults()
     {
-        if (SelectedProvider == ObjectStorageProvider.QiniuKodo)
-        {
-            if (string.IsNullOrWhiteSpace(_endpointTextBox.Text) ||
-                _endpointTextBox.Text.Contains("aliyuncs.com", StringComparison.OrdinalIgnoreCase))
-            {
-                _endpointTextBox.Text = "s3.cn-east-1.qiniucs.com";
-            }
-
-            if (string.IsNullOrWhiteSpace(_regionTextBox.Text) ||
-                _regionTextBox.Text.StartsWith("cn-hangzhou", StringComparison.OrdinalIgnoreCase))
-            {
-                _regionTextBox.Text = "cn-east-1";
-            }
-
-            return;
-        }
-
+        var detectedProvider = DetectProviderFromEndpoint(_endpointTextBox.Text);
+        var defaults = GetProviderDefaults(SelectedProvider);
         if (string.IsNullOrWhiteSpace(_endpointTextBox.Text) ||
-            _endpointTextBox.Text.Contains("qiniucs.com", StringComparison.OrdinalIgnoreCase))
+            detectedProvider is not null)
         {
-            _endpointTextBox.Text = "oss-cn-hangzhou.aliyuncs.com";
+            _endpointTextBox.Text = defaults.Endpoint;
         }
 
         if (string.IsNullOrWhiteSpace(_regionTextBox.Text) ||
-            _regionTextBox.Text.StartsWith("cn-east-", StringComparison.OrdinalIgnoreCase))
+            detectedProvider is not null)
         {
-            _regionTextBox.Text = "cn-hangzhou";
+            _regionTextBox.Text = defaults.Region;
         }
+    }
+
+    private static ObjectStorageProvider? DetectProviderFromEndpoint(string endpoint)
+    {
+        if (endpoint.Contains("aliyuncs.com", StringComparison.OrdinalIgnoreCase))
+        {
+            return ObjectStorageProvider.AliyunOss;
+        }
+
+        if (endpoint.Contains("qiniucs.com", StringComparison.OrdinalIgnoreCase))
+        {
+            return ObjectStorageProvider.QiniuKodo;
+        }
+
+        if (endpoint.Contains("myqcloud.com", StringComparison.OrdinalIgnoreCase))
+        {
+            return ObjectStorageProvider.TencentCos;
+        }
+
+        return null;
+    }
+
+    private static ProviderDefaults GetProviderDefaults(
+        ObjectStorageProvider provider)
+    {
+        return provider switch
+        {
+            ObjectStorageProvider.QiniuKodo => new ProviderDefaults(
+                "s3.cn-east-1.qiniucs.com",
+                "cn-east-1"),
+            ObjectStorageProvider.TencentCos => new ProviderDefaults(
+                "cos.ap-guangzhou.myqcloud.com",
+                "ap-guangzhou"),
+            _ => new ProviderDefaults(
+                "oss-cn-hangzhou.aliyuncs.com",
+                "cn-hangzhou")
+        };
     }
 
     private sealed record ProviderChoice(
@@ -233,6 +256,8 @@ public sealed class OssProfileDialog : Form
     {
         public override string ToString() => DisplayName;
     }
+
+    private sealed record ProviderDefaults(string Endpoint, string Region);
 
     private static Button CreateButton(string text, Color background, Color foreground)
     {

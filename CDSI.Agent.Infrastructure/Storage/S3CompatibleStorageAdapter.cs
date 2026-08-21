@@ -8,14 +8,32 @@ using CDSI.Agent.Core.Storage;
 
 namespace CDSI.Agent.Infrastructure.Storage;
 
-public sealed class QiniuKodoStorageAdapter : IObjectStorageAdapter
+public sealed class S3CompatibleStorageAdapter : IObjectStorageAdapter
 {
     private const long DefaultPartSize = 16L * 1024 * 1024;
     private const long MaximumPartCount = 10_000;
     private const string Sha256MetadataKey = "cdsi-sha256";
     private const string AssetIdMetadataKey = "cdsi-asset-id";
 
-    public ObjectStorageProvider Provider => ObjectStorageProvider.QiniuKodo;
+    private readonly bool _forcePathStyle;
+
+    public S3CompatibleStorageAdapter(ObjectStorageProvider provider)
+    {
+        if (provider is not (ObjectStorageProvider.QiniuKodo or
+            ObjectStorageProvider.TencentCos))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(provider),
+                "S3 兼容适配器仅支持七牛云 Kodo 和腾讯云 COS。");
+        }
+
+        Provider = provider;
+        _forcePathStyle = provider == ObjectStorageProvider.QiniuKodo;
+    }
+
+    public ObjectStorageProvider Provider { get; }
+
+    internal bool ForcePathStyle => _forcePathStyle;
 
     public async Task<ObjectStorageObjectInfo?> StatAsync(
         ObjectStorageConnection connection,
@@ -63,7 +81,7 @@ public sealed class QiniuKodoStorageAdapter : IObjectStorageAdapter
             request.Connection.Profile.BucketName,
             request.ObjectKey,
             cancellationToken)
-            ?? throw new IOException("七牛云 Kodo 上传完成后未找到目标对象。");
+            ?? throw new IOException("S3 兼容存储上传完成后未找到目标对象。");
         return new ObjectStorageTransferResult(uploaded, Uploaded: true);
     }
 
@@ -174,7 +192,7 @@ public sealed class QiniuKodoStorageAdapter : IObjectStorageAdapter
             InputStream = progressStream,
             AutoCloseStream = false,
             AutoResetStreamPosition = false,
-            IfNoneMatch = "*"
+            IfNoneMatch = GetIfNoneMatch(request.Connection.Profile.Provider)
         };
         AddMetadata(upload.Metadata, request);
         var result = await client.PutObjectAsync(upload, cancellationToken);
@@ -301,7 +319,7 @@ public sealed class QiniuKodoStorageAdapter : IObjectStorageAdapter
             .ToList();
         if (partEtags.Count != totalParts)
         {
-            throw new IOException("七牛云 Kodo 分片数量不完整，保留会话等待重试。");
+            throw new IOException("S3 兼容存储分片数量不完整，保留会话等待重试。");
         }
 
         await client.CompleteMultipartUploadAsync(
@@ -311,7 +329,7 @@ public sealed class QiniuKodoStorageAdapter : IObjectStorageAdapter
                 Key = request.ObjectKey,
                 UploadId = session.UploadId,
                 PartETags = partEtags,
-                IfNoneMatch = "*"
+                IfNoneMatch = GetIfNoneMatch(request.Connection.Profile.Provider)
             },
             cancellationToken);
     }
@@ -355,7 +373,7 @@ public sealed class QiniuKodoStorageAdapter : IObjectStorageAdapter
             cancellationToken);
         return string.IsNullOrWhiteSpace(result.ETag)
             ? throw new IOException(
-                "七牛云 Kodo 分片上传响应缺少 ETag，已保留会话等待重试。")
+                "S3 兼容存储分片上传响应缺少 ETag，已保留会话等待重试。")
             : result.ETag;
     }
 
@@ -374,7 +392,7 @@ public sealed class QiniuKodoStorageAdapter : IObjectStorageAdapter
         var result = await client.InitiateMultipartUploadAsync(upload, cancellationToken);
         if (string.IsNullOrWhiteSpace(result.UploadId))
         {
-            throw new IOException("七牛云 Kodo 未返回分片上传 ID。");
+            throw new IOException("S3 兼容存储未返回分片上传 ID。");
         }
 
         return new MultipartUploadSession(
@@ -465,13 +483,13 @@ public sealed class QiniuKodoStorageAdapter : IObjectStorageAdapter
         }
     }
 
-    private static IAmazonS3 CreateClient(ObjectStorageConnection connection)
+    private IAmazonS3 CreateClient(ObjectStorageConnection connection)
     {
         var profile = connection.Profile;
         if (string.IsNullOrWhiteSpace(profile.Region))
         {
             throw new InvalidOperationException(
-                "七牛云 Kodo 配置缺少 Region ID，请在备份配置中补充。");
+                "S3 兼容备份配置缺少 Region ID，请在备份配置中补充。");
         }
 
         AWSCredentials credentials = string.IsNullOrWhiteSpace(connection.SecurityToken)
@@ -480,14 +498,38 @@ public sealed class QiniuKodoStorageAdapter : IObjectStorageAdapter
                 profile.AccessKeyId,
                 connection.AccessKeySecret,
                 connection.SecurityToken);
-        return new AmazonS3Client(credentials, new AmazonS3Config
+        var client = new AmazonS3Client(credentials, new AmazonS3Config
         {
             ServiceURL = CreateServiceUrl(profile),
             AuthenticationRegion = profile.Region,
-            ForcePathStyle = true,
+            ForcePathStyle = _forcePathStyle,
             UseHttp = !profile.UseHttps,
             MaxErrorRetry = 3
         });
+        if (profile.Provider == ObjectStorageProvider.TencentCos)
+        {
+            client.BeforeRequestEvent += AddTencentOverwriteProtection;
+        }
+
+        return client;
+    }
+
+    private static string? GetIfNoneMatch(ObjectStorageProvider provider)
+    {
+        return provider == ObjectStorageProvider.TencentCos ? null : "*";
+    }
+
+    private static void AddTencentOverwriteProtection(
+        object sender,
+        RequestEventArgs eventArgs)
+    {
+        if (eventArgs is WebServiceRequestEventArgs requestEvent &&
+            requestEvent.Request is PutObjectRequest or
+                InitiateMultipartUploadRequest or
+                CompleteMultipartUploadRequest)
+        {
+            requestEvent.Headers["x-cos-forbid-overwrite"] = "true";
+        }
     }
 
     internal static string CreateServiceUrl(ObjectStorageProfile profile)

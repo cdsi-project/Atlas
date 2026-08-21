@@ -260,7 +260,7 @@ public sealed class ConfigurationFormLayoutTests
     }
 
     [Fact]
-    public void OssProfileDialog_OffersAliyunAndQiniuProviders()
+    public void OssProfileDialog_OffersAllBackupProviders()
     {
         using var form = new OssProfileDialog();
         form.CreateControl();
@@ -268,7 +268,7 @@ public sealed class ConfigurationFormLayoutTests
             .OfType<ComboBox>()
             .Single(control => control.AccessibleName == "提供商");
 
-        Assert.Equal(["阿里云 OSS", "七牛云 Kodo"], providerComboBox.Items
+        Assert.Equal(["阿里云 OSS", "七牛云 Kodo", "腾讯云 COS"], providerComboBox.Items
             .Cast<object>()
             .Select(item => item.ToString() ?? string.Empty)
             .ToArray());
@@ -278,6 +278,12 @@ public sealed class ConfigurationFormLayoutTests
         Assert.Equal(ObjectStorageProvider.QiniuKodo, request.Provider);
         Assert.Equal("s3.cn-east-1.qiniucs.com", request.Endpoint);
         Assert.Equal("cn-east-1", request.Region);
+
+        providerComboBox.SelectedIndex = 2;
+        request = form.CreateRequest();
+        Assert.Equal(ObjectStorageProvider.TencentCos, request.Provider);
+        Assert.Equal("cos.ap-guangzhou.myqcloud.com", request.Endpoint);
+        Assert.Equal("ap-guangzhou", request.Region);
     }
 
     [Fact]

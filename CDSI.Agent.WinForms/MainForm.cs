@@ -736,6 +736,7 @@ public sealed partial class MainForm : Form
         {
             "ALIYUNOSS" or "ALIYUN OSS" or "OSS" => "OSS",
             "QINIU" or "QINIUKODO" or "QINIU KODO" => "七牛",
+            "TENCENT" or "TENCENTCOS" or "TENCENT COS" or "COS" => "COS",
             "S3" or "AMAZONS3" or "S3COMPATIBLE" => "S3",
             _ => provider.Trim()
         };
