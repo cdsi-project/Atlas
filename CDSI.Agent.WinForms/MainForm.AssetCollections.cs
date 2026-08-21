@@ -409,12 +409,16 @@ public sealed partial class MainForm
         menuItem.DropDownItems.Clear();
         menuItem.Text = $"加入项目 ({selectedAssetCount:N0})";
         menuItem.Enabled = selectedAssetCount > 0;
+        menuItem.DropDownItems.Add(new ToolStripMenuItem("新建项目")
+        {
+            Tag = AddToProjectMenuCommand.Create
+        });
         if (projects.Count == 0)
         {
-            menuItem.DropDownItems.Add(new ToolStripMenuItem("新建项目..."));
             return;
         }
 
+        menuItem.DropDownItems.Add(new ToolStripSeparator());
         foreach (var project in projects.Take(3))
         {
             menuItem.DropDownItems.Add(new ToolStripMenuItem(
@@ -443,9 +447,16 @@ public sealed partial class MainForm
 
     private async void AddToProjectMenuItem_Click(object? sender, EventArgs e)
     {
-        if ((sender as ToolStripMenuItem)?.Tag is Guid projectId)
+        var tag = (sender as ToolStripMenuItem)?.Tag;
+        if (tag is Guid projectId)
         {
             await AddSelectedAssetsToCollectionAsync(projectId);
+            return;
+        }
+
+        if (tag is AddToProjectMenuCommand.Create)
+        {
+            await AddSelectedAssetsToNewCollectionAsync();
             return;
         }
 
@@ -576,6 +587,32 @@ public sealed partial class MainForm
         catch (Exception exception)
         {
             ShowError("无法将资产加入项目", exception);
+        }
+    }
+
+    private async Task AddSelectedAssetsToNewCollectionAsync()
+    {
+        var selectedAssets = GetSelectedAssets();
+        if (selectedAssets.Count == 0)
+        {
+            return;
+        }
+
+        var collectionId = await CreateCollectionWithDialogAsync();
+        if (collectionId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await AddSelectedAssetsToCollectionAsync(
+                collectionId.Value,
+                selectedAssets);
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法将资产加入新项目", exception);
         }
     }
 
@@ -819,5 +856,10 @@ public sealed partial class MainForm
             AssetCollectionType.Mixed => "综合",
             _ => type.ToString()
         };
+    }
+
+    private enum AddToProjectMenuCommand
+    {
+        Create
     }
 }

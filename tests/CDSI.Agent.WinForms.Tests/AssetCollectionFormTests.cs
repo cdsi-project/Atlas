@@ -87,6 +87,8 @@ public sealed class AssetCollectionFormTests
         Assert.True(menuItem.Enabled);
         Assert.Collection(
             menuItem.DropDownItems.Cast<ToolStripItem>(),
+            item => Assert.Equal("新建项目", item.Text),
+            item => Assert.IsType<ToolStripSeparator>(item),
             item => Assert.Equal(projects[0].Id, item.Tag),
             item => Assert.Equal(projects[1].Id, item.Tag),
             item => Assert.Equal(projects[2].Id, item.Tag),
@@ -98,7 +100,7 @@ public sealed class AssetCollectionFormTests
             projects.Take(3).ToArray(),
             selectedAssetCount: 1);
 
-        Assert.Equal(3, menuItem.DropDownItems.Count);
+        Assert.Equal(5, menuItem.DropDownItems.Count);
         Assert.DoesNotContain(
             menuItem.DropDownItems.Cast<ToolStripItem>(),
             item => item.Text == "更多...");
@@ -116,7 +118,7 @@ public sealed class AssetCollectionFormTests
 
         var createItem = Assert.Single(
             menuItem.DropDownItems.Cast<ToolStripItem>());
-        Assert.Equal("新建项目...", createItem.Text);
+        Assert.Equal("新建项目", createItem.Text);
     }
 
     [Fact]
