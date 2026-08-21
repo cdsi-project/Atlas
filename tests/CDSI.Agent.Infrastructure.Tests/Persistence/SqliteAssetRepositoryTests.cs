@@ -702,7 +702,7 @@ public sealed class SqliteAssetRepositoryTests
                     'openweb_publications', 'local_volumes', 'openweb_sources',
                     'restore_jobs', 'restore_items', 'asset_tags',
                     'asset_tag_links', 'asset_directory_exclusions',
-                    'asset_collection_deletion_audit');
+                    'asset_collection_deletion_audit', 'git_profiles');
                 """;
             var tableCount = Convert.ToInt32(await tableCommand.ExecuteScalarAsync());
 
@@ -767,8 +767,8 @@ public sealed class SqliteAssetRepositoryTests
             var locationVisibilityColumnCount = Convert.ToInt32(
                 await locationVisibilityColumnCommand.ExecuteScalarAsync());
 
-            Assert.Equal(20, version);
-            Assert.Equal(22, tableCount);
+            Assert.Equal(21, version);
+            Assert.Equal(23, tableCount);
             Assert.Equal(8, filterIndexCount);
             Assert.Equal(2, scanFilterColumnCount);
             Assert.Equal(2, assetVisibilityColumnCount);

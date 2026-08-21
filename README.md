@@ -45,12 +45,13 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 - 检测嵌套或重叠扫描目录并提示，位置身份仍按设备和规范化路径保持幂等
 - 在设置页添加、编辑和删除多个阿里云 OSS 配置
 - 在设置页添加、编辑和删除多个 OpenWeb 源站，并指定其中一个默认源站；域名规范化后持久化到本机 SQLite
+- 在设置页添加、编辑和删除多个 GitHub 或 Gitee（码云）仓库配置，并指定默认配置；支持 HTTPS 与 SSH 仓库地址，保存配置不会自动克隆、提交或推送文件
 - 每个源站独立配置 WordPress 用户名和应用程序密码；发布 Markdown/TXT 资产时默认选中默认源站，也可临时切换目标源站
 - Markdown 发布支持 YAML Front Matter 中的 <code>slug</code>、<code>categories</code>、<code>category</code>、<code>tags</code> 和 <code>tag</code>；分类和标签按名称匹配，不存在时在用户明确发布文章的过程中创建
 - 保存资产与 WordPress 文章的映射，重复发布同一资产时更新原文章
 - 如果已映射文章在 WordPress 中被删除或失效，发布时会自动新建文章并用新文章 ID 更新本地映射
 - 按阿里云规则校验 Bucket，并规范化 Endpoint、地域和 HTTPS 设置
-- SQLite 只保存非敏感配置；AccessKey Secret 和各源站的 WordPress 应用程序密码按配置独立保存到 Windows 凭据管理器
+- SQLite 只保存非敏感配置；AccessKey Secret、各源站的 WordPress 应用程序密码和 Git 访问令牌按配置独立保存到 Windows 凭据管理器
 - 在资产列表中显示稳定的资产 ID，资产身份不依赖文件名或存储位置
 - 在资产列表中显式单选或多选文件，在确认窗口逐项设置 OSS 文件名；默认与当前本地文件名一致
 - 远端对象使用 <code>storage_profile_id + assets/&lt;AssetId&gt;/&lt;OSS文件名&gt;</code> 标识，不把文件名或永久 URL 当作资产身份
@@ -137,8 +138,8 @@ CDSI Atlas 采用本地优先、默认非破坏性的处理方式，但不能替
 
 ### 密码与凭据
 
-- OSS AccessKey Secret 和 WordPress 应用程序密码保存在当前 Windows 用户的凭据管理器中，不写入 <code>cdsi.db</code>；WordPress 密码按源站隔离保存，编辑配置时不会读取并回显已有密码。
-- SQLite 会保存连接所需的非密码信息，例如 AccessKey ID、Endpoint、Bucket、各 WordPress 源站域名和用户名。AccessKey ID 不是 Secret，但仍不建议公开。
+- OSS AccessKey Secret、WordPress 应用程序密码和 Git 访问令牌保存在当前 Windows 用户的凭据管理器中，不写入 <code>cdsi.db</code>；凭据按配置隔离保存，编辑配置时不会读取并回显已有密码或令牌。
+- SQLite 会保存连接所需的非密码信息，例如 AccessKey ID、Endpoint、Bucket、各 WordPress 源站域名和用户名，以及 Git 平台、仓库地址、账号和默认分支。AccessKey ID 和仓库地址不是 Secret，但仍不建议公开。
 - 当前应用没有独立的主密码，也没有对 SQLite 数据库进行应用层加密；本机数据的访问控制依赖 Windows 账户权限。建议为 Windows 账户设置强密码，并对设备启用 BitLocker 或等效的磁盘加密。
 - WordPress 发布固定使用 HTTPS。OSS 配置允许选择 HTTP 或 HTTPS；为避免凭据和文件在传输中暴露，应始终启用 HTTPS。
 - 建议为 OSS 使用权限最小化、可轮换的专用凭据。备份至少需要目标对象的写入和读取元数据权限，取回需要 <code>oss:GetObject</code>；为 WordPress 使用应用程序密码而不是账户主密码。凭据泄露后应立即在服务端撤销并重新生成。
@@ -147,7 +148,7 @@ CDSI Atlas 采用本地优先、默认非破坏性的处理方式，但不能替
 
 - 本机 SQLite 位于 <code>%LOCALAPPDATA%\CDSI\cdsi.db</code>。其中包含文件名、绝对路径、大小、时间、SHA-256、媒体元数据、资产清单、远端对象键、操作审计和发布映射等隐私信息；能够访问该数据库的用户可能据此了解本机资产结构。
 - 当前扫描流程不提取或保存文件正文。由旧版本产生的 <code>asset_text</code> 历史表可能仍包含过去提取的文本，数据库迁移不会自动删除这些历史记录。
-- 当前版本不会因为扫描、搜索、创建清单或保存配置而传输文件。网络传输只在用户明确执行 OSS 备份、OSS 取回或 OpenWeb 发布时发生；发布过程中可能按 Markdown Front Matter 创建所声明但尚不存在的 WordPress 分类或标签。
+- 当前版本不会因为扫描、搜索、创建清单或保存配置而传输文件。保存 Git 配置不会连接、克隆、提交或推送仓库；网络传输只在用户明确执行 OSS 备份、OSS 取回或 OpenWeb 发布时发生。发布过程中可能按 Markdown Front Matter 创建所声明但尚不存在的 WordPress 分类或标签。
 - OSS 备份将所选原始文件直接发送到用户配置的对象存储，OSS 取回将所选远端对象直接下载到用户确认的本地目录；OpenWeb 发布会读取所选 Markdown/TXT，并将文章标题和转换后的 HTML 发送到用户配置的 WordPress。对应服务商的访问控制、保留策略和合规责任由用户配置和管理。
 - 当前版本尚未接入 CDSI Server，也没有后台遥测上传。操作审计和错误信息保存在本机；向他人提供数据库、日志内容或错误截图前，应检查其中的文件路径、对象键和账号信息。
 

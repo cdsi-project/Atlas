@@ -1,6 +1,7 @@
 using CDSI.Agent.Application.Assets;
 using CDSI.Agent.Application.Collections;
 using CDSI.Agent.Application.Fingerprints;
+using CDSI.Agent.Application.Git;
 using CDSI.Agent.Application.Metadata;
 using CDSI.Agent.Application.OpenWeb;
 using CDSI.Agent.Application.Scanning;
@@ -57,6 +58,9 @@ static class Program
             var openWebSettingsService = new OpenWebSettingsService(
                 repository,
                 secretStore);
+            var gitProfileService = new GitProfileService(
+                repository,
+                secretStore);
             var openWebPublishingService = new OpenWebArticlePublishingService(
                 openWebSettingsService,
                 repository,
@@ -103,6 +107,7 @@ static class Program
                 volumeReconciliationService,
                 storageService,
                 openWebSettingsService,
+                gitProfileService,
                 openWebPublishingService,
                 objectStorageBackupService,
                 objectStorageRestoreService,

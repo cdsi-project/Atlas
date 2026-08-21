@@ -1,4 +1,5 @@
 using CDSI.Agent.Application.OpenWeb;
+using CDSI.Agent.Application.Git;
 using CDSI.Agent.Application.Scanning;
 using CDSI.Agent.Application.Storage;
 using CDSI.Agent.Application.Workspaces;
@@ -31,12 +32,14 @@ public sealed partial class SettingsForm : Form
         WorkspaceApplicationService workspaceService,
         ScanRootManagementService scanRootService,
         ObjectStorageProfileService storageService,
-        OpenWebSettingsService openWebSettingsService)
+        OpenWebSettingsService openWebSettingsService,
+        GitProfileService gitProfileService)
     {
         _workspaceService = workspaceService;
         _scanRootService = scanRootService;
         _storageService = storageService;
         _openWebSettingsService = openWebSettingsService;
+        _gitProfileService = gitProfileService;
 
         Text = "CDSI Atlas 设置";
         StartPosition = FormStartPosition.CenterParent;
@@ -55,6 +58,7 @@ public sealed partial class SettingsForm : Form
         tabs.TabPages.Add(CreateScanRootsPage());
         tabs.TabPages.Add(CreateStoragePage());
         tabs.TabPages.Add(CreateOpenWebPage());
+        tabs.TabPages.Add(CreateGitPage());
 
         _startScanButton.Text = "开始扫描";
         _startScanButton.BackColor = Color.FromArgb(24, 121, 78);
@@ -338,6 +342,7 @@ public sealed partial class SettingsForm : Form
             await RefreshRootsAsync();
             await RefreshStorageAsync();
             await RefreshOpenWebAsync();
+            await RefreshGitProfilesAsync();
         }
         catch (Exception exception)
         {

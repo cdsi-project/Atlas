@@ -830,6 +830,39 @@ internal static class DatabaseMigrator
             await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
+        if (currentVersion < 21)
+        {
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await using var migrationCommand = connection.CreateCommand();
+            migrationCommand.Transaction = (SqliteTransaction)transaction;
+            migrationCommand.CommandText =
+                """
+                CREATE TABLE git_profiles (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    display_name TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    repository_url TEXT NOT NULL COLLATE NOCASE,
+                    account_name TEXT NOT NULL,
+                    default_branch TEXT NOT NULL,
+                    is_default INTEGER NOT NULL CHECK(is_default IN (0, 1)),
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(provider, repository_url)
+                );
+
+                CREATE UNIQUE INDEX ux_git_profiles_default
+                ON git_profiles(is_default)
+                WHERE is_default = 1;
+
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (21, $applied_at);
+                """;
+            migrationCommand.Parameters.AddWithValue(
+                "$applied_at",
+                DateTimeOffset.UtcNow.ToString("O"));
+            await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     private static async Task<bool> TableExistsAsync(

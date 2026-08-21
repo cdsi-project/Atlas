@@ -1,6 +1,7 @@
 using System.Reflection;
 using CDSI.Agent.Application.Assets;
 using CDSI.Agent.Application.Collections;
+using CDSI.Agent.Application.Git;
 using CDSI.Agent.Application.Metadata;
 using CDSI.Agent.Application.OpenWeb;
 using CDSI.Agent.Application.Fingerprints;
@@ -23,6 +24,7 @@ public sealed partial class MainForm : Form
     private readonly ScanRootManagementService _scanRootService;
     private readonly ObjectStorageProfileService _storageService;
     private readonly OpenWebSettingsService _openWebSettingsService;
+    private readonly GitProfileService _gitProfileService;
     private readonly OpenWebArticlePublishingService _openWebPublishingService;
     private readonly ObjectStorageBackupService _objectStorageBackupService;
     private readonly ObjectStorageRestoreService _objectStorageRestoreService;
@@ -64,6 +66,7 @@ public sealed partial class MainForm : Form
         LocalVolumeReconciliationService volumeReconciliationService,
         ObjectStorageProfileService storageService,
         OpenWebSettingsService openWebSettingsService,
+        GitProfileService gitProfileService,
         OpenWebArticlePublishingService openWebPublishingService,
         ObjectStorageBackupService objectStorageBackupService,
         ObjectStorageRestoreService objectStorageRestoreService,
@@ -81,6 +84,7 @@ public sealed partial class MainForm : Form
         _volumeReconciliationService = volumeReconciliationService;
         _storageService = storageService;
         _openWebSettingsService = openWebSettingsService;
+        _gitProfileService = gitProfileService;
         _openWebPublishingService = openWebPublishingService;
         _objectStorageBackupService = objectStorageBackupService;
         _objectStorageRestoreService = objectStorageRestoreService;
@@ -752,7 +756,8 @@ public sealed partial class MainForm : Form
             _workspaceService,
             _scanRootService,
             _storageService,
-            _openWebSettingsService);
+            _openWebSettingsService,
+            _gitProfileService);
         var settingsResult = settingsForm.ShowDialog(this);
         await _volumeReconciliationService.ReconcileAsync();
         if (settingsResult == DialogResult.OK &&
