@@ -7,17 +7,16 @@ public sealed class ScanRootDialog : Form
 {
     private static readonly IReadOnlyList<FileTypeChoice> FileTypeChoices =
     [
-        new(AssetFileTypeFilter.All, "全部类型"),
         new(AssetFileTypeFilter.Video, "视频"),
         new(AssetFileTypeFilter.Audio, "音频"),
         new(AssetFileTypeFilter.Image, "图片"),
         new(AssetFileTypeFilter.Document, "文档"),
-        new(AssetFileTypeFilter.Other, "其他"),
-        new(null, "自定义白名单")
+        new(AssetFileTypeFilter.Other, "其他")
     ];
 
     private readonly TextBox _pathTextBox = new();
-    private readonly ComboBox _fileTypeComboBox = new();
+    private readonly Dictionary<AssetFileTypeFilter, CheckBox> _fileTypeCheckBoxes = [];
+    private readonly CheckBox _customExtensionCheckBox = new();
     private readonly TextBox _extensionTextBox = new();
     private readonly ListBox _extensionListBox = new();
     private readonly Button _addExtensionButton = new();
@@ -27,11 +26,15 @@ public sealed class ScanRootDialog : Form
 
     public ScanRootDialog(
         string? path = null,
-        AssetFileTypeFilter fileTypeFilter = AssetFileTypeFilter.All,
+        IReadOnlyCollection<AssetFileTypeFilter>? fileTypeFilters = null,
         IReadOnlyCollection<string>? extensionWhitelist = null,
         bool allowPathSelection = true)
     {
-        var filter = new ScanFileFilter(fileTypeFilter, extensionWhitelist);
+        var effectiveFileTypes = fileTypeFilters ??
+            (extensionWhitelist?.Count > 0
+                ? Array.Empty<AssetFileTypeFilter>()
+                : ScanFileFilter.AllFileTypes);
+        var filter = new ScanFileFilter(effectiveFileTypes, extensionWhitelist);
         _requireAvailablePath = allowPathSelection;
 
         Text = allowPathSelection ? "添加扫描目录" : "设置扫描目录";
@@ -80,16 +83,6 @@ public sealed class ScanRootDialog : Form
         browseButton.Click += BrowseButton_Click;
         layout.Controls.Add(browseButton, 2, 1);
 
-        _fileTypeComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
-        _fileTypeComboBox.Width = 200;
-        _fileTypeComboBox.Margin = new Padding(8, 7, 0, 5);
-        _fileTypeComboBox.AccessibleName = "扫描文件类型";
-        _fileTypeComboBox.Items.AddRange(FileTypeChoices.Cast<object>().ToArray());
-        _fileTypeComboBox.SelectedItem = filter.UsesExtensionWhitelist
-            ? FileTypeChoices.Single(choice => choice.Value is null)
-            : FileTypeChoices.Single(choice => choice.Value == fileTypeFilter);
-        _fileTypeComboBox.SelectedIndexChanged += FileTypeComboBox_SelectedIndexChanged;
-
         var fileTypePanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -101,7 +94,27 @@ public sealed class ScanRootDialog : Form
         fileTypeLabel.Width = 84;
         fileTypeLabel.Margin = new Padding(0, 5, 0, 5);
         fileTypePanel.Controls.Add(fileTypeLabel);
-        fileTypePanel.Controls.Add(_fileTypeComboBox);
+        foreach (var choice in FileTypeChoices)
+        {
+            var checkBox = new CheckBox
+            {
+                Text = choice.Label,
+                AutoSize = true,
+                Checked = filter.FileTypeFilters.Contains(choice.Value),
+                Margin = new Padding(8, 13, 4, 0),
+                AccessibleName = $"扫描策略 {choice.Label}"
+            };
+            _fileTypeCheckBoxes.Add(choice.Value, checkBox);
+            fileTypePanel.Controls.Add(checkBox);
+        }
+
+        _customExtensionCheckBox.Text = "自定义扩展名";
+        _customExtensionCheckBox.AutoSize = true;
+        _customExtensionCheckBox.Checked = filter.UsesExtensionWhitelist;
+        _customExtensionCheckBox.Margin = new Padding(8, 13, 0, 0);
+        _customExtensionCheckBox.AccessibleName = "扫描策略 自定义扩展名";
+        _customExtensionCheckBox.CheckedChanged += (_, _) => UpdateWhitelistState();
+        fileTypePanel.Controls.Add(_customExtensionCheckBox);
         layout.Controls.Add(fileTypePanel, 0, 2);
         layout.SetColumnSpan(fileTypePanel, 3);
 
@@ -190,16 +203,18 @@ public sealed class ScanRootDialog : Form
 
     public string SelectedPath => Path.GetFullPath(_pathTextBox.Text.Trim());
 
-    public AssetFileTypeFilter FileTypeFilter =>
-        (_fileTypeComboBox.SelectedItem as FileTypeChoice)?.Value
-        ?? AssetFileTypeFilter.All;
+    public IReadOnlyList<AssetFileTypeFilter> FileTypeFilters =>
+        FileTypeChoices
+            .Where(choice => _fileTypeCheckBoxes[choice.Value].Checked)
+            .Select(choice => choice.Value)
+            .ToArray();
 
     public IReadOnlyList<string> ExtensionWhitelist => IsWhitelistSelected
         ? _extensionListBox.Items.Cast<string>().ToArray()
         : Array.Empty<string>();
 
     internal bool IsWhitelistSelected =>
-        (_fileTypeComboBox.SelectedItem as FileTypeChoice)?.Value is null;
+        _customExtensionCheckBox.Checked;
 
     private void BrowseButton_Click(object? sender, EventArgs e)
     {
@@ -216,11 +231,6 @@ public sealed class ScanRootDialog : Form
         {
             _pathTextBox.Text = dialog.SelectedPath;
         }
-    }
-
-    private void FileTypeComboBox_SelectedIndexChanged(object? sender, EventArgs e)
-    {
-        UpdateWhitelistState();
     }
 
     private void ExtensionTextBox_KeyDown(object? sender, KeyEventArgs e)
@@ -317,6 +327,17 @@ public sealed class ScanRootDialog : Form
             return;
         }
 
+        if (FileTypeFilters.Count == 0 && !IsWhitelistSelected)
+        {
+            MessageBox.Show(
+                this,
+                "请至少勾选一种扫描策略。",
+                "扫描策略",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
         DialogResult = DialogResult.OK;
         Close();
     }
@@ -352,7 +373,7 @@ public sealed class ScanRootDialog : Form
     }
 
     private sealed record FileTypeChoice(
-        AssetFileTypeFilter? Value,
+        AssetFileTypeFilter Value,
         string Label)
     {
         public override string ToString() => Label;

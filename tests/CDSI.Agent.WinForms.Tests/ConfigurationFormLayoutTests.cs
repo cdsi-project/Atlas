@@ -8,6 +8,7 @@ using CDSI.Agent.Infrastructure.Persistence;
 using CDSI.Agent.Infrastructure.Security;
 using CDSI.Agent.WinForms;
 using CDSI.Agent.Core.Assets;
+using CDSI.Agent.Core.Scanning;
 using CDSI.Agent.Core.Storage;
 
 namespace CDSI.Agent.WinForms.Tests;
@@ -87,11 +88,14 @@ public sealed class ConfigurationFormLayoutTests
                 .ToArray());
         Assert.Equal(4, rootsGrid.Columns.Count);
         Assert.Equal(
-            ["目录", "文件类型", "状态", "最近扫描"],
+            ["目录", "扫描策略", "状态", "最近扫描"],
             rootsGrid.Columns
                 .Cast<DataGridViewColumn>()
                 .Select(column => column.HeaderText)
                 .ToArray());
+        Assert.DoesNotContain(
+            Descendants(form).OfType<Button>(),
+            button => button.Text == "设置类型");
         Assert.Equal(DataGridViewAutoSizeColumnMode.Fill, rootsGrid.Columns[0].AutoSizeMode);
         Assert.True(rootsGrid.Columns[0].MinimumWidth >= 320);
         Assert.Equal(5, storageGrid.Columns.Count);
@@ -115,22 +119,28 @@ public sealed class ConfigurationFormLayoutTests
         using var dialog = new ScanRootDialog(Path.GetTempPath());
         dialog.CreateControl();
         dialog.PerformLayout();
-        var fileTypeComboBox = Descendants(dialog)
-            .OfType<ComboBox>()
-            .Single(control => control.AccessibleName == "扫描文件类型");
+        var strategyCheckBoxes = Descendants(dialog)
+            .OfType<CheckBox>()
+            .Where(control => control.AccessibleName?.StartsWith(
+                "扫描策略 ",
+                StringComparison.Ordinal) == true)
+            .ToArray();
         var fileTypeLabel = Descendants(dialog)
             .OfType<Label>()
             .Single(label => label.Text == "扫描策略");
+        var videoCheckBox = Assert.Single(
+            strategyCheckBoxes,
+            control => control.AccessibleName == "扫描策略 视频");
         var whitelistInput = Descendants(dialog)
             .OfType<TextBox>()
             .Single(control => control.AccessibleName == "白名单扩展名输入");
 
-        Assert.Equal(AssetFileTypeFilter.All, dialog.FileTypeFilter);
-        Assert.Equal("全部类型", fileTypeComboBox.SelectedItem?.ToString());
-        Assert.Equal(7, fileTypeComboBox.Items.Count);
+        Assert.Equal(6, strategyCheckBoxes.Length);
+        Assert.Equal(ScanFileFilter.AllFileTypes, dialog.FileTypeFilters);
+        Assert.All(strategyCheckBoxes.Take(5), checkBox => Assert.True(checkBox.Checked));
         Assert.False(dialog.IsWhitelistSelected);
         Assert.False(whitelistInput.Enabled);
-        Assert.False(fileTypeLabel.Bounds.IntersectsWith(fileTypeComboBox.Bounds));
+        Assert.False(fileTypeLabel.Bounds.IntersectsWith(videoCheckBox.Bounds));
     }
 
     [Fact]
@@ -138,21 +148,22 @@ public sealed class ConfigurationFormLayoutTests
     {
         using var dialog = new ScanRootDialog(Path.GetTempPath());
         dialog.CreateControl();
-        var fileTypeComboBox = Descendants(dialog)
-            .OfType<ComboBox>()
-            .Single(control => control.AccessibleName == "扫描文件类型");
+        var customExtensionCheckBox = Descendants(dialog)
+            .OfType<CheckBox>()
+            .Single(control =>
+                control.AccessibleName == "扫描策略 自定义扩展名");
         var whitelistInput = Descendants(dialog)
             .OfType<TextBox>()
             .Single(control => control.AccessibleName == "白名单扩展名输入");
 
-        fileTypeComboBox.SelectedIndex = 6;
+        customExtensionCheckBox.Checked = true;
         whitelistInput.Text = "MP4, *.mov, .MP4";
         dialog.AddExtensions(["MP4", "*.mov", ".MP4"]);
 
         Assert.True(dialog.IsWhitelistSelected);
         Assert.True(whitelistInput.Enabled);
         Assert.Equal([".mov", ".mp4"], dialog.ExtensionWhitelist);
-        Assert.Equal(AssetFileTypeFilter.All, dialog.FileTypeFilter);
+        Assert.Equal(ScanFileFilter.AllFileTypes, dialog.FileTypeFilters);
     }
 
     [Fact]

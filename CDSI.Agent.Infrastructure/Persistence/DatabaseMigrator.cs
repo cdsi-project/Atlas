@@ -884,6 +884,34 @@ internal static class DatabaseMigrator
             await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
+        if (currentVersion < 23)
+        {
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await using var migrationCommand = connection.CreateCommand();
+            migrationCommand.Transaction = (SqliteTransaction)transaction;
+            migrationCommand.CommandText =
+                """
+                ALTER TABLE scan_roots
+                    ADD COLUMN file_type_filters_json TEXT NOT NULL
+                    DEFAULT '["Video","Audio","Image","Document","Other"]';
+
+                UPDATE scan_roots
+                SET file_type_filters_json = CASE
+                    WHEN extension_whitelist_json <> '[]' THEN '[]'
+                    WHEN file_type_filter = 'All'
+                        THEN '["Video","Audio","Image","Document","Other"]'
+                    ELSE '["' || file_type_filter || '"]'
+                END;
+
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (23, $applied_at);
+                """;
+            migrationCommand.Parameters.AddWithValue(
+                "$applied_at",
+                DateTimeOffset.UtcNow.ToString("O"));
+            await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     private static async Task<bool> TableExistsAsync(

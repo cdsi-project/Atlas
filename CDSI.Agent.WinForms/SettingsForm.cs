@@ -15,7 +15,6 @@ public sealed partial class SettingsForm : Form
     private readonly ObjectStorageProfileService _storageService;
     private readonly TextBox _workspacePathTextBox = new();
     private readonly DataGridView _rootsGrid = new();
-    private readonly Button _editRootButton = new();
     private readonly Button _toggleRootButton = new();
     private readonly Button _removeRootButton = new();
     private readonly Label _workspaceStatusLabel = new();
@@ -172,11 +171,6 @@ public sealed partial class SettingsForm : Form
         addButton.Click += AddRootButton_Click;
         addButton.Size = new Size(104, 32);
 
-        _editRootButton.Text = "设置类型";
-        _editRootButton.Size = new Size(88, 32);
-        _editRootButton.FlatStyle = FlatStyle.Flat;
-        _editRootButton.Click += EditRootButton_Click;
-
         _toggleRootButton.Text = "停用";
         _toggleRootButton.Size = new Size(88, 32);
         _toggleRootButton.FlatStyle = FlatStyle.Flat;
@@ -196,7 +190,6 @@ public sealed partial class SettingsForm : Form
             Padding = new Padding(0, 4, 0, 8)
         };
         commands.Controls.Add(addButton);
-        commands.Controls.Add(_editRootButton);
         commands.Controls.Add(_toggleRootButton);
         commands.Controls.Add(_removeRootButton);
 
@@ -318,7 +311,7 @@ public sealed partial class SettingsForm : Form
         });
         _rootsGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
-            HeaderText = "文件类型",
+            HeaderText = "扫描策略",
             Width = 160
         });
         _rootsGrid.Columns.Add(new DataGridViewTextBoxColumn
@@ -443,7 +436,7 @@ public sealed partial class SettingsForm : Form
         {
             var result = await _scanRootService.AddExternalAsync(
                 dialog.SelectedPath,
-                dialog.FileTypeFilter,
+                dialog.FileTypeFilters,
                 dialog.ExtensionWhitelist);
             if (result.RequiresInitialScan)
             {
@@ -465,47 +458,6 @@ public sealed partial class SettingsForm : Form
         catch (Exception exception)
         {
             ShowError("无法添加扫描目录", exception);
-        }
-    }
-
-    private async void EditRootButton_Click(object? sender, EventArgs e)
-    {
-        if (_rootsGrid.CurrentRow?.Tag is not ScanRoot root)
-        {
-            return;
-        }
-
-        using var dialog = new ScanRootDialog(
-            root.Path,
-            root.FileTypeFilter,
-            root.ExtensionWhitelist,
-            allowPathSelection: false);
-        if (dialog.ShowDialog(this) != DialogResult.OK)
-        {
-            return;
-        }
-
-        var fileFilter = new ScanFileFilter(
-            dialog.FileTypeFilter,
-            dialog.ExtensionWhitelist);
-        if (root.CreateFileFilter().HasSameConfiguration(fileFilter))
-        {
-            return;
-        }
-
-        try
-        {
-            await _scanRootService.SetFileFilterAsync(
-                root.Id,
-                fileFilter.FileTypeFilter,
-                fileFilter.ExtensionWhitelist);
-            _initialScanRootIds.Add(root.Id);
-            await RefreshRootsAsync();
-            UpdateStartScanButton();
-        }
-        catch (Exception exception)
-        {
-            ShowError("无法更新扫描文件类型", exception);
         }
     }
 
@@ -567,7 +519,6 @@ public sealed partial class SettingsForm : Form
     private void UpdateRootCommands()
     {
         var root = _rootsGrid.CurrentRow?.Tag as ScanRoot;
-        _editRootButton.Enabled = root is not null;
         _toggleRootButton.Enabled = root is not null;
         _removeRootButton.Enabled = root is not null;
         _toggleRootButton.Text = root?.Enabled == true ? "停用" : "启用";
@@ -594,16 +545,27 @@ public sealed partial class SettingsForm : Form
 
     internal static string FormatFileFilter(ScanRoot root)
     {
-        var extensions = root.ExtensionWhitelist ?? Array.Empty<string>();
-        if (extensions.Count == 0)
+        var filter = root.CreateFileFilter();
+        var parts = new List<string>();
+        if (filter.FileTypeFilters.Count == ScanFileFilter.AllFileTypes.Count)
         {
-            return FormatFileTypeFilter(root.FileTypeFilter);
+            parts.Add("全部类型");
+        }
+        else if (filter.FileTypeFilters.Count > 0)
+        {
+            parts.Add(string.Join("、", filter.FileTypeFilters.Select(
+                FormatFileTypeFilter)));
         }
 
-        var preview = string.Join(", ", extensions.Take(3));
-        return extensions.Count <= 3
-            ? $"白名单: {preview}"
-            : $"白名单: {preview} 等 {extensions.Count} 种";
+        if (filter.ExtensionWhitelist.Count > 0)
+        {
+            var preview = string.Join(", ", filter.ExtensionWhitelist.Take(3));
+            parts.Add(filter.ExtensionWhitelist.Count <= 3
+                ? $"扩展名: {preview}"
+                : $"扩展名: {preview} 等 {filter.ExtensionWhitelist.Count} 种");
+        }
+
+        return string.Join("；", parts);
     }
 
     private static string FormatRootStatus(ScanRoot root)

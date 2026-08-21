@@ -21,7 +21,7 @@ public sealed partial class SqliteAssetRepository
                 id, path, mode, enabled, status, created_at,
                 updated_at, last_scanned_at, removed_at,
                 volume_id, volume_relative_path, file_type_filter,
-                extension_whitelist_json
+                extension_whitelist_json, file_type_filters_json
             FROM scan_roots
             WHERE $include_removed = 1 OR removed_at IS NULL
             ORDER BY mode DESC, path;
@@ -77,6 +77,8 @@ public sealed partial class SqliteAssetRepository
         ArgumentNullException.ThrowIfNull(fileFilter);
         var extensionWhitelistJson = JsonSerializer.Serialize(
             fileFilter.ExtensionWhitelist);
+        var fileTypeFiltersJson = JsonSerializer.Serialize(
+            fileFilter.FileTypeFilters.Select(fileType => fileType.ToString()));
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
@@ -85,9 +87,11 @@ public sealed partial class SqliteAssetRepository
             UPDATE scan_roots
             SET file_type_filter = $file_type_filter,
                 extension_whitelist_json = $extension_whitelist_json,
+                file_type_filters_json = $file_type_filters_json,
                 last_scanned_at = CASE
                     WHEN file_type_filter <> $file_type_filter
                       OR extension_whitelist_json <> $extension_whitelist_json
+                      OR file_type_filters_json <> $file_type_filters_json
                     THEN NULL
                     ELSE last_scanned_at
                 END,
@@ -101,6 +105,9 @@ public sealed partial class SqliteAssetRepository
         command.Parameters.AddWithValue(
             "$extension_whitelist_json",
             extensionWhitelistJson);
+        command.Parameters.AddWithValue(
+            "$file_type_filters_json",
+            fileTypeFiltersJson);
         command.Parameters.AddWithValue("$updated_at", now.ToString("O"));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -230,7 +237,11 @@ public sealed partial class SqliteAssetRepository
         var fileTypeFilter = Enum.Parse<AssetFileTypeFilter>(reader.GetString(11));
         var extensionWhitelist = JsonSerializer.Deserialize<string[]>(reader.GetString(12))
             ?? Array.Empty<string>();
-        var fileFilter = new ScanFileFilter(fileTypeFilter, extensionWhitelist);
+        var fileTypeFilters = (JsonSerializer.Deserialize<string[]>(reader.GetString(13))
+                ?? Array.Empty<string>())
+            .Select(value => Enum.Parse<AssetFileTypeFilter>(value))
+            .ToArray();
+        var fileFilter = new ScanFileFilter(fileTypeFilters, extensionWhitelist);
 
         return new ScanRoot(
             Guid.Parse(reader.GetString(0)),
@@ -245,7 +256,8 @@ public sealed partial class SqliteAssetRepository
             reader.IsDBNull(9) ? null : Guid.Parse(reader.GetString(9)),
             reader.IsDBNull(10) ? null : reader.GetString(10),
             fileFilter.FileTypeFilter,
-            fileFilter.ExtensionWhitelist);
+            fileFilter.ExtensionWhitelist,
+            fileFilter.FileTypeFilters);
     }
 
     private static ManagedWorkspace ReadManagedWorkspace(SqliteDataReader reader)

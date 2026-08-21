@@ -781,7 +781,10 @@ public sealed class SqliteAssetRepositoryTests
                   AND dflt_value = '''All''')
                    OR (name = 'extension_whitelist_json'
                   AND "notnull" = 1
-                  AND dflt_value = '''[]''');
+                  AND dflt_value = '''[]''')
+                   OR (name = 'file_type_filters_json'
+                  AND "notnull" = 1
+                  AND dflt_value = '''["Video","Audio","Image","Document","Other"]''');
                 """;
             var scanFilterColumnCount = Convert.ToInt32(
                 await scanFilterColumnCommand.ExecuteScalarAsync());
@@ -814,10 +817,10 @@ public sealed class SqliteAssetRepositoryTests
             var locationVisibilityColumnCount = Convert.ToInt32(
                 await locationVisibilityColumnCommand.ExecuteScalarAsync());
 
-            Assert.Equal(22, version);
+            Assert.Equal(23, version);
             Assert.Equal(23, tableCount);
             Assert.Equal(8, filterIndexCount);
-            Assert.Equal(2, scanFilterColumnCount);
+            Assert.Equal(3, scanFilterColumnCount);
             Assert.Equal(2, assetVisibilityColumnCount);
             Assert.Equal(2, locationVisibilityColumnCount);
         }

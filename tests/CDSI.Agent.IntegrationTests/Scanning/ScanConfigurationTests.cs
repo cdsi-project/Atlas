@@ -228,6 +228,7 @@ public sealed class ScanConfigurationTests
         Assert.Equal(1, summary.FilesIndexed);
         Assert.Equal("clip.mp4", asset.OriginalFilename);
         Assert.Equal(AssetFileTypeFilter.Video, savedRoot.FileTypeFilter);
+        Assert.Equal([AssetFileTypeFilter.Video], savedRoot.FileTypeFilters);
 
         SqliteConnection.ClearAllPools();
     }
@@ -260,7 +261,47 @@ public sealed class ScanConfigurationTests
         Assert.Equal(1, summary.FilesDiscovered);
         Assert.Equal(1, summary.FilesIndexed);
         Assert.Equal("source.mov", asset.OriginalFilename);
+        Assert.Empty(savedRoot.CreateFileFilter().FileTypeFilters);
         Assert.Equal([".mov"], savedRoot.ExtensionWhitelist);
+
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
+    public async Task ScanRootsAsync_CombinesSelectedCategoriesAndExtensions()
+    {
+        using var directory = new TestDirectory();
+        var root = Directory.CreateDirectory(Path.Combine(directory.Path, "Mixed"));
+        await File.WriteAllTextAsync(Path.Combine(root.FullName, "clip.mp4"), "video");
+        await File.WriteAllTextAsync(Path.Combine(root.FullName, "cover.png"), "image");
+        await File.WriteAllTextAsync(Path.Combine(root.FullName, "layout.psd"), "design");
+        await File.WriteAllTextAsync(Path.Combine(root.FullName, "notes.txt"), "notes");
+
+        var repository = new SqliteAssetRepository(
+            Path.Combine(directory.Path, "State", "cdsi.db"));
+        await repository.InitializeAsync();
+        var rootService = new ScanRootManagementService(repository);
+        var registration = await rootService.AddExternalAsync(
+            root.FullName,
+            [AssetFileTypeFilter.Video, AssetFileTypeFilter.Image],
+            ["PSD"]);
+        var scanService = new ScanApplicationService(
+            new FileSystemScanner(),
+            repository);
+
+        var summary = await scanService.ScanRootsAsync([registration.Root.Id]);
+        var assets = await scanService.ListAssetsAsync();
+        var savedRoot = Assert.Single(await rootService.ListExternalAsync());
+
+        Assert.Equal(3, summary.FilesDiscovered);
+        Assert.Equal(3, summary.FilesIndexed);
+        Assert.Equal(
+            ["clip.mp4", "cover.png", "layout.psd"],
+            assets.Select(asset => asset.OriginalFilename).Order().ToArray());
+        Assert.Equal(
+            [AssetFileTypeFilter.Video, AssetFileTypeFilter.Image],
+            savedRoot.FileTypeFilters);
+        Assert.Equal([".psd"], savedRoot.ExtensionWhitelist);
 
         SqliteConnection.ClearAllPools();
     }

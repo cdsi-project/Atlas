@@ -119,7 +119,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                 id, path, mode, enabled, status, created_at,
                 updated_at, last_scanned_at, removed_at,
                 volume_id, volume_relative_path, file_type_filter,
-                extension_whitelist_json
+                extension_whitelist_json, file_type_filters_json
             FROM scan_roots
             WHERE path_key = $path_key;
             """;
@@ -210,9 +210,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
 
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        var fileTypeCondition = fileFilter.UsesExtensionWhitelist
-            ? CreateExtensionWhitelistCondition(fileFilter.ExtensionWhitelist.Count)
-            : CreateAssetFileTypeCondition(fileFilter.FileTypeFilter);
+        var fileTypeCondition = CreateScanFileFilterCondition(fileFilter);
         var fileTypeClause = fileTypeCondition is null
             ? string.Empty
             : $"""
@@ -1576,6 +1574,29 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
         var parameters = Enumerable.Range(0, extensionCount)
             .Select(index => $"$scan_extension_{index}");
         return $"lower(COALESCE(a.extension, '')) IN ({string.Join(", ", parameters)})";
+    }
+
+    private static string? CreateScanFileFilterCondition(ScanFileFilter fileFilter)
+    {
+        if (fileFilter.FileTypeFilters.Count == ScanFileFilter.AllFileTypes.Count)
+        {
+            return null;
+        }
+
+        var conditions = fileFilter.FileTypeFilters
+            .Select(CreateAssetFileTypeCondition)
+            .Where(condition => condition is not null)
+            .Cast<string>()
+            .ToList();
+        if (fileFilter.UsesExtensionWhitelist)
+        {
+            conditions.Add(CreateExtensionWhitelistCondition(
+                fileFilter.ExtensionWhitelist.Count));
+        }
+
+        return conditions.Count == 1
+            ? conditions[0]
+            : $"({string.Join(" OR ", conditions)})";
     }
 
     private static void AddAssetFilterParameters(

@@ -36,6 +36,10 @@ public sealed class SqliteGitProfileRepositoryTests
                 CREATE UNIQUE INDEX ux_git_profiles_default
                 ON git_profiles(is_default)
                 WHERE is_default = 1;
+                CREATE TABLE scan_roots (
+                    file_type_filter TEXT NOT NULL DEFAULT 'All',
+                    extension_whitelist_json TEXT NOT NULL DEFAULT '[]'
+                );
                 INSERT INTO schema_migrations(version, applied_at)
                 VALUES(21, $now);
                 INSERT INTO git_profiles(
@@ -64,7 +68,7 @@ public sealed class SqliteGitProfileRepositoryTests
             await connection.OpenAsync();
             await using var command = connection.CreateCommand();
             command.CommandText = "SELECT MAX(version) FROM schema_migrations;";
-            Assert.Equal(22, Convert.ToInt32(await command.ExecuteScalarAsync()));
+            Assert.Equal(23, Convert.ToInt32(await command.ExecuteScalarAsync()));
         }
 
         SqliteConnection.ClearAllPools();

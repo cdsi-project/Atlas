@@ -37,4 +37,28 @@ public sealed class ScanFileFilterTests
         Assert.True(filter.Matches(".mp4", "video/mp4"));
         Assert.False(filter.Matches(".txt", "text/plain"));
     }
+
+    [Fact]
+    public void MultipleStrategies_MatchAnySelectedCategoryOrExtension()
+    {
+        var filter = new ScanFileFilter(
+            [AssetFileTypeFilter.Video, AssetFileTypeFilter.Image],
+            ["PSD"]);
+
+        Assert.Equal(
+            [AssetFileTypeFilter.Video, AssetFileTypeFilter.Image],
+            filter.FileTypeFilters);
+        Assert.True(filter.Matches(".mp4", "video/mp4"));
+        Assert.True(filter.Matches(".png", "image/png"));
+        Assert.True(filter.Matches(".psd", "application/octet-stream"));
+        Assert.False(filter.Matches(".mp3", "audio/mpeg"));
+        Assert.False(filter.Matches(".txt", "text/plain"));
+    }
+
+    [Fact]
+    public void MultipleStrategies_RequireAtLeastOneSelection()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new ScanFileFilter([], []));
+    }
 }
