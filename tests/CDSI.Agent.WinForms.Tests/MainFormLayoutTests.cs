@@ -123,6 +123,107 @@ public sealed class MainFormLayoutTests
     }
 
     [Theory]
+    [InlineData((int)Keys.Escape, (int)MainForm.MainShortcutCommand.CancelCurrentTask)]
+    [InlineData((int)(Keys.Control | Keys.F), (int)MainForm.MainShortcutCommand.FocusAssetFilter)]
+    [InlineData((int)(Keys.Control | Keys.N), (int)MainForm.MainShortcutCommand.CreateProject)]
+    [InlineData((int)(Keys.Control | Keys.A), (int)MainForm.MainShortcutCommand.SelectAllAssets)]
+    [InlineData((int)(Keys.Alt | Keys.Enter), (int)MainForm.MainShortcutCommand.ShowAssetDetails)]
+    [InlineData((int)(Keys.Shift | Keys.F10), (int)MainForm.MainShortcutCommand.ShowContextMenu)]
+    [InlineData((int)(Keys.Control | Keys.Shift | Keys.Tab), (int)MainForm.MainShortcutCommand.PreviousTab)]
+    [InlineData((int)(Keys.Control | Keys.Tab), (int)MainForm.MainShortcutCommand.NextTab)]
+    [InlineData((int)Keys.Enter, (int)MainForm.MainShortcutCommand.LocateAsset)]
+    [InlineData((int)Keys.Delete, (int)MainForm.MainShortcutCommand.DeleteSelection)]
+    [InlineData((int)(Keys.Control | Keys.Alt | Keys.Enter), (int)MainForm.MainShortcutCommand.None)]
+    public void ResolveMainShortcut_MapsOnlyTheSupportedExactCombination(
+        int keyData,
+        int expectedCommand)
+    {
+        Assert.Equal(
+            (MainForm.MainShortcutCommand)expectedCommand,
+            MainForm.ResolveMainShortcut((Keys)keyData));
+    }
+
+    [Theory]
+    [InlineData(0, 5, true, 4)]
+    [InlineData(4, 5, false, 0)]
+    [InlineData(2, 5, true, 1)]
+    [InlineData(2, 5, false, 3)]
+    [InlineData(0, 0, false, -1)]
+    public void GetAdjacentTabIndex_WrapsAtBothEnds(
+        int currentIndex,
+        int tabCount,
+        bool previous,
+        int expectedIndex)
+    {
+        Assert.Equal(
+            expectedIndex,
+            MainForm.GetAdjacentTabIndex(currentIndex, tabCount, previous));
+    }
+
+    [Fact]
+    public void SelectAllGridRows_SelectsOnlyRowsInTheCurrentGrid()
+    {
+        using var grid = CreateSelectionGrid();
+        grid.ClearSelection();
+
+        var selected = MainForm.SelectAllGridRows(grid);
+
+        Assert.True(selected);
+        Assert.Equal(grid.Rows.Count, grid.SelectedRows.Count);
+    }
+
+    [Fact]
+    public void AssetDetails_IncludeStableIdentityIntegrityAndLocationFields()
+    {
+        var assetId = Guid.Parse("6a85382d-fdfd-4533-ad6f-14333ad6f14a");
+        var sha256 = new string('a', 64);
+        var asset = new AssetListItem(
+            assetId,
+            "creator-video.mp4",
+            ".mp4",
+            "video/mp4",
+            2048,
+            sha256,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            Path.Combine(Path.GetTempPath(), "creator-video.mp4"),
+            AssetLocationOwnership.External,
+            AssetLocationStatus.Available,
+            AssetStatus.Indexed,
+            true)
+        {
+            Tags = ["素材", "成片"]
+        };
+
+        var entries = AssetDetailsForm.CreateDetailEntries(asset)
+            .ToDictionary(entry => entry.Name, entry => entry.Value);
+
+        Assert.Equal(assetId.ToString("D"), entries["资产 ID"]);
+        Assert.Equal(sha256, entries["文件校验值（SHA-256）"]);
+        Assert.Equal(asset.Path, entries["本地位置"]);
+        Assert.Equal("素材、成片", entries["标签"]);
+        Assert.Equal("已备份", entries["OSS 备份"]);
+        Assert.Equal("可用", entries["位置状态"]);
+    }
+
+    [Fact]
+    public void ConfigureDetailsGrid_KeepsValuesReadableAndCopyable()
+    {
+        using var grid = new DataGridView();
+
+        AssetDetailsForm.ConfigureDetailsGrid(
+            grid,
+            [new AssetDetailEntry("本地位置", @"D:\Creator\video.mp4")]);
+
+        Assert.True(grid.ReadOnly);
+        Assert.True(grid.AllowUserToResizeColumns);
+        Assert.Equal(DataGridViewAutoSizeRowsMode.AllCells, grid.AutoSizeRowsMode);
+        Assert.Equal(DataGridViewClipboardCopyMode.EnableWithoutHeaderText, grid.ClipboardCopyMode);
+        Assert.Equal("本地位置", grid.Rows[0].Cells["Property"].Value);
+        Assert.Equal(@"D:\Creator\video.mp4", grid.Rows[0].Cells["Value"].Value);
+    }
+
+    [Theory]
     [InlineData(0x0007)]
     [InlineData(0x8000)]
     [InlineData(0x8004)]

@@ -51,6 +51,7 @@ public sealed partial class MainForm
             await SyncSelectedCollectionAsync();
         _deleteProjectContextMenuItem.Click += async (_, _) =>
             await DeleteSelectedProjectAsync();
+        _deleteProjectContextMenuItem.ShortcutKeyDisplayString = "Delete";
         _projectContextMenu.Opening += (_, args) =>
         {
             var hasProject = GetSelectedCollection() is not null;

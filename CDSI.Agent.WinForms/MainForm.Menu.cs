@@ -12,6 +12,7 @@ public sealed partial class MainForm
     private readonly ToolStripMenuItem _startFullScanMenuItem = new();
     private readonly ToolStripMenuItem _cancelScanMenuItem = new();
     private readonly ToolStripMenuItem _refreshAssetsMenuItem = new();
+    private readonly ToolStripMenuItem _createProjectMenuItem = new();
     private readonly ToolStripMenuItem _fileSettingsMenuItem = new();
     private readonly ToolStripMenuItem _toolsSettingsMenuItem = new();
     private readonly ToolStripMenuItem _mainAssetMenuItem = new();
@@ -19,6 +20,13 @@ public sealed partial class MainForm
     private void ConfigureMainMenu()
     {
         var fileMenu = new ToolStripMenuItem("文件(&F)");
+        _createProjectMenuItem.Text = "新建项目(&N)";
+        _createProjectMenuItem.ShortcutKeyDisplayString = "Ctrl+N";
+        _createProjectMenuItem.Click += async (_, _) =>
+        {
+            _mainTabControl.SelectedTab = _collectionsTabPage;
+            await CreateCollectionAsync();
+        };
         var openWorkspaceItem = new ToolStripMenuItem("打开 CDSI 工作目录(&W)");
         openWorkspaceItem.Click += async (_, _) => await OpenWorkspaceDirectoryAsync();
         _fileSettingsMenuItem.Text = "扫描目录设置...";
@@ -31,6 +39,8 @@ public sealed partial class MainForm
         exitItem.Click += (_, _) => Close();
         fileMenu.DropDownItems.AddRange(
             [
+                _createProjectMenuItem,
+                new ToolStripSeparator(),
                 openWorkspaceItem,
                 _fileSettingsMenuItem,
                 openDataDirectoryItem,
@@ -161,8 +171,31 @@ public sealed partial class MainForm
     private void ConfigureMainAssetMenu()
     {
         _mainAssetMenuItem.Text = "资产(&A)";
-        var openLocationItem = new ToolStripMenuItem("打开文件位置(&O)");
+        var focusFilterItem = new ToolStripMenuItem("查找或筛选资产(&F)")
+        {
+            ShortcutKeyDisplayString = "Ctrl+F"
+        };
+        focusFilterItem.Click += (_, _) => FocusAssetFilter();
+        var selectAllItem = new ToolStripMenuItem("全选当前页(&A)")
+        {
+            ShortcutKeyDisplayString = "Ctrl+A"
+        };
+        selectAllItem.Click += (_, _) =>
+        {
+            _mainTabControl.SelectedTab = _assetsTabPage;
+            _assetGrid.Focus();
+            SelectAllGridRows(_assetGrid);
+        };
+        var openLocationItem = new ToolStripMenuItem("打开文件位置(&O)")
+        {
+            ShortcutKeyDisplayString = "Enter"
+        };
         openLocationItem.Click += (_, _) => OpenCurrentAssetFileLocation();
+        var detailsItem = new ToolStripMenuItem("资产详情(&I)")
+        {
+            ShortcutKeyDisplayString = "Alt+Enter"
+        };
+        detailsItem.Click += (_, _) => ShowCurrentAssetDetails();
         var tagsItem = new ToolStripMenuItem("标签(&T)");
         var addToCollectionItem = new ToolStripMenuItem("加入资产清单(&L)");
         addToCollectionItem.Click += async (_, _) => await AddSelectedAssetsToCollectionAsync();
@@ -178,11 +211,18 @@ public sealed partial class MainForm
         backupItem.Click += async (_, _) => await BackupSelectedAssetsAsync();
         var restoreItem = new ToolStripMenuItem("从 OSS 取回(&R)");
         restoreItem.Click += async (_, _) => await RestoreSelectedAssetsFromOssAsync();
-        var hideItem = new ToolStripMenuItem("从资产列表中移除（不删除）(&H)");
+        var hideItem = new ToolStripMenuItem("从资产列表中移除（不删除）(&H)")
+        {
+            ShortcutKeyDisplayString = "Delete"
+        };
         hideItem.Click += async (_, _) => await HideSelectedAssetsFromListAsync();
         _mainAssetMenuItem.DropDownItems.AddRange(
             [
+                focusFilterItem,
+                selectAllItem,
+                new ToolStripSeparator(),
                 openLocationItem,
+                detailsItem,
                 tagsItem,
                 addToCollectionItem,
                 publishItem,
@@ -200,8 +240,11 @@ public sealed partial class MainForm
             var selected = GetSelectedAssets();
             var canOperate = !_isBusy && selected.Count > 0 && selected.All(asset =>
                 asset.LocationStatus == AssetLocationStatus.Available);
-            _mainAssetMenuItem.Enabled = !_isBusy && selected.Count > 0;
+            _mainAssetMenuItem.Enabled = !_isBusy;
+            focusFilterItem.Enabled = !_isBusy;
+            selectAllItem.Enabled = !_isBusy && _assetGrid.Rows.Count > 0;
             openLocationItem.Enabled = !_isBusy && _assetGrid.CurrentRow?.Tag is AssetListItem;
+            detailsItem.Enabled = !_isBusy && _assetGrid.CurrentRow?.Tag is AssetListItem;
             ConfigureAssetTagMenu(tagsItem, selected);
             addToCollectionItem.Enabled = !_isBusy && selected.Count > 0;
             publishItem.Enabled = selected.Count == 1 &&
@@ -366,9 +409,10 @@ public sealed partial class MainForm
         _startFullScanMenuItem.Enabled = !_isBusy;
         _cancelScanMenuItem.Enabled = _canCancelCurrentTask;
         _refreshAssetsMenuItem.Enabled = !_isBusy;
+        _createProjectMenuItem.Enabled = !_isBusy;
         _fileSettingsMenuItem.Enabled = !_isBusy;
         _toolsSettingsMenuItem.Enabled = !_isBusy;
-        _mainAssetMenuItem.Enabled = !_isBusy && GetSelectedAssets().Count > 0;
+        _mainAssetMenuItem.Enabled = !_isBusy;
     }
 
     internal static void ResetGridColumnWidths(DataGridView grid)

@@ -8,6 +8,7 @@ namespace CDSI.Agent.WinForms;
 public sealed partial class MainForm
 {
     private readonly ToolStripMenuItem _openFileLocationMenuItem = new();
+    private readonly ToolStripMenuItem _showAssetDetailsMenuItem = new();
     private readonly ToolStripMenuItem _hideAssetsFromListMenuItem = new();
     private readonly ToolStripMenuItem _restoreFromOssMenuItem = new();
     private readonly ContextMenuStrip _duplicateContextMenu = new();
@@ -16,6 +17,9 @@ public sealed partial class MainForm
     private void ConfigureAssetContextMenu()
     {
         _openFileLocationMenuItem.Text = "打开文件位置";
+        _openFileLocationMenuItem.ShortcutKeyDisplayString = "Enter";
+        _showAssetDetailsMenuItem.Text = "资产详情";
+        _showAssetDetailsMenuItem.ShortcutKeyDisplayString = "Alt+Enter";
         _addToCollectionMenuItem.Text = "加入资产清单";
         _copyToWorkspaceMenuItem.Text = "复制到 CDSI 工作目录";
         _moveToWorkspaceMenuItem.Text = "移动到 CDSI 工作目录";
@@ -24,6 +28,7 @@ public sealed partial class MainForm
         _publishToOpenWebMenuItem.Text = "发布到 OpenWeb";
         _hideAssetsFromListMenuItem.Text = "从资产列表中移除（不删除）";
         _openFileLocationMenuItem.Click += (_, _) => OpenCurrentAssetFileLocation();
+        _showAssetDetailsMenuItem.Click += (_, _) => ShowCurrentAssetDetails();
         _copyToWorkspaceMenuItem.Click += async (_, _) =>
             await TransferSelectedAssetsAsync(ManagedAssetTransferAction.Copy);
         _moveToWorkspaceMenuItem.Click += async (_, _) =>
@@ -42,6 +47,7 @@ public sealed partial class MainForm
         _assetContextMenu.Items.AddRange(
             [
                 _openFileLocationMenuItem,
+                _showAssetDetailsMenuItem,
                 new ToolStripSeparator(),
                 _assetTagsMenuItem,
                 _addToCollectionMenuItem,
@@ -55,6 +61,7 @@ public sealed partial class MainForm
                 new ToolStripSeparator(),
                 _hideAssetsFromListMenuItem
             ]);
+        _hideAssetsFromListMenuItem.ShortcutKeyDisplayString = "Delete";
         _assetContextMenu.Opening += (_, args) =>
         {
             var selected = GetSelectedAssets();
@@ -64,6 +71,7 @@ public sealed partial class MainForm
             args.Cancel = selected.Count == 0;
             ConfigureAssetTagMenu(_assetTagsMenuItem, selected);
             _openFileLocationMenuItem.Enabled = _assetGrid.CurrentRow?.Tag is AssetListItem;
+            _showAssetDetailsMenuItem.Enabled = _assetGrid.CurrentRow?.Tag is AssetListItem;
             _addToCollectionMenuItem.Enabled = selected.Count > 0;
             _copyToWorkspaceMenuItem.Enabled = canOperate;
             _moveToWorkspaceMenuItem.Enabled = canOperate;

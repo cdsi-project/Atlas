@@ -314,18 +314,6 @@ public sealed partial class MainForm : Form
         tabControl.Padding = new Point(12, 5);
     }
 
-    private void MainForm_KeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.KeyCode != Keys.Escape || !_canCancelCurrentTask)
-        {
-            return;
-        }
-
-        _scanCancellation?.Cancel();
-        e.Handled = true;
-        e.SuppressKeyPress = true;
-    }
-
     internal static TableLayoutPanel CreateStatisticsPanel(
         Label fileCountValueLabel,
         Label totalSizeValueLabel,
@@ -1125,7 +1113,7 @@ public sealed partial class MainForm : Form
         return busy && allowCancel;
     }
 
-    private static string FormatStatus(AssetListItem asset)
+    internal static string FormatStatus(AssetListItem asset)
     {
         if (asset.LocationStatus == AssetLocationStatus.Offline)
         {
@@ -1156,7 +1144,7 @@ public sealed partial class MainForm : Form
         };
     }
 
-    private static string FormatLocationStatus(AssetLocationStatus status)
+    internal static string FormatLocationStatus(AssetLocationStatus status)
     {
         return status switch
         {
@@ -1168,7 +1156,7 @@ public sealed partial class MainForm : Form
         };
     }
 
-    private static string FormatMetadata(AssetMetadata? metadata)
+    internal static string FormatMetadata(AssetMetadata? metadata)
     {
         if (metadata is null)
         {
@@ -1256,7 +1244,7 @@ public sealed partial class MainForm : Form
             : informationalVersion.Split('+', 2)[0];
     }
 
-    private static string FormatFileSize(long bytes)
+    internal static string FormatFileSize(long bytes)
     {
         string[] units = ["B", "KB", "MB", "GB", "TB"];
         var value = (double)bytes;

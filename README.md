@@ -173,7 +173,7 @@ CDSI Atlas 采用本地优先、默认非破坏性的处理方式，但不能替
 - “工具”：打开任务中心或设置
 - “帮助”：打开随应用发布的 README、数据安全说明和关于窗口；Apache 2.0 协议与第三方许可在应用内“许可信息”双页签面板中显示
 
-常用快捷键：<code>F5</code> 刷新资产索引，<code>F6</code> 常规扫描，<code>Ctrl+F6</code> 完整校验扫描，<code>Esc</code> 取消当前可取消任务，<code>Ctrl+1</code> 至 <code>Ctrl+5</code> 切换主选项卡，<code>Ctrl+J</code> 打开任务中心，<code>Ctrl+,</code> 打开设置，<code>F1</code> 打开使用文档。
+常用快捷键：<code>Ctrl+F</code> 定位到全部资产筛选，<code>Ctrl+N</code> 新建项目，<code>Ctrl+A</code> 全选当前页资产，<code>Alt+Enter</code> 查看资产详情，<code>Shift+F10</code> 打开当前列表的右键菜单，<code>Enter</code> 在资源管理器中定位选中资产，<code>Delete</code> 从全部资产中逻辑移除所选资产或删除所选项目（均保留确认流程），<code>Ctrl+Tab</code> / <code>Ctrl+Shift+Tab</code> 前后切换主选项卡。原有快捷键包括：<code>F5</code> 刷新资产索引，<code>F6</code> 常规扫描，<code>Ctrl+F6</code> 完整校验扫描，<code>Esc</code> 取消当前可取消任务，<code>Ctrl+1</code> 至 <code>Ctrl+5</code> 切换主选项卡，<code>Ctrl+J</code> 打开任务中心，<code>Ctrl+,</code> 打开设置，<code>F1</code> 打开使用文档。
 
 ## 资产统计
 
