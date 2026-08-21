@@ -11,7 +11,7 @@ public sealed class AssetCollectionService(IAssetCollectionRepository repository
     public async Task<AssetCollection> CreateAsync(
         string name,
         AssetCollectionType type,
-        Guid? backupProfileId = null,
+        IReadOnlyCollection<Guid>? backupProfileIds = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(name);
@@ -33,14 +33,19 @@ public sealed class AssetCollectionService(IAssetCollectionRepository repository
             throw new ArgumentOutOfRangeException(nameof(type));
         }
 
+        var normalizedBackupProfileIds = backupProfileIds?
+            .Distinct()
+            .ToArray() ?? [];
         var now = DateTimeOffset.UtcNow;
         var collection = new AssetCollection(
             Guid.NewGuid(),
             normalizedName,
             type,
             now,
-            now,
-            backupProfileId);
+            now)
+        {
+            BackupProfileIds = normalizedBackupProfileIds
+        };
         if (!await repository.CreateAssetCollectionAsync(collection, cancellationToken))
         {
             throw new InvalidOperationException("已存在同名资产清单。请使用其他名称。");

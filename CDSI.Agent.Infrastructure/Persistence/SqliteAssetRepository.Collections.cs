@@ -12,23 +12,51 @@ public sealed partial class SqliteAssetRepository : IAssetCollectionRepository
         CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var transaction =
+            (Microsoft.Data.Sqlite.SqliteTransaction)await connection.BeginTransactionAsync(
+                cancellationToken);
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText =
             """
             INSERT OR IGNORE INTO asset_collections (
-                id, name, type, created_at, updated_at, backup_profile_id)
+                id, name, type, created_at, updated_at)
             VALUES (
-                $id, $name, $type, $created_at, $updated_at, $backup_profile_id);
+                $id, $name, $type, $created_at, $updated_at);
             """;
         command.Parameters.AddWithValue("$id", collection.Id.ToString("D"));
         command.Parameters.AddWithValue("$name", collection.Name);
         command.Parameters.AddWithValue("$type", collection.Type.ToString());
         command.Parameters.AddWithValue("$created_at", collection.CreatedAt.ToString("O"));
         command.Parameters.AddWithValue("$updated_at", collection.UpdatedAt.ToString("O"));
-        command.Parameters.AddWithValue(
-            "$backup_profile_id",
-            (object?)collection.BackupProfileId?.ToString("D") ?? DBNull.Value);
-        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+        if (await command.ExecuteNonQueryAsync(cancellationToken) != 1)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return false;
+        }
+
+        foreach (var profileId in collection.BackupProfileIds.Distinct())
+        {
+            await using var bindingCommand = connection.CreateCommand();
+            bindingCommand.Transaction = transaction;
+            bindingCommand.CommandText =
+                """
+                INSERT INTO asset_collection_backup_profiles (
+                    collection_id, profile_id, added_at)
+                VALUES ($collection_id, $profile_id, $added_at);
+                """;
+            bindingCommand.Parameters.AddWithValue(
+                "$collection_id",
+                collection.Id.ToString("D"));
+            bindingCommand.Parameters.AddWithValue("$profile_id", profileId.ToString("D"));
+            bindingCommand.Parameters.AddWithValue(
+                "$added_at",
+                collection.CreatedAt.ToString("O"));
+            await bindingCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return true;
     }
 
     public async Task<AssetCollection?> GetAssetCollectionAsync(
@@ -39,17 +67,33 @@ public sealed partial class SqliteAssetRepository : IAssetCollectionRepository
         await using var command = connection.CreateCommand();
         command.CommandText =
             """
-            SELECT id, name, type, created_at, updated_at, backup_profile_id
+            SELECT id, name, type, created_at, updated_at
             FROM asset_collections
             WHERE id = $id
             LIMIT 1;
             """;
         command.Parameters.AddWithValue("$id", collectionId.ToString("D"));
 
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        return await reader.ReadAsync(cancellationToken)
-            ? ReadAssetCollection(reader)
-            : null;
+        AssetCollection? collection;
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            collection = await reader.ReadAsync(cancellationToken)
+                ? ReadAssetCollection(reader)
+                : null;
+        }
+
+        if (collection is null)
+        {
+            return null;
+        }
+
+        return collection with
+        {
+            BackupProfileIds = await ListAssetCollectionBackupProfileIdsAsync(
+                connection,
+                collectionId,
+                cancellationToken)
+        };
     }
 
     public async Task<IReadOnlyList<AssetCollectionSummary>> ListAssetCollectionsAsync(
@@ -73,41 +117,39 @@ public sealed partial class SqliteAssetRepository : IAssetCollectionRepository
                       AND osl.status = 'Healthy'
                 ) THEN 1 ELSE 0 END), 0),
                 c.created_at,
-                c.updated_at,
-                c.backup_profile_id,
-                sp.display_name,
-                sp.provider
+                c.updated_at
             FROM asset_collections c
             LEFT JOIN asset_collection_items ci ON ci.collection_id = c.id
             LEFT JOIN assets a ON a.id = ci.asset_id
-            LEFT JOIN storage_profiles sp ON sp.id = c.backup_profile_id
-            GROUP BY
-                c.id, c.name, c.type, c.created_at, c.updated_at,
-                c.backup_profile_id, sp.display_name, sp.provider
+            GROUP BY c.id, c.name, c.type, c.created_at, c.updated_at
             ORDER BY c.updated_at DESC, c.name;
             """;
 
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
-            collections.Add(new AssetCollectionSummary(
-                Guid.Parse(reader.GetString(0)),
-                reader.GetString(1),
-                Enum.Parse<AssetCollectionType>(reader.GetString(2)),
-                reader.GetInt32(3),
-                reader.GetInt64(4),
-                reader.GetInt32(5),
-                ParseTimestamp(reader.GetString(6)),
-                ParseTimestamp(reader.GetString(7)),
-                reader.IsDBNull(8) ? null : Guid.Parse(reader.GetString(8)),
-                reader.IsDBNull(9) ? null : reader.GetString(9),
-                reader.IsDBNull(10)
-                    ? null
-                    : Enum.Parse<CDSI.Agent.Core.Storage.ObjectStorageProvider>(
-                        reader.GetString(10))));
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                collections.Add(new AssetCollectionSummary(
+                    Guid.Parse(reader.GetString(0)),
+                    reader.GetString(1),
+                    Enum.Parse<AssetCollectionType>(reader.GetString(2)),
+                    reader.GetInt32(3),
+                    reader.GetInt64(4),
+                    reader.GetInt32(5),
+                    ParseTimestamp(reader.GetString(6)),
+                    ParseTimestamp(reader.GetString(7))));
+            }
         }
 
-        return collections;
+        var backupTargets = await ListAssetCollectionBackupTargetsAsync(
+            connection,
+            cancellationToken);
+        return collections
+            .Select(collection => collection with
+            {
+                BackupTargets = backupTargets.GetValueOrDefault(collection.Id) ?? []
+            })
+            .ToArray();
     }
 
     public async Task<bool> DeleteAssetCollectionAsync(
@@ -388,8 +430,71 @@ public sealed partial class SqliteAssetRepository : IAssetCollectionRepository
             reader.GetString(1),
             Enum.Parse<AssetCollectionType>(reader.GetString(2)),
             ParseTimestamp(reader.GetString(3)),
-            ParseTimestamp(reader.GetString(4)),
-            reader.IsDBNull(5) ? null : Guid.Parse(reader.GetString(5)));
+            ParseTimestamp(reader.GetString(4)));
+    }
+
+    private static async Task<IReadOnlyList<Guid>> ListAssetCollectionBackupProfileIdsAsync(
+        Microsoft.Data.Sqlite.SqliteConnection connection,
+        Guid collectionId,
+        CancellationToken cancellationToken)
+    {
+        var profileIds = new List<Guid>();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT profile_id
+            FROM asset_collection_backup_profiles
+            WHERE collection_id = $collection_id
+            ORDER BY added_at, profile_id;
+            """;
+        command.Parameters.AddWithValue("$collection_id", collectionId.ToString("D"));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            profileIds.Add(Guid.Parse(reader.GetString(0)));
+        }
+
+        return profileIds;
+    }
+
+    private static async Task<Dictionary<Guid, IReadOnlyList<AssetCollectionBackupTarget>>>
+        ListAssetCollectionBackupTargetsAsync(
+            Microsoft.Data.Sqlite.SqliteConnection connection,
+            CancellationToken cancellationToken)
+    {
+        var targets = new Dictionary<Guid, List<AssetCollectionBackupTarget>>();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT
+                binding.collection_id,
+                profile.id,
+                profile.display_name,
+                profile.provider
+            FROM asset_collection_backup_profiles binding
+            INNER JOIN storage_profiles profile ON profile.id = binding.profile_id
+            ORDER BY binding.added_at, profile.display_name, profile.id;
+            """;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var collectionId = Guid.Parse(reader.GetString(0));
+            if (!targets.TryGetValue(collectionId, out var collectionTargets))
+            {
+                collectionTargets = [];
+                targets.Add(collectionId, collectionTargets);
+            }
+
+            collectionTargets.Add(new AssetCollectionBackupTarget(
+                Guid.Parse(reader.GetString(1)),
+                reader.GetString(2),
+                Enum.Parse<CDSI.Agent.Core.Storage.ObjectStorageProvider>(
+                    reader.GetString(3))));
+        }
+
+        return targets.ToDictionary(
+            pair => pair.Key,
+            pair => (IReadOnlyList<AssetCollectionBackupTarget>)pair.Value);
     }
 
     private static async Task UpdateAssetCollectionTimestampAsync(

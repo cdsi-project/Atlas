@@ -10,13 +10,16 @@ internal sealed partial class OssBackupConfirmationForm : Form
     private readonly Label _targetLabel = new();
     private readonly DataGridView _assetsGrid = new();
     private readonly string? _objectDirectory;
+    private readonly IReadOnlyList<ConfiguredObjectStorageProfile> _profiles;
+    private readonly bool _useAllProfiles;
     private IReadOnlyDictionary<Guid, string> _selectedObjectNames =
         new Dictionary<Guid, string>();
 
     public OssBackupConfirmationForm(
         IReadOnlyCollection<ConfiguredObjectStorageProfile> profiles,
         IReadOnlyCollection<AssetListItem> assets,
-        string? objectDirectory = null)
+        string? objectDirectory = null,
+        bool useAllProfiles = false)
     {
         ArgumentNullException.ThrowIfNull(profiles);
         ArgumentNullException.ThrowIfNull(assets);
@@ -29,8 +32,10 @@ internal sealed partial class OssBackupConfirmationForm : Form
             throw new ArgumentException("至少需要一个待备份资产。", nameof(assets));
         }
         _objectDirectory = objectDirectory;
+        _profiles = profiles.ToArray();
+        _useAllProfiles = useAllProfiles;
 
-        Text = objectDirectory is null ? "确认备份到 OSS" : "确认同步项目到 OSS";
+        Text = objectDirectory is null ? "确认云端备份" : "确认同步项目到云端";
         StartPosition = FormStartPosition.CenterParent;
         MinimumSize = new Size(650, 430);
         Size = new Size(790, 540);
@@ -55,7 +60,7 @@ internal sealed partial class OssBackupConfirmationForm : Form
         layout.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
-            Text = $"将 {assets.Count:N0} 个资产备份到 OSS",
+            Text = $"将 {assets.Count:N0} 个资产备份到云端",
             Font = new Font("Segoe UI Semibold", 13F),
             ForeColor = Color.FromArgb(31, 37, 43),
             TextAlign = ContentAlignment.MiddleLeft
@@ -81,10 +86,18 @@ internal sealed partial class OssBackupConfirmationForm : Form
         _profileComboBox.Dock = DockStyle.Fill;
         _profileComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
         _profileComboBox.DisplayMember = nameof(ProfileChoice.DisplayName);
-        _profileComboBox.Items.AddRange(profiles
-            .Select(profile => new ProfileChoice(profile))
-            .Cast<object>()
-            .ToArray());
+        if (_useAllProfiles)
+        {
+            _profileComboBox.Items.Add($"{_profiles.Count:N0} 个已绑定备份目标");
+            _profileComboBox.Enabled = false;
+        }
+        else
+        {
+            _profileComboBox.Items.AddRange(_profiles
+                .Select(profile => new ProfileChoice(profile))
+                .Cast<object>()
+                .ToArray());
+        }
         _profileComboBox.SelectedIndexChanged += (_, _) => UpdateTargetLabel();
         _profileComboBox.SelectedIndex = 0;
         targetLayout.Controls.Add(_profileComboBox, 1, 0);
@@ -99,8 +112,8 @@ internal sealed partial class OssBackupConfirmationForm : Form
         {
             Dock = DockStyle.Fill,
             Text = objectDirectory is null
-                ? "这会把下列文件内容发送到选定的 OSS Bucket。上传后将校验大小和 SHA-256；本地文件不会被修改或删除。"
-                : $"文件将同步到 OSS 目录“{objectDirectory}/”，文件名保持本地原名。上传后将校验大小和 SHA-256。",
+                ? "这会把下列文件内容发送到选定的云端 Bucket。上传后将校验大小和 SHA-256；本地文件不会被修改或删除。"
+                : $"文件将同步到云端目录“{objectDirectory}/”，文件名保持本地原名。上传后将校验大小和 SHA-256。",
             ForeColor = Color.FromArgb(137, 49, 49),
             TextAlign = ContentAlignment.MiddleLeft
         }, 0, 2);
@@ -142,11 +155,29 @@ internal sealed partial class OssBackupConfirmationForm : Form
         UpdateTargetLabel();
     }
 
-    public Guid SelectedProfileId =>
-        ((ProfileChoice)_profileComboBox.SelectedItem!).Profile.Profile.Id;
+    public Guid SelectedProfileId => SelectedProfileIds[0];
+
+    public IReadOnlyList<Guid> SelectedProfileIds => _useAllProfiles
+        ? _profiles.Select(profile => profile.Profile.Id).ToArray()
+        : [((ProfileChoice)_profileComboBox.SelectedItem!).Profile.Profile.Id];
 
     private void UpdateTargetLabel()
     {
+        if (_useAllProfiles)
+        {
+            var multiTargetDirectoryText = _objectDirectory is null
+                ? string.Empty
+                : $" · 目录: {_objectDirectory}/";
+            _targetLabel.Text = string.Join(
+                "；",
+                _profiles.Select(profile =>
+                    $"{FormatProvider(profile.Profile.Provider)} · " +
+                    $"{profile.Profile.DisplayName} ({profile.Profile.BucketName})")) +
+                multiTargetDirectoryText;
+            _targetLabel.AutoEllipsis = true;
+            return;
+        }
+
         if (_profileComboBox.SelectedItem is not ProfileChoice choice)
         {
             _targetLabel.Text = string.Empty;
@@ -164,6 +195,18 @@ internal sealed partial class OssBackupConfirmationForm : Form
     private sealed record ProfileChoice(ConfiguredObjectStorageProfile Profile)
     {
         public string DisplayName =>
+            $"{FormatProvider(Profile.Profile.Provider)} · " +
             $"{Profile.Profile.DisplayName} ({Profile.Profile.BucketName})";
+    }
+
+    private static string FormatProvider(CDSI.Agent.Core.Storage.ObjectStorageProvider provider)
+    {
+        return provider switch
+        {
+            CDSI.Agent.Core.Storage.ObjectStorageProvider.AliyunOss => "阿里云 OSS",
+            CDSI.Agent.Core.Storage.ObjectStorageProvider.TencentCos => "腾讯云 COS",
+            CDSI.Agent.Core.Storage.ObjectStorageProvider.QiniuKodo => "七牛云 Kodo",
+            _ => provider.ToString()
+        };
     }
 }

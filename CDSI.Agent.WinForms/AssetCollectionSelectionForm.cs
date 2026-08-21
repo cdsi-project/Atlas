@@ -27,7 +27,7 @@ internal sealed class AssetCollectionSelectionForm : Form
 
         Text = purpose switch
         {
-            AssetCollectionSelectionPurpose.Sync => "同步到 OSS",
+            AssetCollectionSelectionPurpose.Sync => "同步到云端",
             AssetCollectionSelectionPurpose.AddAndSync => "加入项目并备份",
             AssetCollectionSelectionPurpose.Open => "打开所在项目",
             _ => "加入项目"
@@ -58,7 +58,7 @@ internal sealed class AssetCollectionSelectionForm : Form
                 AssetCollectionSelectionPurpose.Sync =>
                     $"选择 {selectedAssetCount:N0} 个资产所属的目标项目",
                 AssetCollectionSelectionPurpose.AddAndSync =>
-                    $"先将 {selectedAssetCount:N0} 个资产加入项目，再同步到 OSS",
+                    $"先将 {selectedAssetCount:N0} 个资产加入项目，再同步到云端",
                 AssetCollectionSelectionPurpose.Open => "选择要打开的所在项目",
                 _ => $"将 {selectedAssetCount:N0} 个资产加入"
             },

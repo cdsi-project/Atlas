@@ -963,6 +963,70 @@ internal static class DatabaseMigrator
             await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
+        if (currentVersion < 25)
+        {
+            var hasAssetCollections = await TableExistsAsync(
+                connection,
+                "asset_collections",
+                cancellationToken);
+            var hasStorageProfiles = await TableExistsAsync(
+                connection,
+                "storage_profiles",
+                cancellationToken);
+            var hasLegacyBackupProfileColumn = hasAssetCollections &&
+                await ColumnExistsAsync(
+                    connection,
+                    "asset_collections",
+                    "backup_profile_id",
+                    cancellationToken);
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            await using var migrationCommand = connection.CreateCommand();
+            migrationCommand.Transaction = (SqliteTransaction)transaction;
+            if (hasAssetCollections && hasStorageProfiles)
+            {
+                migrationCommand.CommandText =
+                    """
+                    CREATE TABLE IF NOT EXISTS asset_collection_backup_profiles (
+                        collection_id TEXT NOT NULL,
+                        profile_id TEXT NOT NULL,
+                        added_at TEXT NOT NULL,
+                        PRIMARY KEY (collection_id, profile_id),
+                        FOREIGN KEY (collection_id)
+                            REFERENCES asset_collections(id) ON DELETE CASCADE,
+                        FOREIGN KEY (profile_id)
+                            REFERENCES storage_profiles(id) ON DELETE CASCADE
+                    );
+
+                    CREATE INDEX IF NOT EXISTS ix_asset_collection_backup_profiles_profile_id
+                    ON asset_collection_backup_profiles(profile_id);
+                    """;
+                await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+
+                if (hasLegacyBackupProfileColumn)
+                {
+                    migrationCommand.CommandText =
+                        """
+                        INSERT OR IGNORE INTO asset_collection_backup_profiles (
+                            collection_id, profile_id, added_at)
+                        SELECT id, backup_profile_id, updated_at
+                        FROM asset_collections
+                        WHERE backup_profile_id IS NOT NULL;
+                        """;
+                    await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+                }
+            }
+
+            migrationCommand.CommandText =
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (25, $applied_at);
+                """;
+            migrationCommand.Parameters.AddWithValue(
+                "$applied_at",
+                DateTimeOffset.UtcNow.ToString("O"));
+            await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     private static async Task<bool> TableExistsAsync(

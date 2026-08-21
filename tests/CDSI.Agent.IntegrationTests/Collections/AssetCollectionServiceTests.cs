@@ -30,6 +30,7 @@ public sealed class AssetCollectionServiceTests
             DateTimeOffset.UtcNow));
         var service = new AssetCollectionService(repository);
         var backupProfileId = Guid.NewGuid();
+        var secondaryBackupProfileId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
         await repository.SaveStorageProfileAsync(new ObjectStorageProfile(
             backupProfileId,
@@ -42,13 +43,31 @@ public sealed class AssetCollectionServiceTests
             "access-key-id",
             now,
             now));
+        await repository.SaveStorageProfileAsync(new ObjectStorageProfile(
+            secondaryBackupProfileId,
+            "腾讯云归档",
+            ObjectStorageProvider.TencentCos,
+            "https://cos.ap-beijing.myqcloud.com",
+            "atlas-archive",
+            "ap-beijing",
+            UseHttps: true,
+            "secret-id",
+            now,
+            now));
 
         var collection = await service.CreateAsync(
             "  Episode 01  ",
             AssetCollectionType.Video,
-            backupProfileId);
+            [backupProfileId, secondaryBackupProfileId]);
         Assert.Equal("Episode 01", collection.Name);
-        Assert.Equal(backupProfileId, collection.BackupProfileId);
+        var expectedBackupProfileIds = new[]
+        {
+            backupProfileId,
+            secondaryBackupProfileId
+        };
+        Assert.Equal(
+            expectedBackupProfileIds.Order(),
+            collection.BackupProfileIds.Order());
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.CreateAsync("episode 01", AssetCollectionType.Mixed));
         var membershipError = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -62,7 +81,9 @@ public sealed class AssetCollectionServiceTests
         Assert.Single(plan.Members);
         Assert.Single(plan.Assets);
         Assert.Equal(0, plan.UnavailableAssetCount);
-        Assert.Equal(backupProfileId, plan.Collection.BackupProfileId);
+        Assert.Equal(
+            expectedBackupProfileIds.Order(),
+            plan.Collection.BackupProfileIds.Order());
         var selectedPlan = await service.PrepareSelectedSyncAsync(
             collection.Id,
             [registered.AssetId, registered.AssetId]);

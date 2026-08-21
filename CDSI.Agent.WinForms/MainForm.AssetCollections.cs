@@ -40,7 +40,7 @@ public sealed partial class MainForm
             Color.White);
         ConfigureCollectionActionButton(
             _syncCollectionButton,
-            "同步到 OSS",
+            "同步到云端",
             Color.FromArgb(236, 239, 242),
             Color.FromArgb(31, 37, 43));
 
@@ -105,7 +105,7 @@ public sealed partial class MainForm
         ArgumentNullException.ThrowIfNull(contextMenu);
         ArgumentNullException.ThrowIfNull(syncItem);
         ArgumentNullException.ThrowIfNull(deleteItem);
-        syncItem.Text = "同步到 OSS";
+        syncItem.Text = "同步到云端";
         deleteItem.Text = "删除项目";
         contextMenu.Items.Clear();
         contextMenu.Items.Add(syncItem);
@@ -282,7 +282,7 @@ public sealed partial class MainForm
             var collection = await _assetCollectionService.CreateAsync(
                 dialog.CollectionName,
                 dialog.CollectionType,
-                dialog.BackupProfileId);
+                dialog.BackupProfileIds);
             _statusLabel.Text = $"已创建项目：{collection.Name}";
             return collection.Id;
         }
@@ -376,7 +376,7 @@ public sealed partial class MainForm
         }
 
         menuItem.DropDownItems.Clear();
-        menuItem.Text = $"同步到 OSS ({selectedAssetCount:N0})";
+        menuItem.Text = $"同步到云端 ({selectedAssetCount:N0})";
         menuItem.Enabled = selectedAssetCount > 0;
         if (commonProjects.Count == 0)
         {
@@ -700,7 +700,7 @@ public sealed partial class MainForm
                 plan.Assets,
                 $"正在同步项目：{plan.Collection.Name}",
                 plan.Collection.Name,
-                plan.Collection.BackupProfileId);
+                plan.Collection.BackupProfileIds);
         }
         catch (Exception exception)
         {
@@ -733,7 +733,7 @@ public sealed partial class MainForm
             var deleted = await _assetCollectionService.DeleteAsync(selected.Id);
             await RefreshAssetCollectionsAsync();
             await RefreshAssetPageAsync();
-            _statusLabel.Text = $"已删除项目：{deleted.Name}；资产文件和 OSS 备份未更改";
+            _statusLabel.Text = $"已删除项目：{deleted.Name}；资产文件和云端备份未更改";
         }
         catch (Exception exception)
         {
@@ -749,7 +749,7 @@ public sealed partial class MainForm
             $"确定删除项目“{project.Name}”吗？{Environment.NewLine}{Environment.NewLine}" +
             $"将移除该项目以及它与 {project.AssetCount:N0} 个资产的本地项目关系。" +
             $"{Environment.NewLine}{Environment.NewLine}" +
-            "不会删除、移动或修改资产文件，也不会删除已有 OSS 备份。" +
+            "不会删除、移动或修改资产文件，也不会删除已有云端备份。" +
             $"{Environment.NewLine}此操作无法撤销。";
     }
 
@@ -816,21 +816,33 @@ public sealed partial class MainForm
         AssetCollectionSummary collection)
     {
         ArgumentNullException.ThrowIfNull(collection);
-        if (collection.BackupProfileId is null ||
-            collection.BackupProvider is null ||
-            string.IsNullOrWhiteSpace(collection.BackupProfileName))
+        if (collection.BackupTargets.Count == 0)
         {
-            return "未绑定";
+            return "未开启";
         }
 
-        var provider = collection.BackupProvider.Value switch
+        if (collection.BackupTargets.Count == 1)
+        {
+            var target = collection.BackupTargets[0];
+            return $"{FormatProjectBackupProvider(target.Provider)} · {target.ProfileName}";
+        }
+
+        var providers = collection.BackupTargets
+            .Select(target => FormatProjectBackupProvider(target.Provider))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        return $"{collection.BackupTargets.Count:N0} 个目标 · {string.Join("、", providers)}";
+    }
+
+    private static string FormatProjectBackupProvider(ObjectStorageProvider provider)
+    {
+        return provider switch
         {
             ObjectStorageProvider.AliyunOss => "阿里云 OSS",
             ObjectStorageProvider.TencentCos => "腾讯云 COS",
             ObjectStorageProvider.QiniuKodo => "七牛云 Kodo",
-            _ => collection.BackupProvider.Value.ToString()
+            _ => provider.ToString()
         };
-        return $"{provider} · {collection.BackupProfileName}";
     }
 
     private async Task RefreshSelectedCollectionMembersAsync()

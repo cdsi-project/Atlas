@@ -8,6 +8,39 @@ namespace CDSI.Agent.WinForms.Tests;
 public sealed class OssCollectionBackupConfirmationFormTests
 {
     [Fact]
+    public void Form_MultipleBoundProfilesAreAllSelectedForProjectSync()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var firstProfile = CreateProfile(now);
+        var secondProfile = firstProfile with
+        {
+            Profile = firstProfile.Profile with
+            {
+                Id = Guid.NewGuid(),
+                DisplayName = "腾讯归档",
+                Provider = ObjectStorageProvider.TencentCos,
+                BucketName = "cdsi-archive"
+            }
+        };
+        using var form = new OssBackupConfirmationForm(
+            [firstProfile, secondProfile],
+            [CreateAsset(Guid.NewGuid(), @"D:\素材\原始视频.mp4", now)],
+            "第一期视频",
+            useAllProfiles: true);
+        form.CreateControl();
+
+        var profileSelector = Assert.Single(Descendants(form).OfType<ComboBox>());
+        Assert.False(profileSelector.Enabled);
+        Assert.Contains("2 个已绑定备份目标", profileSelector.Text);
+        Assert.Equal(
+            [firstProfile.Profile.Id, secondProfile.Profile.Id],
+            form.SelectedProfileIds);
+        Assert.Contains(
+            Descendants(form).OfType<Label>(),
+            label => label.Text.Contains("腾讯归档", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Form_CollectionModeKeepsOriginalFilenameAndShowsTargetDirectory()
     {
         var now = DateTimeOffset.UtcNow;

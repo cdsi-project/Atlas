@@ -21,7 +21,7 @@ public sealed class AssetCollectionFormTests
     }
 
     [Fact]
-    public void CreateDialog_OffersConfiguredCloudBackupProvidersAndNoBinding()
+    public void CreateDialog_AllowsZeroOneOrMultipleCloudBackupProfiles()
     {
         var profiles = new[]
         {
@@ -31,18 +31,26 @@ public sealed class AssetCollectionFormTests
         };
         using var form = new AssetCollectionDialog(profiles);
         form.CreateControl();
-        var backupComboBox = Assert.Single(Descendants(form).OfType<ComboBox>(),
-            comboBox => comboBox.AccessibleName == "云端备份");
+        var enableBackup = Assert.Single(Descendants(form).OfType<CheckBox>(),
+            checkBox => checkBox.AccessibleName == "开启云端备份");
+        var backupList = Assert.Single(Descendants(form).OfType<CheckedListBox>(),
+            list => list.AccessibleName == "云端备份配置列表");
 
-        Assert.Equal(4, backupComboBox.Items.Count);
-        Assert.Equal("暂不绑定", backupComboBox.GetItemText(backupComboBox.Items[0]));
-        Assert.Contains("阿里云 OSS · 阿里主存储", backupComboBox.GetItemText(backupComboBox.Items[1]));
-        Assert.Contains("腾讯云 COS · 腾讯归档", backupComboBox.GetItemText(backupComboBox.Items[2]));
-        Assert.Contains("七牛云 Kodo · 七牛分发", backupComboBox.GetItemText(backupComboBox.Items[3]));
-        Assert.Null(form.BackupProfileId);
+        Assert.False(enableBackup.Checked);
+        Assert.False(backupList.Enabled);
+        Assert.Empty(form.BackupProfileIds);
+        Assert.Equal(3, backupList.Items.Count);
+        Assert.Contains("阿里云 OSS · 阿里主存储", backupList.GetItemText(backupList.Items[0]));
+        Assert.Contains("腾讯云 COS · 腾讯归档", backupList.GetItemText(backupList.Items[1]));
+        Assert.Contains("七牛云 Kodo · 七牛分发", backupList.GetItemText(backupList.Items[2]));
 
-        backupComboBox.SelectedIndex = 2;
-        Assert.Equal(profiles[1].Profile.Id, form.BackupProfileId);
+        enableBackup.Checked = true;
+        backupList.SetItemChecked(0, true);
+        Assert.Equal([profiles[0].Profile.Id], form.BackupProfileIds);
+        backupList.SetItemChecked(2, true);
+        Assert.Equal(
+            [profiles[0].Profile.Id, profiles[2].Profile.Id],
+            form.BackupProfileIds);
     }
 
     [Fact]
@@ -57,10 +65,49 @@ public sealed class AssetCollectionFormTests
 
         var selected = MainForm.SelectBackupProfiles(
             profiles,
-            profiles[1].Profile.Id);
+            [profiles[0].Profile.Id, profiles[2].Profile.Id]);
 
-        Assert.Equal(profiles[1].Profile.Id, Assert.Single(selected).Profile.Id);
-        Assert.Equal(3, MainForm.SelectBackupProfiles(profiles, null).Count);
+        Assert.Equal(
+            [profiles[0].Profile.Id, profiles[2].Profile.Id],
+            selected.Select(profile => profile.Profile.Id));
+        Assert.Equal(3, MainForm.SelectBackupProfiles(profiles, []).Count);
+    }
+
+    [Fact]
+    public void ProjectBackupTarget_FormatsDisabledSingleAndMultipleStates()
+    {
+        var project = CreateProject("项目 A");
+        Assert.Equal("未开启", MainForm.FormatProjectBackupTarget(project));
+
+        project = project with
+        {
+            BackupTargets =
+            [
+                new(
+                    Guid.NewGuid(),
+                    "阿里主存储",
+                    ObjectStorageProvider.AliyunOss)
+            ]
+        };
+        Assert.Equal(
+            "阿里云 OSS · 阿里主存储",
+            MainForm.FormatProjectBackupTarget(project));
+
+        project = project with
+        {
+            BackupTargets =
+            [
+                .. project.BackupTargets,
+                new(
+                    Guid.NewGuid(),
+                    "腾讯归档",
+                    ObjectStorageProvider.TencentCos)
+            ]
+        };
+        var multiple = MainForm.FormatProjectBackupTarget(project);
+        Assert.Contains("2 个目标", multiple);
+        Assert.Contains("阿里云 OSS", multiple);
+        Assert.Contains("腾讯云 COS", multiple);
     }
 
     [Fact]
@@ -69,7 +116,7 @@ public sealed class AssetCollectionFormTests
         using var collectionGrid = new DataGridView();
         using var memberGrid = new DataGridView();
         using var createButton = new Button { Text = "新建项目" };
-        using var syncButton = new Button { Text = "同步到 OSS" };
+        using var syncButton = new Button { Text = "同步到云端" };
         using var layout = MainForm.CreateAssetCollectionLayout(
             collectionGrid,
             memberGrid,
@@ -94,7 +141,7 @@ public sealed class AssetCollectionFormTests
         var toolbar = Assert.Single(
             layout.Controls.OfType<FlowLayoutPanel>());
         Assert.Equal(
-            ["新建项目", "同步到 OSS"],
+            ["新建项目", "同步到云端"],
             toolbar.Controls.OfType<Button>().Select(button => button.Text));
     }
 
@@ -112,7 +159,7 @@ public sealed class AssetCollectionFormTests
 
         Assert.Equal(3, contextMenu.Items.Count);
         Assert.Same(syncItem, contextMenu.Items[0]);
-        Assert.Equal("同步到 OSS", syncItem.Text);
+        Assert.Equal("同步到云端", syncItem.Text);
         Assert.IsType<ToolStripSeparator>(contextMenu.Items[1]);
         Assert.Same(deleteItem, contextMenu.Items[2]);
         Assert.Equal("删除项目", deleteItem.Text);
@@ -188,7 +235,7 @@ public sealed class AssetCollectionFormTests
             commonProjects,
             selectedAssetCount: 2);
 
-        Assert.Equal("同步到 OSS (2)", menuItem.Text);
+        Assert.Equal("同步到云端 (2)", menuItem.Text);
         Assert.Collection(
             menuItem.DropDownItems.Cast<ToolStripItem>(),
             item => Assert.Equal(projects[0].Id, item.Tag),
@@ -306,7 +353,7 @@ public sealed class AssetCollectionFormTests
         Assert.Contains("夏季视频", message);
         Assert.Contains("12 个资产", message);
         Assert.Contains("不会删除、移动或修改资产文件", message);
-        Assert.Contains("不会删除已有 OSS 备份", message);
+        Assert.Contains("不会删除已有云端备份", message);
         Assert.Contains("无法撤销", message);
     }
 

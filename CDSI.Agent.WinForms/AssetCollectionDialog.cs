@@ -8,17 +8,22 @@ internal sealed class AssetCollectionDialog : Form
 {
     private readonly TextBox _nameTextBox = new();
     private readonly ComboBox _typeComboBox = new();
-    private readonly ComboBox _backupProfileComboBox = new();
+    private readonly CheckBox _enableCloudBackupCheckBox = new();
+    private readonly CheckedListBox _backupProfileListBox = new();
 
     public AssetCollectionDialog(
         IReadOnlyCollection<ConfiguredObjectStorageProfile>? backupProfiles = null)
     {
         backupProfiles ??= [];
+        var availableBackupProfiles = backupProfiles
+            .Where(profile => profile.HasStoredSecret)
+            .OrderBy(profile => GetProviderOrder(profile.Profile.Provider))
+            .ThenBy(profile => profile.Profile.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         Text = "新建项目";
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(560, 260);
-        MinimumSize = new Size(500, 260);
-        MaximumSize = new Size(820, 310);
+        ClientSize = new Size(640, 410);
+        MinimumSize = new Size(560, 380);
         ShowInTaskbar = false;
         Font = new Font("Segoe UI", 9F);
         AutoScaleMode = AutoScaleMode.Dpi;
@@ -35,8 +40,8 @@ internal sealed class AssetCollectionDialog : Form
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
 
         layout.Controls.Add(CreateLabel("名称"), 0, 0);
         _nameTextBox.Dock = DockStyle.Fill;
@@ -58,20 +63,36 @@ internal sealed class AssetCollectionDialog : Form
         layout.Controls.Add(_typeComboBox, 1, 1);
 
         layout.Controls.Add(CreateLabel("云端备份"), 0, 2);
-        _backupProfileComboBox.Dock = DockStyle.Fill;
-        _backupProfileComboBox.Margin = new Padding(0, 7, 0, 7);
-        _backupProfileComboBox.DropDownStyle = ComboBoxStyle.DropDownList;
-        _backupProfileComboBox.DisplayMember = nameof(BackupProfileChoice.DisplayName);
-        _backupProfileComboBox.AccessibleName = "云端备份";
-        _backupProfileComboBox.Items.Add(new BackupProfileChoice(null));
-        _backupProfileComboBox.Items.AddRange(backupProfiles
-            .Where(profile => profile.HasStoredSecret)
-            .OrderBy(profile => GetProviderOrder(profile.Profile.Provider))
-            .ThenBy(profile => profile.Profile.DisplayName, StringComparer.OrdinalIgnoreCase)
+        var backupLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = new Padding(0, 6, 0, 6)
+        };
+        backupLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+        backupLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        _enableCloudBackupCheckBox.Dock = DockStyle.Fill;
+        _enableCloudBackupCheckBox.Text = availableBackupProfiles.Length == 0
+            ? "开启云端备份（暂无可用配置）"
+            : "开启云端备份";
+        _enableCloudBackupCheckBox.Enabled = availableBackupProfiles.Length > 0;
+        _enableCloudBackupCheckBox.AccessibleName = "开启云端备份";
+        _enableCloudBackupCheckBox.CheckedChanged += (_, _) =>
+            _backupProfileListBox.Enabled = _enableCloudBackupCheckBox.Checked;
+        backupLayout.Controls.Add(_enableCloudBackupCheckBox, 0, 0);
+
+        _backupProfileListBox.Dock = DockStyle.Fill;
+        _backupProfileListBox.CheckOnClick = true;
+        _backupProfileListBox.Enabled = false;
+        _backupProfileListBox.IntegralHeight = false;
+        _backupProfileListBox.DisplayMember = nameof(BackupProfileChoice.DisplayName);
+        _backupProfileListBox.AccessibleName = "云端备份配置列表";
+        _backupProfileListBox.Items.AddRange(availableBackupProfiles
             .Select(profile => (object)new BackupProfileChoice(profile.Profile))
             .ToArray());
-        _backupProfileComboBox.SelectedIndex = 0;
-        layout.Controls.Add(_backupProfileComboBox, 1, 2);
+        backupLayout.Controls.Add(_backupProfileListBox, 0, 1);
+        layout.Controls.Add(backupLayout, 1, 2);
 
         var buttons = new FlowLayoutPanel
         {
@@ -112,8 +133,12 @@ internal sealed class AssetCollectionDialog : Form
     public AssetCollectionType CollectionType =>
         ((TypeChoice)_typeComboBox.SelectedItem!).Type;
 
-    public Guid? BackupProfileId =>
-        ((BackupProfileChoice)_backupProfileComboBox.SelectedItem!).Profile?.Id;
+    public IReadOnlyList<Guid> BackupProfileIds => !_enableCloudBackupCheckBox.Checked
+        ? []
+        : _backupProfileListBox.CheckedItems
+            .Cast<BackupProfileChoice>()
+            .Select(choice => choice.Profile.Id)
+            .ToArray();
 
     internal static IReadOnlyList<TypeChoice> CollectionTypeChoices { get; } =
     [
@@ -149,6 +174,18 @@ internal sealed class AssetCollectionDialog : Form
             return;
         }
 
+        if (_enableCloudBackupCheckBox.Checked && BackupProfileIds.Count == 0)
+        {
+            MessageBox.Show(
+                this,
+                "请至少勾选一个云端备份配置，或取消“开启云端备份”。",
+                "CDSI Atlas",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            _backupProfileListBox.Focus();
+            return;
+        }
+
         DialogResult = DialogResult.OK;
         Close();
     }
@@ -157,11 +194,10 @@ internal sealed class AssetCollectionDialog : Form
         AssetCollectionType Type,
         string DisplayName);
 
-    private sealed record BackupProfileChoice(ObjectStorageProfile? Profile)
+    private sealed record BackupProfileChoice(ObjectStorageProfile Profile)
     {
-        public string DisplayName => Profile is null
-            ? "暂不绑定"
-            : $"{FormatProvider(Profile.Provider)} · {Profile.DisplayName} · {Profile.BucketName}";
+        public string DisplayName =>
+            $"{FormatProvider(Profile.Provider)} · {Profile.DisplayName} · {Profile.BucketName}";
 
         private static string FormatProvider(ObjectStorageProvider provider)
         {

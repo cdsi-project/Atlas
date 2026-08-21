@@ -9,13 +9,66 @@ namespace CDSI.Agent.Infrastructure.Tests.Persistence;
 public sealed class SqliteAssetCollectionRepositoryTests
 {
     [Fact]
-    public async Task CollectionBackupBinding_PersistsAndClearsWithItsProfile()
+    public async Task Version24SingleBackupBinding_MigratesToMultipleBindingTable()
+    {
+        using var directory = new TestDirectory();
+        var databasePath = Path.Combine(directory.Path, "cdsi.db");
+        var repository = new SqliteAssetRepository(databasePath);
+        await repository.InitializeAsync();
+        var now = DateTimeOffset.UtcNow;
+        var profile = new ObjectStorageProfile(
+            Guid.NewGuid(),
+            "旧版阿里云",
+            ObjectStorageProvider.AliyunOss,
+            "https://oss-cn-beijing.aliyuncs.com",
+            "atlas-assets",
+            "oss-cn-beijing",
+            UseHttps: true,
+            "access-key-id",
+            now,
+            now);
+        await repository.SaveStorageProfileAsync(profile);
+        var collection = new AssetCollection(
+            Guid.NewGuid(),
+            "旧版项目",
+            AssetCollectionType.Mixed,
+            now,
+            now);
+        Assert.True(await repository.CreateAssetCollectionAsync(collection));
+
+        await using (var connection = new SqliteConnection(
+            $"Data Source={databasePath};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText =
+                """
+                DELETE FROM asset_collection_backup_profiles;
+                UPDATE asset_collections
+                SET backup_profile_id = $profile_id
+                WHERE id = $collection_id;
+                DELETE FROM schema_migrations WHERE version = 25;
+                """;
+            command.Parameters.AddWithValue("$profile_id", profile.Id.ToString("D"));
+            command.Parameters.AddWithValue("$collection_id", collection.Id.ToString("D"));
+            await command.ExecuteNonQueryAsync();
+        }
+
+        await repository.InitializeAsync();
+
+        var migrated = await repository.GetAssetCollectionAsync(collection.Id);
+        Assert.Equal([profile.Id], migrated?.BackupProfileIds);
+        SqliteConnection.ClearAllPools();
+    }
+
+    [Fact]
+    public async Task CollectionBackupBindings_PersistAndClearIndependently()
     {
         using var directory = new TestDirectory();
         var repository = new SqliteAssetRepository(Path.Combine(directory.Path, "cdsi.db"));
         await repository.InitializeAsync();
         var now = DateTimeOffset.UtcNow;
-        var profile = new ObjectStorageProfile(
+        var firstProfile = new ObjectStorageProfile(
             Guid.NewGuid(),
             "腾讯归档",
             ObjectStorageProvider.TencentCos,
@@ -26,32 +79,53 @@ public sealed class SqliteAssetCollectionRepositoryTests
             "secret-id",
             now,
             now);
-        await repository.SaveStorageProfileAsync(profile);
+        var secondProfile = new ObjectStorageProfile(
+            Guid.NewGuid(),
+            "七牛分发",
+            ObjectStorageProvider.QiniuKodo,
+            "https://s3-cn-east-1.qiniucs.com",
+            "atlas-distribution",
+            "cn-east-1",
+            UseHttps: true,
+            "access-key",
+            now,
+            now);
+        await repository.SaveStorageProfileAsync(firstProfile);
+        await repository.SaveStorageProfileAsync(secondProfile);
         var collection = new AssetCollection(
             Guid.NewGuid(),
             "项目 A",
             AssetCollectionType.Mixed,
             now,
-            now,
-            profile.Id);
+            now)
+        {
+            BackupProfileIds = [firstProfile.Id, secondProfile.Id]
+        };
 
         Assert.True(await repository.CreateAssetCollectionAsync(collection));
 
         var loaded = await repository.GetAssetCollectionAsync(collection.Id);
         var summary = Assert.Single(await repository.ListAssetCollectionsAsync());
-        Assert.Equal(profile.Id, loaded?.BackupProfileId);
-        Assert.Equal(profile.Id, summary.BackupProfileId);
-        Assert.Equal("腾讯归档", summary.BackupProfileName);
-        Assert.Equal(ObjectStorageProvider.TencentCos, summary.BackupProvider);
+        Assert.Equal(
+            new[] { firstProfile.Id, secondProfile.Id }.Order().ToArray(),
+            loaded?.BackupProfileIds.Order().ToArray());
+        Assert.Equal(2, summary.BackupTargets.Count);
+        Assert.Contains(summary.BackupTargets, target =>
+            target.ProfileId == firstProfile.Id &&
+            target.ProfileName == "腾讯归档" &&
+            target.Provider == ObjectStorageProvider.TencentCos);
+        Assert.Contains(summary.BackupTargets, target =>
+            target.ProfileId == secondProfile.Id &&
+            target.ProfileName == "七牛分发" &&
+            target.Provider == ObjectStorageProvider.QiniuKodo);
 
-        Assert.True(await repository.DeleteStorageProfileAsync(profile.Id));
+        Assert.True(await repository.DeleteStorageProfileAsync(firstProfile.Id));
 
         loaded = await repository.GetAssetCollectionAsync(collection.Id);
         summary = Assert.Single(await repository.ListAssetCollectionsAsync());
-        Assert.Null(loaded?.BackupProfileId);
-        Assert.Null(summary.BackupProfileId);
-        Assert.Null(summary.BackupProfileName);
-        Assert.Null(summary.BackupProvider);
+        Assert.Equal([secondProfile.Id], loaded?.BackupProfileIds);
+        var remainingTarget = Assert.Single(summary.BackupTargets);
+        Assert.Equal(secondProfile.Id, remainingTarget.ProfileId);
         SqliteConnection.ClearAllPools();
     }
 
