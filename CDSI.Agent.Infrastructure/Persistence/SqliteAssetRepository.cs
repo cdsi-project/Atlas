@@ -1055,7 +1055,17 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                         WHERE atl.asset_id = a.id
                         ORDER BY t.name COLLATE NOCASE, t.id
                     )
-                ), '[]') AS tags_json
+                ), '[]') AS tags_json,
+                COALESCE((
+                    SELECT json_group_array(project_name)
+                    FROM (
+                        SELECT c.name AS project_name
+                        FROM asset_collection_items ci
+                        INNER JOIN asset_collections c ON c.id = ci.collection_id
+                        WHERE ci.asset_id = a.id
+                        ORDER BY c.name COLLATE NOCASE, c.id
+                    )
+                ), '[]') AS project_names_json
             FROM assets a
             INNER JOIN asset_locations l ON l.asset_id = a.id
             LEFT JOIN asset_metadata m
@@ -1100,7 +1110,8 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
                 reader.GetInt64(12) != 0,
                 ReadMetadata(reader, Guid.Parse(reader.GetString(0)), 13))
             {
-                Tags = ReadAssetTags(reader, 21)
+                Tags = ReadJsonStringArray(reader, 21),
+                ProjectNames = ReadJsonStringArray(reader, 22)
             });
         }
 
@@ -1605,7 +1616,7 @@ public sealed partial class SqliteAssetRepository : IAssetRepository
         }
     }
 
-    private static IReadOnlyList<string> ReadAssetTags(
+    private static IReadOnlyList<string> ReadJsonStringArray(
         SqliteDataReader reader,
         int ordinal)
     {

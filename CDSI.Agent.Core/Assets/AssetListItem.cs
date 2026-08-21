@@ -19,4 +19,6 @@ public sealed record AssetListItem(
     AssetMetadata? Metadata = null)
 {
     public IReadOnlyList<string> Tags { get; init; } = [];
+
+    public IReadOnlyList<string> ProjectNames { get; init; } = [];
 }

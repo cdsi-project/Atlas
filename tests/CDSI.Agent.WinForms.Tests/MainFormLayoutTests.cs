@@ -941,7 +941,7 @@ public sealed class MainFormLayoutTests
     }
 
     [Fact]
-    public void AssetIdColumn_DisplaysTheStableAssetIdentifier()
+    public void AssetIdColumn_DisplaysTheFinalHexSegment()
     {
         var assetId = Guid.Parse("6a85382d-fdfd-4533-ad6f-14333ad6f14a");
         using var grid = new DataGridView
@@ -950,15 +950,30 @@ public sealed class MainFormLayoutTests
         };
         var column = MainForm.CreateAssetIdColumn();
         grid.Columns.Add(column);
-        grid.Rows.Add(assetId.ToString("D"));
+        grid.Rows.Add(MainForm.FormatAssetIdForList(assetId));
 
         Assert.Equal("AssetId", column.Name);
         Assert.Equal("资产 ID", column.HeaderText);
         Assert.Equal(typeof(string), column.ValueType);
-        Assert.Equal(
-            "6a85382d-fdfd-4533-ad6f-14333ad6f14a",
-            grid.Rows[0].Cells[0].Value);
+        Assert.Equal("14333ad6f14a", grid.Rows[0].Cells[0].Value);
+        Assert.Equal(118, column.Width);
     }
+
+    [Theory]
+    [MemberData(nameof(AssetProjectDisplayCases))]
+    public void AssetProjects_DisplayNamesOrNone(
+        IReadOnlyList<string> projectNames,
+        string expected)
+    {
+        Assert.Equal(expected, MainForm.FormatAssetProjects(projectNames));
+    }
+
+    public static TheoryData<IReadOnlyList<string>, string> AssetProjectDisplayCases =>
+        new()
+        {
+            { Array.Empty<string>(), "无" },
+            { new[] { "项目甲", "项目乙" }, "项目甲、项目乙" }
+        };
 
     [Fact]
     public void Sha256Column_DisplaysTheCompleteFileChecksum()
@@ -993,9 +1008,16 @@ public sealed class MainFormLayoutTests
         Assert.Contains("索引时间", headers);
         Assert.Contains("文件校验值（SHA256）", headers);
         Assert.Contains("标签", headers);
+        Assert.Contains("所属项目", headers);
         Assert.DoesNotContain("文本", headers);
         Assert.Equal("IndexedAt", grid.Columns["IndexedAt"]?.Name);
         Assert.Equal("Sha256", grid.Columns["Sha256"]?.Name);
+        Assert.Equal("Projects", grid.Columns["Projects"]?.Name);
+        Assert.True(grid.AllowUserToOrderColumns);
+        Assert.True(
+            grid.Columns["Projects"]!.DisplayIndex <
+            grid.Columns.Cast<DataGridViewColumn>()
+                .Single(column => column.HeaderText == "标签").DisplayIndex);
     }
 
     [Fact]

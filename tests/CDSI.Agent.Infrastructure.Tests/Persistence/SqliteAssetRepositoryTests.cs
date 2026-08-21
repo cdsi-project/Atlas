@@ -1,4 +1,5 @@
 using CDSI.Agent.Core.Assets;
+using CDSI.Agent.Core.Collections;
 using CDSI.Agent.Core.Metadata;
 using CDSI.Agent.Core.Scanning;
 using CDSI.Agent.Core.Storage;
@@ -410,6 +411,33 @@ public sealed class SqliteAssetRepositoryTests
             deviceId,
             files,
             DateTimeOffset.UtcNow);
+        var articleAsset = (await repository.ListAssetsAsync(100))
+            .Single(asset => asset.OriginalFilename == "article.pdf");
+        var projectB = new AssetCollection(
+            Guid.NewGuid(),
+            "Project B",
+            AssetCollectionType.Text,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow);
+        var projectA = projectB with
+        {
+            Id = Guid.NewGuid(),
+            Name = "Project A"
+        };
+        Assert.True(await repository.CreateAssetCollectionAsync(projectB));
+        Assert.True(await repository.CreateAssetCollectionAsync(projectA));
+        Assert.Equal(
+            1,
+            await repository.AddAssetsToCollectionAsync(
+                projectB.Id,
+                [articleAsset.AssetId],
+                DateTimeOffset.UtcNow));
+        Assert.Equal(
+            1,
+            await repository.AddAssetsToCollectionAsync(
+                projectA.Id,
+                [articleAsset.AssetId],
+                DateTimeOffset.UtcNow));
 
         var videoFilter = new AssetListFilter(AssetFileTypeFilter.Video);
         var documentFilter = new AssetListFilter(AssetFileTypeFilter.Document);
@@ -474,6 +502,13 @@ public sealed class SqliteAssetRepositoryTests
             Assert.Single(await repository.ListAssetsAsync(filenameFilter, 100))
                 .OriginalFilename);
         Assert.Empty(await repository.ListAssetsAsync(pathOnlyFilter, 100));
+        var assetsWithProjects = await repository.ListAssetsAsync(100);
+        Assert.Equal(
+            ["Project A", "Project B"],
+            assetsWithProjects.Single(asset =>
+                asset.OriginalFilename == "article.pdf").ProjectNames);
+        Assert.Empty(assetsWithProjects.Single(asset =>
+            asset.OriginalFilename == "video.mp4").ProjectNames);
 
         SqliteConnection.ClearAllPools();
     }

@@ -504,6 +504,9 @@ public sealed partial class MainForm : Form
         grid.Columns.Add(CreateRowNumberColumn());
         grid.Columns.Add(CreateAssetIdColumn());
         grid.Columns.Add(CreateColumn("文件", 220, DataGridViewAutoSizeColumnMode.Fill, 24));
+        var projectsColumn = CreateColumn("所属项目", 180);
+        projectsColumn.Name = "Projects";
+        grid.Columns.Add(projectsColumn);
         grid.Columns.Add(CreateColumn("标签", 180));
         grid.Columns.Add(CreateColumn("类型", 125));
         grid.Columns.Add(CreateFileSizeColumn());
@@ -525,6 +528,7 @@ public sealed partial class MainForm : Form
             minimumWidth: 220));
         grid.Columns.Add(CreateObjectStorageStatusColumn());
         grid.Columns.Add(CreateColumn("状态", 80));
+        grid.AllowUserToOrderColumns = true;
     }
 
     internal static void EnableAssetMultiSelection(DataGridView grid)
@@ -662,10 +666,23 @@ public sealed partial class MainForm : Form
 
     internal static DataGridViewColumn CreateAssetIdColumn()
     {
-        var column = CreateColumn("资产 ID", 236, minimumWidth: 180);
+        var column = CreateColumn("资产 ID", 118, minimumWidth: 96);
         column.Name = "AssetId";
         column.ValueType = typeof(string);
         return column;
+    }
+
+    internal static string FormatAssetIdForList(Guid assetId)
+    {
+        return assetId.ToString("N")[^12..];
+    }
+
+    internal static string FormatAssetProjects(IReadOnlyList<string> projectNames)
+    {
+        ArgumentNullException.ThrowIfNull(projectNames);
+        return projectNames.Count == 0
+            ? "无"
+            : string.Join("、", projectNames);
     }
 
     internal static DataGridViewColumn CreateObjectStorageStatusColumn()
@@ -989,8 +1006,9 @@ public sealed partial class MainForm : Form
         {
             var rowIndex = _assetGrid.Rows.Add(
                 pagination.FirstItem + _assetGrid.Rows.Count,
-                asset.AssetId.ToString("D"),
+                FormatAssetIdForList(asset.AssetId),
                 asset.OriginalFilename,
+                FormatAssetProjects(asset.ProjectNames),
                 string.Join("、", asset.Tags),
                 asset.MimeType ?? "未知",
                 asset.Size,
@@ -1002,6 +1020,8 @@ public sealed partial class MainForm : Form
                 asset.HasHealthyObjectStorageBackup ? "已备份" : "未备份",
                 FormatStatus(asset));
             _assetGrid.Rows[rowIndex].Tag = asset;
+            _assetGrid.Rows[rowIndex].Cells["AssetId"].ToolTipText =
+                asset.AssetId.ToString("D");
         }
 
         if (_assetGrid.Rows.Count > 0)

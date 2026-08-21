@@ -305,6 +305,7 @@ public sealed partial class MainForm
                 collectionId.Value,
                 selectedAssets.Select(asset => asset.AssetId).ToArray());
             await RefreshAssetCollectionsAsync(collectionId);
+            await RefreshAssetPageAsync();
             _statusLabel.Text = added == 0
                 ? "所选资产已在该清单中"
                 : $"已将 {added:N0} 个资产加入清单";
@@ -383,6 +384,7 @@ public sealed partial class MainForm
         {
             var deleted = await _assetCollectionService.DeleteAsync(selected.Id);
             await RefreshAssetCollectionsAsync();
+            await RefreshAssetPageAsync();
             _statusLabel.Text = $"已删除项目：{deleted.Name}；资产文件和 OSS 备份未更改";
         }
         catch (Exception exception)

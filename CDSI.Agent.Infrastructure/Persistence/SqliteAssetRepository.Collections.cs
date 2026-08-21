@@ -353,7 +353,7 @@ public sealed partial class SqliteAssetRepository : IAssetCollectionRepository
                 reader.GetInt64(12) != 0,
                 ReadMetadata(reader, assetId, 13))
             {
-                Tags = ReadAssetTags(reader, 21)
+                Tags = ReadJsonStringArray(reader, 21)
             };
             members.Add(new AssetCollectionMember(
                 collectionId,
