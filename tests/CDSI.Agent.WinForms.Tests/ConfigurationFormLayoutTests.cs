@@ -151,6 +151,23 @@ public sealed class ConfigurationFormLayoutTests
                 .Cast<DataGridViewColumn>()
                 .Select(column => column.HeaderText)
                 .ToArray());
+        Assert.Equal(
+            ["添加配置"],
+            Descendants(tabs.TabPages[4])
+                .OfType<Button>()
+                .Select(button => button.Text)
+                .ToArray());
+        var gitContextMenu = Assert.IsType<ContextMenuStrip>(
+            gitProfilesGrid.ContextMenuStrip);
+        Assert.Collection(
+            gitContextMenu.Items.Cast<ToolStripItem>(),
+            item => Assert.Equal("编辑配置", item.Text),
+            item => Assert.Equal("打开平台网站", item.Text),
+            item => Assert.Equal("复制仓库地址", item.Text),
+            item => Assert.IsType<ToolStripSeparator>(item),
+            item => Assert.Equal("设为默认", item.Text),
+            item => Assert.IsType<ToolStripSeparator>(item),
+            item => Assert.Equal("删除配置", item.Text));
         Assert.False(startScanButton.Enabled);
         Assert.Equal(DialogResult.OK, startScanButton.DialogResult);
         Assert.Equal(DialogResult.Cancel, closeButton.DialogResult);

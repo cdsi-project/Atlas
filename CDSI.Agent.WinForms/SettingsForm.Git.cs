@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using CDSI.Agent.Application.Git;
 using CDSI.Agent.Core.Git;
 
@@ -7,9 +8,12 @@ public sealed partial class SettingsForm
 {
     private readonly GitProfileService _gitProfileService;
     private readonly DataGridView _gitProfilesGrid = new();
-    private readonly Button _editGitProfileButton = new();
-    private readonly Button _defaultGitProfileButton = new();
-    private readonly Button _deleteGitProfileButton = new();
+    private readonly ContextMenuStrip _gitProfileContextMenu = new();
+    private readonly ToolStripMenuItem _editGitProfileMenuItem = new();
+    private readonly ToolStripMenuItem _openGitProviderMenuItem = new();
+    private readonly ToolStripMenuItem _copyGitRepositoryUrlMenuItem = new();
+    private readonly ToolStripMenuItem _defaultGitProfileMenuItem = new();
+    private readonly ToolStripMenuItem _deleteGitProfileMenuItem = new();
 
     private TabPage CreateGitPage()
     {
@@ -28,22 +32,6 @@ public sealed partial class SettingsForm
         addButton.AccessibleName = "添加 Git 配置";
         addButton.Click += AddGitProfileButton_Click;
 
-        _editGitProfileButton.Text = "编辑";
-        _editGitProfileButton.Size = new Size(88, 32);
-        _editGitProfileButton.FlatStyle = FlatStyle.Flat;
-        _editGitProfileButton.Click += EditGitProfileButton_Click;
-
-        _defaultGitProfileButton.Text = "设为默认";
-        _defaultGitProfileButton.Size = new Size(88, 32);
-        _defaultGitProfileButton.FlatStyle = FlatStyle.Flat;
-        _defaultGitProfileButton.Click += DefaultGitProfileButton_Click;
-
-        _deleteGitProfileButton.Text = "删除";
-        _deleteGitProfileButton.Size = new Size(88, 32);
-        _deleteGitProfileButton.FlatStyle = FlatStyle.Flat;
-        _deleteGitProfileButton.ForeColor = Color.FromArgb(137, 49, 49);
-        _deleteGitProfileButton.Click += DeleteGitProfileButton_Click;
-
         var commands = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
@@ -52,9 +40,6 @@ public sealed partial class SettingsForm
             Padding = new Padding(0, 4, 0, 8)
         };
         commands.Controls.Add(addButton);
-        commands.Controls.Add(_editGitProfileButton);
-        commands.Controls.Add(_defaultGitProfileButton);
-        commands.Controls.Add(_deleteGitProfileButton);
 
         var note = new Label
         {
@@ -132,8 +117,47 @@ public sealed partial class SettingsForm
             HeaderText = "凭据",
             Width = 82
         });
-        _gitProfilesGrid.SelectionChanged += (_, _) =>
-            UpdateGitProfileCommands();
+        _editGitProfileMenuItem.Text = "编辑配置";
+        _editGitProfileMenuItem.Click += EditGitProfileMenuItem_Click;
+        _openGitProviderMenuItem.Text = "打开平台网站";
+        _openGitProviderMenuItem.Click += (_, _) => OpenSelectedGitProvider();
+        _copyGitRepositoryUrlMenuItem.Text = "复制仓库地址";
+        _copyGitRepositoryUrlMenuItem.Click += (_, _) =>
+            CopySelectedGitRepositoryUrl();
+        _defaultGitProfileMenuItem.Text = "设为默认";
+        _defaultGitProfileMenuItem.Click += DefaultGitProfileMenuItem_Click;
+        _deleteGitProfileMenuItem.Text = "删除配置";
+        _deleteGitProfileMenuItem.ForeColor = Color.FromArgb(137, 49, 49);
+        _deleteGitProfileMenuItem.Click += DeleteGitProfileMenuItem_Click;
+        _gitProfileContextMenu.Items.AddRange(
+        [
+            _editGitProfileMenuItem,
+            _openGitProviderMenuItem,
+            _copyGitRepositoryUrlMenuItem,
+            new ToolStripSeparator(),
+            _defaultGitProfileMenuItem,
+            new ToolStripSeparator(),
+            _deleteGitProfileMenuItem
+        ]);
+        _gitProfileContextMenu.Opening += (_, args) =>
+        {
+            var profile =
+                (_gitProfilesGrid.CurrentRow?.Tag as ConfiguredGitProfile)?.Profile;
+            args.Cancel = profile is null;
+            _defaultGitProfileMenuItem.Enabled = profile is not null && !profile.IsDefault;
+        };
+        _gitProfilesGrid.ContextMenuStrip = _gitProfileContextMenu;
+        _gitProfilesGrid.CellMouseDown += (_, args) =>
+        {
+            if (args.Button == MouseButtons.Right &&
+                args.RowIndex >= 0 &&
+                args.ColumnIndex >= 0)
+            {
+                _gitProfilesGrid.CurrentCell =
+                    _gitProfilesGrid.Rows[args.RowIndex].Cells[args.ColumnIndex];
+            }
+        };
+        _gitProfilesGrid.CellDoubleClick += GitProfilesGrid_CellDoubleClick;
     }
 
     private async Task RefreshGitProfilesAsync()
@@ -159,8 +183,6 @@ public sealed partial class SettingsForm
                     : "本机密钥");
             _gitProfilesGrid.Rows[index].Tag = configured;
         }
-
-        UpdateGitProfileCommands();
     }
 
     private async void AddGitProfileButton_Click(object? sender, EventArgs e)
@@ -168,7 +190,22 @@ public sealed partial class SettingsForm
         await ShowGitProfileDialogAsync(null);
     }
 
-    private async void EditGitProfileButton_Click(object? sender, EventArgs e)
+    private async void EditGitProfileMenuItem_Click(object? sender, EventArgs e)
+    {
+        await EditSelectedGitProfileAsync();
+    }
+
+    private async void GitProfilesGrid_CellDoubleClick(
+        object? sender,
+        DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex >= 0)
+        {
+            await EditSelectedGitProfileAsync();
+        }
+    }
+
+    private async Task EditSelectedGitProfileAsync()
     {
         if (_gitProfilesGrid.CurrentRow?.Tag is ConfiguredGitProfile configured)
         {
@@ -195,7 +232,42 @@ public sealed partial class SettingsForm
         }
     }
 
-    private async void DefaultGitProfileButton_Click(object? sender, EventArgs e)
+    private void OpenSelectedGitProvider()
+    {
+        if (_gitProfilesGrid.CurrentRow?.Tag is not ConfiguredGitProfile configured)
+        {
+            return;
+        }
+
+        try
+        {
+            using var process = Process.Start(
+                SshKeySupport.CreateOpenWebsiteStartInfo(configured.Profile.Provider));
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法打开 Git 托管平台网站", exception);
+        }
+    }
+
+    private void CopySelectedGitRepositoryUrl()
+    {
+        if (_gitProfilesGrid.CurrentRow?.Tag is not ConfiguredGitProfile configured)
+        {
+            return;
+        }
+
+        try
+        {
+            Clipboard.SetText(configured.Profile.RepositoryUrl);
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法复制 Git 仓库地址", exception);
+        }
+    }
+
+    private async void DefaultGitProfileMenuItem_Click(object? sender, EventArgs e)
     {
         if (_gitProfilesGrid.CurrentRow?.Tag is not ConfiguredGitProfile configured ||
             configured.Profile.IsDefault)
@@ -214,12 +286,12 @@ public sealed partial class SettingsForm
         }
     }
 
-    private async void DeleteGitProfileButton_Click(object? sender, EventArgs e)
+    private async void DeleteGitProfileMenuItem_Click(object? sender, EventArgs e)
     {
         if (_gitProfilesGrid.CurrentRow?.Tag is not ConfiguredGitProfile configured ||
             MessageBox.Show(
                 this,
-                "将删除本机 Git 配置和对应的 Windows 凭据，不会删除远端仓库或本地文件。",
+                "将删除本机 Git 配置和对应的 Windows 凭据，不会删除远端仓库、本地文件或 SSH 密钥。",
                 "删除 Git 配置",
                 MessageBoxButtons.OKCancel,
                 MessageBoxIcon.Warning) != DialogResult.OK)
@@ -236,15 +308,6 @@ public sealed partial class SettingsForm
         {
             ShowError("无法删除 Git 配置", exception);
         }
-    }
-
-    private void UpdateGitProfileCommands()
-    {
-        var profile =
-            (_gitProfilesGrid.CurrentRow?.Tag as ConfiguredGitProfile)?.Profile;
-        _editGitProfileButton.Enabled = profile is not null;
-        _defaultGitProfileButton.Enabled = profile is not null && !profile.IsDefault;
-        _deleteGitProfileButton.Enabled = profile is not null;
     }
 
     internal static string FormatGitProvider(GitHostingProvider provider)
