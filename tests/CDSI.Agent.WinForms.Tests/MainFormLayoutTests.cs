@@ -30,13 +30,14 @@ public sealed class MainFormLayoutTests
             new("资产"),
             new("视图"),
             new("工具"),
+            new("设置"),
             new("帮助")
         ];
 
         MainForm.ConfigureMainMenuStrip(menuStrip, menus);
 
         Assert.Equal(
-            ["文件", "扫描", "资产", "视图", "工具", "帮助"],
+            ["文件", "扫描", "资产", "视图", "工具", "设置", "帮助"],
             menuStrip.Items.Cast<ToolStripMenuItem>().Select(item => item.Text));
         Assert.Equal(DockStyle.Fill, menuStrip.Dock);
         Assert.Equal("主菜单", menuStrip.AccessibleName);

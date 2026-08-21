@@ -14,7 +14,7 @@ public sealed partial class MainForm
     private readonly ToolStripMenuItem _refreshAssetsMenuItem = new();
     private readonly ToolStripMenuItem _createProjectMenuItem = new();
     private readonly ToolStripMenuItem _fileSettingsMenuItem = new();
-    private readonly ToolStripMenuItem _toolsSettingsMenuItem = new();
+    private readonly ToolStripMenuItem _settingsMenuItem = new();
     private readonly ToolStripMenuItem _mainAssetMenuItem = new();
 
     private void ConfigureMainMenu()
@@ -102,16 +102,12 @@ public sealed partial class MainForm
             ShortcutKeys = Keys.Control | Keys.J
         };
         taskCenterItem.Click += (_, _) => ShowTaskCenter();
-        _toolsSettingsMenuItem.Text = "设置(&O)...";
-        ConfigureSettingsShortcutDisplay(_toolsSettingsMenuItem);
-        _toolsSettingsMenuItem.Click += async (_, _) => await OpenSettingsAsync();
-        toolsMenu.DropDownItems.AddRange(
-            [
-                taskCenterItem,
-                new ToolStripSeparator(),
-                _toolsSettingsMenuItem
-            ]);
+        toolsMenu.DropDownItems.Add(taskCenterItem);
         toolsMenu.DropDownOpening += (_, _) => UpdateMainMenuState();
+
+        _settingsMenuItem.Text = "设置(&O)";
+        ConfigureSettingsShortcutDisplay(_settingsMenuItem);
+        _settingsMenuItem.Click += async (_, _) => await OpenSettingsAsync();
 
         var helpMenu = new ToolStripMenuItem("帮助(&H)");
         var readmeItem = new ToolStripMenuItem("使用文档(&D)")
@@ -142,7 +138,15 @@ public sealed partial class MainForm
 
         ConfigureMainMenuStrip(
             _mainMenuStrip,
-            [fileMenu, scanMenu, _mainAssetMenuItem, viewMenu, toolsMenu, helpMenu]);
+            [
+                fileMenu,
+                scanMenu,
+                _mainAssetMenuItem,
+                viewMenu,
+                toolsMenu,
+                _settingsMenuItem,
+                helpMenu
+            ]);
         UpdateMainMenuState();
     }
 
@@ -419,7 +423,7 @@ public sealed partial class MainForm
         _refreshAssetsMenuItem.Enabled = !_isBusy;
         _createProjectMenuItem.Enabled = !_isBusy;
         _fileSettingsMenuItem.Enabled = !_isBusy;
-        _toolsSettingsMenuItem.Enabled = !_isBusy;
+        _settingsMenuItem.Enabled = !_isBusy;
         _mainAssetMenuItem.Enabled = !_isBusy;
     }
 
