@@ -96,6 +96,16 @@ public sealed class ConfigurationFormLayoutTests
         Assert.DoesNotContain(
             Descendants(form).OfType<Button>(),
             button => button.Text == "设置类型");
+        Assert.DoesNotContain(
+            Descendants(form).OfType<Button>(),
+            button => button.Text is "停用" or "移除");
+        var rootContextMenu = Assert.IsType<ContextMenuStrip>(
+            rootsGrid.ContextMenuStrip);
+        Assert.Collection(
+            rootContextMenu.Items.Cast<ToolStripItem>(),
+            item => Assert.Equal("停用", item.Text),
+            item => Assert.IsType<ToolStripSeparator>(item),
+            item => Assert.Equal("移除", item.Text));
         Assert.Equal(DataGridViewAutoSizeColumnMode.Fill, rootsGrid.Columns[0].AutoSizeMode);
         Assert.True(rootsGrid.Columns[0].MinimumWidth >= 320);
         Assert.Equal(5, storageGrid.Columns.Count);

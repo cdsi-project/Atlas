@@ -15,8 +15,9 @@ public sealed partial class SettingsForm : Form
     private readonly ObjectStorageProfileService _storageService;
     private readonly TextBox _workspacePathTextBox = new();
     private readonly DataGridView _rootsGrid = new();
-    private readonly Button _toggleRootButton = new();
-    private readonly Button _removeRootButton = new();
+    private readonly ContextMenuStrip _rootContextMenu = new();
+    private readonly ToolStripMenuItem _toggleRootMenuItem = new();
+    private readonly ToolStripMenuItem _removeRootMenuItem = new();
     private readonly Label _workspaceStatusLabel = new();
     private readonly DataGridView _storageGrid = new();
     private readonly Button _editStorageButton = new();
@@ -171,17 +172,6 @@ public sealed partial class SettingsForm : Form
         addButton.Click += AddRootButton_Click;
         addButton.Size = new Size(104, 32);
 
-        _toggleRootButton.Text = "停用";
-        _toggleRootButton.Size = new Size(88, 32);
-        _toggleRootButton.FlatStyle = FlatStyle.Flat;
-        _toggleRootButton.Click += ToggleRootButton_Click;
-
-        _removeRootButton.Text = "移除";
-        _removeRootButton.Size = new Size(88, 32);
-        _removeRootButton.FlatStyle = FlatStyle.Flat;
-        _removeRootButton.ForeColor = Color.FromArgb(137, 49, 49);
-        _removeRootButton.Click += RemoveRootButton_Click;
-
         var commands = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
@@ -190,8 +180,6 @@ public sealed partial class SettingsForm : Form
             Padding = new Padding(0, 4, 0, 8)
         };
         commands.Controls.Add(addButton);
-        commands.Controls.Add(_toggleRootButton);
-        commands.Controls.Add(_removeRootButton);
 
         page.Controls.Add(_rootsGrid);
         page.Controls.Add(commands);
@@ -324,7 +312,34 @@ public sealed partial class SettingsForm : Form
             HeaderText = "最近扫描",
             Width = 150
         });
-        _rootsGrid.SelectionChanged += (_, _) => UpdateRootCommands();
+        _toggleRootMenuItem.Text = "停用";
+        _toggleRootMenuItem.Click += ToggleRootMenuItem_Click;
+        _removeRootMenuItem.Text = "移除";
+        _removeRootMenuItem.ForeColor = Color.FromArgb(137, 49, 49);
+        _removeRootMenuItem.Click += RemoveRootMenuItem_Click;
+        _rootContextMenu.Items.AddRange(
+            [_toggleRootMenuItem, new ToolStripSeparator(), _removeRootMenuItem]);
+        _rootContextMenu.Opening += (_, args) =>
+        {
+            if (_rootsGrid.CurrentRow?.Tag is not ScanRoot root)
+            {
+                args.Cancel = true;
+                return;
+            }
+
+            _toggleRootMenuItem.Text = root.Enabled ? "停用" : "启用";
+        };
+        _rootsGrid.ContextMenuStrip = _rootContextMenu;
+        _rootsGrid.CellMouseDown += (_, args) =>
+        {
+            if (args.Button == MouseButtons.Right &&
+                args.RowIndex >= 0 &&
+                args.ColumnIndex >= 0)
+            {
+                _rootsGrid.CurrentCell =
+                    _rootsGrid.Rows[args.RowIndex].Cells[args.ColumnIndex];
+            }
+        };
     }
 
     private async void SettingsForm_Shown(object? sender, EventArgs e)
@@ -373,7 +388,6 @@ public sealed partial class SettingsForm : Form
             _rootsGrid.Rows[index].Tag = root;
         }
 
-        UpdateRootCommands();
         UpdateStartScanButton();
     }
 
@@ -461,7 +475,7 @@ public sealed partial class SettingsForm : Form
         }
     }
 
-    private async void ToggleRootButton_Click(object? sender, EventArgs e)
+    private async void ToggleRootMenuItem_Click(object? sender, EventArgs e)
     {
         if (_rootsGrid.CurrentRow?.Tag is not ScanRoot root)
         {
@@ -490,7 +504,7 @@ public sealed partial class SettingsForm : Form
         }
     }
 
-    private async void RemoveRootButton_Click(object? sender, EventArgs e)
+    private async void RemoveRootMenuItem_Click(object? sender, EventArgs e)
     {
         if (_rootsGrid.CurrentRow?.Tag is not ScanRoot root ||
             MessageBox.Show(
@@ -514,14 +528,6 @@ public sealed partial class SettingsForm : Form
         {
             ShowError("无法移除扫描目录", exception);
         }
-    }
-
-    private void UpdateRootCommands()
-    {
-        var root = _rootsGrid.CurrentRow?.Tag as ScanRoot;
-        _toggleRootButton.Enabled = root is not null;
-        _removeRootButton.Enabled = root is not null;
-        _toggleRootButton.Text = root?.Enabled == true ? "停用" : "启用";
     }
 
     private void UpdateStartScanButton()
