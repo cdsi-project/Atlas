@@ -259,6 +259,49 @@ public sealed class ConfigurationFormLayoutTests
             form.CreateRequest().Provider);
     }
 
+    [Fact]
+    public void GitProfileDialog_SshMode_HidesPasswordRowsAndKeepsPublicKeyRow()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var profile = new CDSI.Agent.Core.Git.GitProfile(
+            Guid.NewGuid(),
+            "SSH 仓库",
+            CDSI.Agent.Core.Git.GitHostingProvider.GitHub,
+            "git@github.com:cdsi-project/Atlas.git",
+            "main",
+            CDSI.Agent.Core.Git.GitAuthenticationMethod.Ssh,
+            string.Empty,
+            @"C:\Users\creator\.ssh\id_ed25519.pub",
+            true,
+            now,
+            now);
+        using var form = new GitProfileDialog(profile);
+        form.CreateControl();
+
+        var layout = Descendants(form)
+            .OfType<TableLayoutPanel>()
+            .Single(panel => panel.ColumnCount == 3 && panel.RowCount == 11);
+        var usernameTextBox = Descendants(form)
+            .OfType<TextBox>()
+            .Single(control => control.AccessibleName == "用户名");
+        var passwordTextBox = Descendants(form)
+            .OfType<TextBox>()
+            .Single(control => control.AccessibleName == "Git 密码");
+        var publicKeyTextBox = Descendants(form)
+            .OfType<TextBox>()
+            .Single(control => control.AccessibleName == "SSH 公钥文件");
+        var generateButton = Descendants(form)
+            .OfType<Button>()
+            .Single(control => control.Text == "生成新密钥");
+
+        Assert.Equal(0, layout.RowStyles[5].Height);
+        Assert.Equal(0, layout.RowStyles[6].Height);
+        Assert.False(usernameTextBox.Enabled);
+        Assert.False(passwordTextBox.Enabled);
+        Assert.True(publicKeyTextBox.Enabled);
+        Assert.True(generateButton.Enabled);
+    }
+
     [Theory]
     [InlineData(
         CDSI.Agent.Core.Git.GitHostingProvider.GitHub,
@@ -302,17 +345,63 @@ public sealed class ConfigurationFormLayoutTests
     }
 
     [Fact]
-    public void SshKeyGenerationCommand_IsInteractiveAndDoesNotChooseAFile()
+    public void SshKeyGenerationCommand_UsesANewExplicitFile()
     {
-        var startInfo = SshKeySupport.CreateSshKeyGenerationStartInfo(
-            "creator@example.com");
+        var sshDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"cdsi-ssh-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(sshDirectory);
+        try
+        {
+            File.WriteAllText(Path.Combine(sshDirectory, "id_ed25519_atlas"), "private");
+            File.WriteAllText(Path.Combine(sshDirectory, "id_ed25519_atlas.pub"), "public");
+            var pair = SshKeySupport.CreateUnusedKeyPairPaths(sshDirectory);
+            var startInfo = SshKeySupport.CreateSshKeyGenerationStartInfo(
+                "creator@example.com",
+                pair.PrivateKeyPath);
 
-        Assert.Equal("ssh-keygen.exe", startInfo.FileName);
-        Assert.True(startInfo.UseShellExecute);
-        Assert.Equal(
-            ["-t", "ed25519", "-C", "creator@example.com"],
-            startInfo.ArgumentList.ToArray());
-        Assert.DoesNotContain("-f", startInfo.ArgumentList);
+            Assert.EndsWith(
+                "id_ed25519_atlas_2",
+                pair.PrivateKeyPath,
+                StringComparison.Ordinal);
+            Assert.Equal("ssh-keygen.exe", startInfo.FileName);
+            Assert.True(startInfo.UseShellExecute);
+            Assert.Equal(
+                [
+                    "-t", "ed25519", "-C", "creator@example.com",
+                    "-f", pair.PrivateKeyPath
+                ],
+                startInfo.ArgumentList.ToArray());
+        }
+        finally
+        {
+            Directory.Delete(sshDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void SshKeyGenerationCommand_RejectsAnExistingTarget()
+    {
+        var sshDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"cdsi-ssh-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(sshDirectory);
+        try
+        {
+            var privateKeyPath = Path.Combine(sshDirectory, "existing_key");
+            File.WriteAllText(privateKeyPath + ".pub", "public");
+
+            var exception = Assert.Throws<IOException>(() =>
+                SshKeySupport.CreateSshKeyGenerationStartInfo(
+                    "creator@example.com",
+                    privateKeyPath));
+
+            Assert.Contains("不能覆盖", exception.Message);
+        }
+        finally
+        {
+            Directory.Delete(sshDirectory, recursive: true);
+        }
     }
 
     private static IEnumerable<Control> Descendants(Control parent)

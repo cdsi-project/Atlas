@@ -144,7 +144,7 @@ CDSI Atlas 采用本地优先、默认非破坏性的处理方式，但不能替
 - OSS AccessKey Secret、WordPress 应用程序密码和 Git 密码保存在当前 Windows 用户的凭据管理器中，不写入 <code>cdsi.db</code>；凭据按配置隔离保存，编辑配置时不会读取并回显已有密码。
 - SQLite 会保存连接所需的非密码信息，例如 AccessKey ID、Endpoint、Bucket、各 WordPress 源站域名和用户名，以及 Git 平台、仓库地址、访问方式、用户名、默认分支和 SSH 公钥路径。AccessKey ID 和仓库地址不是 Secret，但仍不建议公开。
 - 当前应用没有独立的主密码，也没有对 SQLite 数据库进行应用层加密；本机数据的访问控制依赖 Windows 账户权限。建议为 Windows 账户设置强密码，并对设备启用 BitLocker 或等效的磁盘加密。
-- SSH 私钥始终由系统 OpenSSH 和用户管理，Atlas 只检查对应私钥是否存在并保存公钥路径，不读取、复制或上传私钥。生成密钥时应设置口令，并将公钥添加到所选 GitHub 或 Gitee 账号。
+- SSH 私钥始终由系统 OpenSSH 和用户管理，Atlas 只检查对应私钥是否存在并保存公钥路径，不读取、复制或上传私钥。“生成新密钥”会在 <code>.ssh</code> 中选择未占用的 Atlas 专用文件名，不覆盖已有密钥；生成时应设置口令，并将公钥添加到所选 GitHub 或 Gitee 账号。
 - WordPress 发布固定使用 HTTPS。OSS 配置允许选择 HTTP 或 HTTPS；为避免凭据和文件在传输中暴露，应始终启用 HTTPS。
 - 建议为 OSS 使用权限最小化、可轮换的专用凭据。备份至少需要目标对象的写入和读取元数据权限，取回需要 <code>oss:GetObject</code>；为 WordPress 使用应用程序密码而不是账户主密码。凭据泄露后应立即在服务端撤销并重新生成。
 

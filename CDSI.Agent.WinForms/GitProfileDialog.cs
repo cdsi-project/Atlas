@@ -6,6 +6,10 @@ namespace CDSI.Agent.WinForms;
 
 public sealed class GitProfileDialog : Form
 {
+    private const int UsernameRowIndex = 5;
+    private const int PasswordRowIndex = 6;
+    private const int FieldRowHeight = 46;
+
     internal static readonly IReadOnlyList<GitProviderOption> ProviderOptions =
     [
         new(GitHostingProvider.GitHub, "GitHub"),
@@ -35,6 +39,7 @@ public sealed class GitProfileDialog : Form
     private readonly Button _selectSshKeyButton = new();
     private readonly Button _generateSshKeyButton = new();
     private readonly CheckBox _isDefaultCheckBox = new();
+    private readonly TableLayoutPanel _layout = new();
 
     public GitProfileDialog(GitProfile? profile = null)
     {
@@ -50,33 +55,30 @@ public sealed class GitProfileDialog : Form
         Font = new Font("Segoe UI", 9F);
         AutoScaleMode = AutoScaleMode.Dpi;
 
-        var layout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 3,
-            RowCount = 11,
-            Padding = new Padding(24),
-            BackColor = Color.White
-        };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
+        _layout.Dock = DockStyle.Fill;
+        _layout.ColumnCount = 3;
+        _layout.RowCount = 11;
+        _layout.Padding = new Padding(24);
+        _layout.BackColor = Color.White;
+        _layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
+        _layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        _layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
         for (var row = 0; row < 9; row++)
         {
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+            _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, FieldRowHeight));
         }
 
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+        _layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
 
-        AddTextField(layout, 0, "配置名称", _displayNameTextBox);
-        AddProviderField(layout, 1);
-        AddTextField(layout, 2, "仓库地址", _repositoryUrlTextBox);
-        AddTextField(layout, 3, "默认分支", _defaultBranchTextBox);
-        AddAuthenticationField(layout, 4);
-        AddTextField(layout, 5, _usernameLabel, _usernameTextBox);
-        AddTextField(layout, 6, _passwordLabel, _passwordTextBox);
-        AddSshKeyField(layout, 7);
+        AddTextField(_layout, 0, "配置名称", _displayNameTextBox);
+        AddProviderField(_layout, 1);
+        AddTextField(_layout, 2, "仓库地址", _repositoryUrlTextBox);
+        AddTextField(_layout, 3, "默认分支", _defaultBranchTextBox);
+        AddAuthenticationField(_layout, 4);
+        AddTextField(_layout, UsernameRowIndex, _usernameLabel, _usernameTextBox);
+        AddTextField(_layout, PasswordRowIndex, _passwordLabel, _passwordTextBox);
+        AddSshKeyField(_layout, 7);
 
         _passwordTextBox.UseSystemPasswordChar = true;
         _passwordTextBox.AccessibleName = "Git 密码";
@@ -91,8 +93,8 @@ public sealed class GitProfileDialog : Form
         _isDefaultCheckBox.Dock = DockStyle.Fill;
         _isDefaultCheckBox.Margin = new Padding(0, 8, 0, 8);
         _isDefaultCheckBox.AccessibleName = "设为默认 Git 配置";
-        layout.Controls.Add(_isDefaultCheckBox, 1, 8);
-        layout.SetColumnSpan(_isDefaultCheckBox, 2);
+        _layout.Controls.Add(_isDefaultCheckBox, 1, 8);
+        _layout.SetColumnSpan(_isDefaultCheckBox, 2);
 
         var securityNote = new Label
         {
@@ -102,8 +104,8 @@ public sealed class GitProfileDialog : Form
             TextAlign = ContentAlignment.TopLeft,
             Padding = new Padding(0, 8, 0, 0)
         };
-        layout.Controls.Add(securityNote, 0, 9);
-        layout.SetColumnSpan(securityNote, 3);
+        _layout.Controls.Add(securityNote, 0, 9);
+        _layout.SetColumnSpan(securityNote, 3);
 
         var buttons = new FlowLayoutPanel
         {
@@ -122,12 +124,12 @@ public sealed class GitProfileDialog : Form
         cancelButton.Size = new Size(88, 32);
         buttons.Controls.Add(saveButton);
         buttons.Controls.Add(cancelButton);
-        layout.Controls.Add(buttons, 0, 10);
-        layout.SetColumnSpan(buttons, 3);
+        _layout.Controls.Add(buttons, 0, 10);
+        _layout.SetColumnSpan(buttons, 3);
 
         AcceptButton = saveButton;
         CancelButton = cancelButton;
-        Controls.Add(layout);
+        Controls.Add(_layout);
 
         InitializeSelections(profile);
         if (profile is not null)
@@ -267,8 +269,8 @@ public sealed class GitProfileDialog : Form
             Margin = Padding.Empty,
             Padding = new Padding(0, 7, 0, 7)
         };
-        ConfigureInlineButton(_selectSshKeyButton, "选择公钥", 82);
-        ConfigureInlineButton(_generateSshKeyButton, "生成密钥", 82);
+        ConfigureInlineButton(_selectSshKeyButton, "选择公钥", 76);
+        ConfigureInlineButton(_generateSshKeyButton, "生成新密钥", 92);
         _selectSshKeyButton.Click += (_, _) => SelectSshPublicKey();
         _generateSshKeyButton.Click += async (_, _) =>
             await GenerateSshKeyAsync(confirm: true);
@@ -357,6 +359,16 @@ public sealed class GitProfileDialog : Form
         _usernameTextBox.Enabled = passwordEnabled;
         _passwordLabel.Enabled = passwordEnabled;
         _passwordTextBox.Enabled = passwordEnabled;
+        _usernameLabel.Visible = passwordEnabled;
+        _usernameTextBox.Visible = passwordEnabled;
+        _passwordLabel.Visible = passwordEnabled;
+        _passwordTextBox.Visible = passwordEnabled;
+        _layout.RowStyles[UsernameRowIndex].Height = passwordEnabled
+            ? FieldRowHeight
+            : 0;
+        _layout.RowStyles[PasswordRowIndex].Height = passwordEnabled
+            ? FieldRowHeight
+            : 0;
         _sshPublicKeyLabel.Enabled = !passwordEnabled;
         _sshPublicKeyTextBox.Enabled = !passwordEnabled;
         _selectSshKeyButton.Enabled = !passwordEnabled;
@@ -404,11 +416,13 @@ public sealed class GitProfileDialog : Form
 
     private async Task GenerateSshKeyAsync(bool confirm)
     {
+        var sshDirectory = SshKeySupport.GetDefaultSshDirectory();
+        var keyPair = SshKeySupport.CreateUnusedKeyPairPaths(sshDirectory);
         if (confirm &&
             MessageBox.Show(
                 this,
-                "Atlas 将打开系统 ssh-keygen。请由您确认密钥保存位置并设置口令；Atlas 不会读取或保存私钥。是否继续？",
-                "生成 SSH 密钥",
+                $"Atlas 将打开系统 ssh-keygen，并在以下未占用位置生成新密钥：{Environment.NewLine}{keyPair.PrivateKeyPath}{Environment.NewLine}{Environment.NewLine}请由您设置密钥口令。Atlas 不会覆盖、读取或保存已有私钥。是否继续？",
+                "生成新 SSH 密钥",
                 MessageBoxButtons.OKCancel,
                 MessageBoxIcon.Information) != DialogResult.OK)
         {
@@ -417,9 +431,11 @@ public sealed class GitProfileDialog : Form
 
         try
         {
+            Directory.CreateDirectory(sshDirectory);
             using var process = Process.Start(
                 SshKeySupport.CreateSshKeyGenerationStartInfo(
-                    _usernameTextBox.Text));
+                    _usernameTextBox.Text,
+                    keyPair.PrivateKeyPath));
             if (process is null)
             {
                 throw new InvalidOperationException("无法启动 ssh-keygen。");
@@ -429,7 +445,16 @@ public sealed class GitProfileDialog : Form
             await process.WaitForExitAsync();
             Enabled = true;
             Activate();
-            RefreshDefaultSshKey();
+            if (process.ExitCode == 0 &&
+                IsUsablePublicKeyPath(keyPair.PublicKeyPath))
+            {
+                _sshPublicKeyTextBox.Text = keyPair.PublicKeyPath;
+                _sshPublicKeyTextBox.PlaceholderText = string.Empty;
+            }
+            else
+            {
+                RefreshDefaultSshKey();
+            }
             if (!IsUsablePublicKeyPath(_sshPublicKeyTextBox.Text))
             {
                 MessageBox.Show(
@@ -446,7 +471,7 @@ public sealed class GitProfileDialog : Form
             MessageBox.Show(
                 this,
                 $"无法打开 ssh-keygen：{exception.Message}{Environment.NewLine}{Environment.NewLine}请确认已安装 Windows OpenSSH 客户端。",
-                "生成 SSH 密钥失败",
+                "生成新 SSH 密钥失败",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
         }

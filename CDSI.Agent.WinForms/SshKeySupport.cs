@@ -33,7 +33,39 @@ internal static class SshKeySupport
             }
         }
 
+        if (!Directory.Exists(directory))
+        {
+            return null;
+        }
+
+        foreach (var publicKeyPath in Directory.EnumerateFiles(directory, "*.pub")
+                     .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
+        {
+            var privateKeyPath = publicKeyPath[..^4];
+            if (File.Exists(privateKeyPath))
+            {
+                return new SshKeyPairPaths(publicKeyPath, privateKeyPath);
+            }
+        }
+
         return null;
+    }
+
+    internal static SshKeyPairPaths CreateUnusedKeyPairPaths(string sshDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sshDirectory);
+        var directory = Path.GetFullPath(sshDirectory);
+        const string baseName = "id_ed25519_atlas";
+        for (var suffix = 1; ; suffix++)
+        {
+            var keyName = suffix == 1 ? baseName : $"{baseName}_{suffix}";
+            var privateKeyPath = Path.Combine(directory, keyName);
+            var publicKeyPath = privateKeyPath + ".pub";
+            if (!File.Exists(privateKeyPath) && !File.Exists(publicKeyPath))
+            {
+                return new SshKeyPairPaths(publicKeyPath, privateKeyPath);
+            }
+        }
     }
 
     internal static ProcessStartInfo CreateOpenWebsiteStartInfo(
@@ -52,8 +84,17 @@ internal static class SshKeySupport
     }
 
     internal static ProcessStartInfo CreateSshKeyGenerationStartInfo(
-        string comment)
+        string comment,
+        string privateKeyPath)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(privateKeyPath);
+        var normalizedPrivateKeyPath = Path.GetFullPath(privateKeyPath);
+        if (File.Exists(normalizedPrivateKeyPath) ||
+            File.Exists(normalizedPrivateKeyPath + ".pub"))
+        {
+            throw new IOException("SSH 密钥目标文件已存在，不能覆盖。请重新生成路径。");
+        }
+
         var normalizedComment = string.IsNullOrWhiteSpace(comment)
             ? $"{Environment.UserName}@{Environment.MachineName}"
             : comment.Trim();
@@ -68,6 +109,8 @@ internal static class SshKeySupport
         startInfo.ArgumentList.Add("ed25519");
         startInfo.ArgumentList.Add("-C");
         startInfo.ArgumentList.Add(normalizedComment);
+        startInfo.ArgumentList.Add("-f");
+        startInfo.ArgumentList.Add(normalizedPrivateKeyPath);
         return startInfo;
     }
 }
