@@ -103,7 +103,7 @@ public sealed partial class MainForm
         };
         taskCenterItem.Click += (_, _) => ShowTaskCenter();
         _toolsSettingsMenuItem.Text = "设置(&O)...";
-        _toolsSettingsMenuItem.ShortcutKeys = Keys.Control | Keys.Oemcomma;
+        ConfigureSettingsShortcutDisplay(_toolsSettingsMenuItem);
         _toolsSettingsMenuItem.Click += async (_, _) => await OpenSettingsAsync();
         toolsMenu.DropDownItems.AddRange(
             [
@@ -166,6 +166,14 @@ public sealed partial class MainForm
         ArgumentNullException.ThrowIfNull(menuItem);
         menuItem.ShortcutKeys = Keys.None;
         menuItem.ShortcutKeyDisplayString = "Esc";
+    }
+
+    internal static void ConfigureSettingsShortcutDisplay(
+        ToolStripMenuItem menuItem)
+    {
+        ArgumentNullException.ThrowIfNull(menuItem);
+        menuItem.ShortcutKeys = Keys.Control | Keys.Oemcomma;
+        menuItem.ShortcutKeyDisplayString = "Ctrl + ，";
     }
 
     private void ConfigureMainAssetMenu()

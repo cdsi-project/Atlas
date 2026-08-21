@@ -122,6 +122,17 @@ public sealed class MainFormLayoutTests
         Assert.Equal("Esc", menuItem.ShortcutKeyDisplayString);
     }
 
+    [Fact]
+    public void ConfigureSettingsShortcutDisplay_UsesAReadableCommaLabel()
+    {
+        using var menuItem = new ToolStripMenuItem();
+
+        MainForm.ConfigureSettingsShortcutDisplay(menuItem);
+
+        Assert.Equal(Keys.Control | Keys.Oemcomma, menuItem.ShortcutKeys);
+        Assert.Equal("Ctrl + ，", menuItem.ShortcutKeyDisplayString);
+    }
+
     [Theory]
     [InlineData((int)Keys.Escape, (int)MainForm.MainShortcutCommand.CancelCurrentTask)]
     [InlineData((int)(Keys.Control | Keys.F), (int)MainForm.MainShortcutCommand.FocusAssetFilter)]
