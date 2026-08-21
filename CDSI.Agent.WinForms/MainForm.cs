@@ -691,13 +691,6 @@ public sealed partial class MainForm : Form
             : string.Join("、", projectNames);
     }
 
-    internal static DataGridViewColumn CreateObjectStorageStatusColumn()
-    {
-        var column = CreateColumn("OSS", 82);
-        column.Name = "ObjectStorageStatus";
-        return column;
-    }
-
     internal static DataGridViewColumn CreateBackupStatusColumn()
     {
         var column = CreateColumn("备份状态", 120);
@@ -771,14 +764,10 @@ public sealed partial class MainForm : Form
             return;
         }
 
-        if ((string.Equals(
-                 columnName,
-                 "BackupStatus",
-                 StringComparison.Ordinal) ||
-             string.Equals(
-                 columnName,
-                 "ObjectStorageStatus",
-                 StringComparison.Ordinal)) &&
+        if (string.Equals(
+                columnName,
+                "BackupStatus",
+                StringComparison.Ordinal) &&
             e.Value is string backupStatus &&
             !string.Equals(backupStatus, "未备份", StringComparison.Ordinal))
         {

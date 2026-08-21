@@ -149,7 +149,7 @@ public sealed partial class MainForm
             DataGridViewAutoSizeColumnMode.Fill,
             48,
             minimumWidth: 200));
-        memberGrid.Columns.Add(CreateObjectStorageStatusColumn());
+        memberGrid.Columns.Add(CreateBackupStatusColumn());
 
         EnableFreeColumnResizing(projectGrid);
         EnableFreeColumnResizing(memberGrid);

@@ -409,7 +409,7 @@ public sealed class MainFormLayoutTests
                 .Cast<DataGridViewColumn>()
                 .Select(column => column.HeaderText));
         Assert.Equal(
-            ["资源ID", "文件", "类型", "大小", "加入时间", "位置", "OSS"],
+            ["资源ID", "文件", "类型", "大小", "加入时间", "位置", "备份状态"],
             memberGrid.Columns
                 .Cast<DataGridViewColumn>()
                 .Select(column => column.HeaderText));
@@ -419,6 +419,9 @@ public sealed class MainFormLayoutTests
                 .Cast<DataGridViewColumn>()
                 .Single(column => column.HeaderText == "资源ID")
                 .Name);
+        Assert.Equal(
+            "备份状态",
+            memberGrid.Columns["BackupStatus"]?.HeaderText);
         Assert.All(
             projectGrid.Columns.Cast<DataGridViewColumn>()
                 .Concat(memberGrid.Columns.Cast<DataGridViewColumn>()),
