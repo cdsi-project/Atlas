@@ -86,6 +86,23 @@ public sealed class ConfigurationFormLayoutTests
                 .Cast<DataGridViewColumn>()
                 .Select(column => column.HeaderText)
                 .ToArray());
+        Assert.Equal(
+            ["添加源站"],
+            Descendants(tabs.TabPages[3])
+                .OfType<Button>()
+                .Select(button => button.Text)
+                .ToArray());
+        var openWebContextMenu = Assert.IsType<ContextMenuStrip>(
+            openWebSourcesGrid.ContextMenuStrip);
+        Assert.Collection(
+            openWebContextMenu.Items.Cast<ToolStripItem>(),
+            item => Assert.Equal("编辑源站", item.Text),
+            item => Assert.Equal("打开源站", item.Text),
+            item => Assert.Equal("复制源站域名", item.Text),
+            item => Assert.IsType<ToolStripSeparator>(item),
+            item => Assert.Equal("设为默认", item.Text),
+            item => Assert.IsType<ToolStripSeparator>(item),
+            item => Assert.Equal("删除源站", item.Text));
         Assert.Equal(4, rootsGrid.Columns.Count);
         Assert.Equal(
             ["目录", "扫描策略", "状态", "最近扫描"],

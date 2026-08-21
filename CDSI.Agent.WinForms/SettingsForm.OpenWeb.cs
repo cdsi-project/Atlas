@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using CDSI.Agent.Application.OpenWeb;
 using CDSI.Agent.Core.OpenWeb;
 
@@ -7,9 +8,12 @@ public sealed partial class SettingsForm
 {
     private readonly OpenWebSettingsService _openWebSettingsService;
     private readonly DataGridView _openWebSourcesGrid = new();
-    private readonly Button _editOpenWebSourceButton = new();
-    private readonly Button _defaultOpenWebSourceButton = new();
-    private readonly Button _deleteOpenWebSourceButton = new();
+    private readonly ContextMenuStrip _openWebSourceContextMenu = new();
+    private readonly ToolStripMenuItem _editOpenWebSourceMenuItem = new();
+    private readonly ToolStripMenuItem _openOpenWebSourceMenuItem = new();
+    private readonly ToolStripMenuItem _copyOpenWebDomainMenuItem = new();
+    private readonly ToolStripMenuItem _defaultOpenWebSourceMenuItem = new();
+    private readonly ToolStripMenuItem _deleteOpenWebSourceMenuItem = new();
 
     private TabPage CreateOpenWebPage()
     {
@@ -28,22 +32,6 @@ public sealed partial class SettingsForm
         addButton.AccessibleName = "添加 OpenWeb 源站";
         addButton.Click += AddOpenWebSourceButton_Click;
 
-        _editOpenWebSourceButton.Text = "编辑";
-        _editOpenWebSourceButton.Size = new Size(88, 32);
-        _editOpenWebSourceButton.FlatStyle = FlatStyle.Flat;
-        _editOpenWebSourceButton.Click += EditOpenWebSourceButton_Click;
-
-        _defaultOpenWebSourceButton.Text = "设为默认";
-        _defaultOpenWebSourceButton.Size = new Size(88, 32);
-        _defaultOpenWebSourceButton.FlatStyle = FlatStyle.Flat;
-        _defaultOpenWebSourceButton.Click += DefaultOpenWebSourceButton_Click;
-
-        _deleteOpenWebSourceButton.Text = "删除";
-        _deleteOpenWebSourceButton.Size = new Size(88, 32);
-        _deleteOpenWebSourceButton.FlatStyle = FlatStyle.Flat;
-        _deleteOpenWebSourceButton.ForeColor = Color.FromArgb(137, 49, 49);
-        _deleteOpenWebSourceButton.Click += DeleteOpenWebSourceButton_Click;
-
         var commands = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
@@ -52,9 +40,6 @@ public sealed partial class SettingsForm
             Padding = new Padding(0, 4, 0, 8)
         };
         commands.Controls.Add(addButton);
-        commands.Controls.Add(_editOpenWebSourceButton);
-        commands.Controls.Add(_defaultOpenWebSourceButton);
-        commands.Controls.Add(_deleteOpenWebSourceButton);
 
         page.Controls.Add(_openWebSourcesGrid);
         page.Controls.Add(commands);
@@ -104,8 +89,46 @@ public sealed partial class SettingsForm
             HeaderText = "凭据",
             Width = 82
         });
-        _openWebSourcesGrid.SelectionChanged += (_, _) =>
-            UpdateOpenWebSourceCommands();
+        _editOpenWebSourceMenuItem.Text = "编辑源站";
+        _editOpenWebSourceMenuItem.Click += EditOpenWebSourceMenuItem_Click;
+        _openOpenWebSourceMenuItem.Text = "打开源站";
+        _openOpenWebSourceMenuItem.Click += (_, _) => OpenSelectedOpenWebSource();
+        _copyOpenWebDomainMenuItem.Text = "复制源站域名";
+        _copyOpenWebDomainMenuItem.Click += (_, _) => CopySelectedOpenWebDomain();
+        _defaultOpenWebSourceMenuItem.Text = "设为默认";
+        _defaultOpenWebSourceMenuItem.Click += DefaultOpenWebSourceMenuItem_Click;
+        _deleteOpenWebSourceMenuItem.Text = "删除源站";
+        _deleteOpenWebSourceMenuItem.ForeColor = Color.FromArgb(137, 49, 49);
+        _deleteOpenWebSourceMenuItem.Click += DeleteOpenWebSourceMenuItem_Click;
+        _openWebSourceContextMenu.Items.AddRange(
+        [
+            _editOpenWebSourceMenuItem,
+            _openOpenWebSourceMenuItem,
+            _copyOpenWebDomainMenuItem,
+            new ToolStripSeparator(),
+            _defaultOpenWebSourceMenuItem,
+            new ToolStripSeparator(),
+            _deleteOpenWebSourceMenuItem
+        ]);
+        _openWebSourceContextMenu.Opening += (_, args) =>
+        {
+            var source =
+                (_openWebSourcesGrid.CurrentRow?.Tag as ConfiguredOpenWebSource)?.Source;
+            args.Cancel = source is null;
+            _defaultOpenWebSourceMenuItem.Enabled = source is not null && !source.IsDefault;
+        };
+        _openWebSourcesGrid.ContextMenuStrip = _openWebSourceContextMenu;
+        _openWebSourcesGrid.CellMouseDown += (_, args) =>
+        {
+            if (args.Button == MouseButtons.Right &&
+                args.RowIndex >= 0 &&
+                args.ColumnIndex >= 0)
+            {
+                _openWebSourcesGrid.CurrentCell =
+                    _openWebSourcesGrid.Rows[args.RowIndex].Cells[args.ColumnIndex];
+            }
+        };
+        _openWebSourcesGrid.CellDoubleClick += OpenWebSourcesGrid_CellDoubleClick;
     }
 
     private async Task RefreshOpenWebAsync()
@@ -123,8 +146,6 @@ public sealed partial class SettingsForm
                 configured.HasApplicationPassword ? "已保存" : "缺失");
             _openWebSourcesGrid.Rows[index].Tag = configured;
         }
-
-        UpdateOpenWebSourceCommands();
     }
 
     private async void AddOpenWebSourceButton_Click(object? sender, EventArgs e)
@@ -132,7 +153,22 @@ public sealed partial class SettingsForm
         await ShowOpenWebSourceDialogAsync(null);
     }
 
-    private async void EditOpenWebSourceButton_Click(object? sender, EventArgs e)
+    private async void EditOpenWebSourceMenuItem_Click(object? sender, EventArgs e)
+    {
+        await EditSelectedOpenWebSourceAsync();
+    }
+
+    private async void OpenWebSourcesGrid_CellDoubleClick(
+        object? sender,
+        DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex >= 0)
+        {
+            await EditSelectedOpenWebSourceAsync();
+        }
+    }
+
+    private async Task EditSelectedOpenWebSourceAsync()
     {
         if (_openWebSourcesGrid.CurrentRow?.Tag is ConfiguredOpenWebSource configured)
         {
@@ -159,7 +195,45 @@ public sealed partial class SettingsForm
         }
     }
 
-    private async void DefaultOpenWebSourceButton_Click(object? sender, EventArgs e)
+    private void OpenSelectedOpenWebSource()
+    {
+        if (_openWebSourcesGrid.CurrentRow?.Tag is not ConfiguredOpenWebSource configured)
+        {
+            return;
+        }
+
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = $"https://{configured.Source.OriginDomain}",
+                UseShellExecute = true
+            });
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法打开 OpenWeb 源站", exception);
+        }
+    }
+
+    private void CopySelectedOpenWebDomain()
+    {
+        if (_openWebSourcesGrid.CurrentRow?.Tag is not ConfiguredOpenWebSource configured)
+        {
+            return;
+        }
+
+        try
+        {
+            Clipboard.SetText(configured.Source.OriginDomain);
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法复制 OpenWeb 源站域名", exception);
+        }
+    }
+
+    private async void DefaultOpenWebSourceMenuItem_Click(object? sender, EventArgs e)
     {
         if (_openWebSourcesGrid.CurrentRow?.Tag is not ConfiguredOpenWebSource configured ||
             configured.Source.IsDefault)
@@ -178,7 +252,7 @@ public sealed partial class SettingsForm
         }
     }
 
-    private async void DeleteOpenWebSourceButton_Click(object? sender, EventArgs e)
+    private async void DeleteOpenWebSourceMenuItem_Click(object? sender, EventArgs e)
     {
         if (_openWebSourcesGrid.CurrentRow?.Tag is not ConfiguredOpenWebSource configured ||
             MessageBox.Show(
@@ -200,13 +274,5 @@ public sealed partial class SettingsForm
         {
             ShowError("无法删除 OpenWeb 源站", exception);
         }
-    }
-
-    private void UpdateOpenWebSourceCommands()
-    {
-        var source = (_openWebSourcesGrid.CurrentRow?.Tag as ConfiguredOpenWebSource)?.Source;
-        _editOpenWebSourceButton.Enabled = source is not null;
-        _defaultOpenWebSourceButton.Enabled = source is not null && !source.IsDefault;
-        _deleteOpenWebSourceButton.Enabled = source is not null;
     }
 }
