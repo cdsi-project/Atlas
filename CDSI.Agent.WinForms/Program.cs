@@ -12,6 +12,7 @@ using CDSI.Agent.Core.Abstractions;
 using CDSI.Agent.Core.Storage;
 using CDSI.Agent.Infrastructure.FileSystem;
 using CDSI.Agent.Infrastructure.Fingerprints;
+using CDSI.Agent.Infrastructure.Identity;
 using CDSI.Agent.Infrastructure.Metadata;
 using CDSI.Agent.Infrastructure.OpenWeb;
 using CDSI.Agent.Infrastructure.Persistence;
@@ -44,6 +45,9 @@ static class Program
 
             ApplicationConfiguration.Initialize();
             runtimeLog = new RuntimeLogService(dataDirectory);
+
+            var clientIdentity = new FileClientIdentityProvider(dataDirectory)
+                .GetOrCreate();
 
             var databasePath = Path.Combine(dataDirectory, "cdsi.db");
             var repository = new SqliteAssetRepository(databasePath);
@@ -134,6 +138,7 @@ static class Program
                 assetTagService,
                 transferService,
                 localDatabaseBackupService,
+                clientIdentity.Value,
                 dataDirectory,
                 runtimeLog);
             mainForm.Shown += (_, _) => singleInstance.StartListening(

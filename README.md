@@ -1,10 +1,14 @@
 # CDSI Beacon
 
+<p align="center">
+  <img src="logo.png" alt="CDSI Beacon" width="280">
+</p>
+
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
 CDSI Beacon 是 CDSI 的本地资产发现与索引应用。它在创作者自己的 Windows 设备上扫描所选目录，建立独立于文件路径的资产与位置记录。扫描和分析不会修改源文件；复制、移动、云端备份、取回或删除备份只会在用户明确选择并确认后执行。
 
-当前发布版本为 **v0.200**，源码以根目录 `VERSION` 为唯一版本来源。仓库已经形成可运行的 Windows 桌面闭环：受管工作目录、多扫描目录、项目化资产管理、阿里云 OSS / 腾讯云 COS / 七牛云 Kodo 多目标备份与校验、云端取回、重复文件检测、基础媒体元数据、OpenWeb 文章发布、本地数据库冗余和运行日志。
+当前版本为 **v0.201**，源码以根目录 `VERSION` 为唯一版本来源。仓库已经形成可运行的 Windows 桌面闭环：受管工作目录、多扫描目录、项目化资产管理、阿里云 OSS / 腾讯云 COS / 七牛云 Kodo 多目标备份与校验、云端取回、重复文件检测、基础媒体元数据、OpenWeb 文章发布、本地数据库冗余和运行日志。
 
 ## 当前能力
 
@@ -99,6 +103,7 @@ CDSI Beacon 是 CDSI 的本地资产发现与索引应用。它在创作者自�
 - 只有完整且无遍历错误的扫描才更新缺失状态，避免权限或临时 IO 故障造成误报
 - 在 WinForms 中显示扫描进度、错误计数和资产列表
 - 应用采用单实例运行；重复启动只会恢复并激活已有窗口，不会重复初始化数据库或启动扫描任务
+- 首次启动为当前 Windows 用户下的 Beacon 安装实例生成 UUID 格式的全局唯一客户端 ID，独立保存于本机数据目录，不随 SQLite 数据库、工作目录或数据库快照迁移；“关于”面板可查看和复制该 ID
 - 在 Windows 标题栏和应用页眉显示当前构建版本
 - 哈希阶段显示文件数、读取字节数与吞吐率
 - 支持取消扫描或哈希；已完成哈希会保留，下次从未完成文件继续
@@ -311,7 +316,7 @@ dotnet run --project CDSI.Agent.WinForms/CDSI.Agent.WinForms.csproj
 
 仓库根目录的 <code>VERSION</code> 是唯一版本来源。构建时，所有程序集和桌面界面都会读取该文件。
 
-每次代码版本提交将版本递增 <code>0.001</code>，并创建同名 Git 标签，例如 <code>VERSION=0.200</code> 对应 <code>v0.200</code>。纯文档修订不单独递增应用版本，也不生成新的二进制发布物。
+每次代码版本提交将版本递增 <code>0.001</code>，并创建同名 Git 标签，例如 <code>VERSION=0.201</code> 对应 <code>v0.201</code>。纯文档修订不单独递增应用版本，也不生成新的二进制发布物。
 
 ## 开源许可
 
@@ -326,6 +331,14 @@ CDSI Beacon 由 CDSI Project 以 [Apache License 2.0](LICENSE) 发布。该协�
 ~~~text
 %LOCALAPPDATA%\CDSI\cdsi.db
 ~~~
+
+客户端安装身份写入：
+
+~~~text
+%LOCALAPPDATA%\CDSI\client-identity.json
+~~~
+
+客户端 ID 使用随机 UUID 创建，不读取硬件序列号，也不是密码、令牌或授权凭据。身份文件与 SQLite 分离，因此从数据库备份恢复到另一台客户端时不会覆盖新客户端身份。未来接入 CDSI Server 激活时，服务端仍必须对客户端 ID 建立唯一约束，并在检测到克隆身份或极小概率碰撞时重新签发。
 
 数据库一致性快照写入：
 

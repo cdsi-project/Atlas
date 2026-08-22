@@ -35,6 +35,7 @@ public sealed partial class MainForm : Form
     private readonly FingerprintApplicationService _fingerprintService;
     private readonly MetadataExtractionApplicationService _metadataService;
     private readonly LocalDatabaseBackupService _localDatabaseBackupService;
+    private readonly string _clientId;
     private readonly System.Windows.Forms.Timer _databaseBackupTimer = new();
     private readonly TableLayoutPanel _progressPanel = new();
     private readonly RowStyle _progressPanelRowStyle = new(SizeType.Absolute, 0);
@@ -76,6 +77,7 @@ public sealed partial class MainForm : Form
         AssetTagService assetTagService,
         ManagedAssetTransferService transferService,
         LocalDatabaseBackupService localDatabaseBackupService,
+        string clientId,
         string dataDirectory,
         RuntimeLogService runtimeLog)
     {
@@ -97,6 +99,9 @@ public sealed partial class MainForm : Form
         _assetTagService = assetTagService;
         _transferService = transferService;
         _localDatabaseBackupService = localDatabaseBackupService;
+        _clientId = string.IsNullOrWhiteSpace(clientId)
+            ? throw new ArgumentException("Client ID is required.", nameof(clientId))
+            : clientId;
         _runtimeLog = runtimeLog ?? throw new ArgumentNullException(nameof(runtimeLog));
         InitializeLayout(_dataDirectory);
 

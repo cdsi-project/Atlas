@@ -403,7 +403,7 @@ public sealed partial class MainForm
 
     private void ShowAboutDialog()
     {
-        using var dialog = new AboutForm(GetApplicationVersion());
+        using var dialog = new AboutForm(GetApplicationVersion(), _clientId);
         dialog.ShowDialog(this);
     }
 
