@@ -14,6 +14,8 @@ public sealed partial class MainForm
     private readonly ToolStripMenuItem _refreshAssetsMenuItem = new();
     private readonly ToolStripMenuItem _createProjectMenuItem = new();
     private readonly ToolStripMenuItem _fileSettingsMenuItem = new();
+    private readonly ToolStripMenuItem _backupDatabaseMenuItem = new();
+    private readonly ToolStripMenuItem _openDatabaseBackupDirectoryMenuItem = new();
     private readonly ToolStripMenuItem _settingsMenuItem = new();
     private readonly ToolStripMenuItem _mainAssetMenuItem = new();
 
@@ -35,6 +37,12 @@ public sealed partial class MainForm
         openDataDirectoryItem.Click += (_, _) => OpenDirectoryPath(
             _dataDirectory,
             "无法打开数据目录");
+        _backupDatabaseMenuItem.Text = "立即备份数据库(&B)";
+        _backupDatabaseMenuItem.Click += async (_, _) =>
+            await CreateDatabaseBackupManuallyAsync();
+        _openDatabaseBackupDirectoryMenuItem.Text = "打开数据库备份目录";
+        _openDatabaseBackupDirectoryMenuItem.Click += async (_, _) =>
+            await OpenDatabaseBackupDirectoryAsync();
         var exitItem = new ToolStripMenuItem("退出(&X)");
         exitItem.Click += (_, _) => Close();
         fileMenu.DropDownItems.AddRange(
@@ -45,8 +53,12 @@ public sealed partial class MainForm
                 _fileSettingsMenuItem,
                 openDataDirectoryItem,
                 new ToolStripSeparator(),
+                _backupDatabaseMenuItem,
+                _openDatabaseBackupDirectoryMenuItem,
+                new ToolStripSeparator(),
                 exitItem
             ]);
+        fileMenu.DropDownOpening += (_, _) => UpdateMainMenuState();
 
         var scanMenu = new ToolStripMenuItem("扫描(&S)");
         _startStandardScanMenuItem.Text = "常规扫描(&S)";
@@ -82,7 +94,8 @@ public sealed partial class MainForm
                 CreateTabMenuItem("资产目录", _assetDirectoriesTabPage, Keys.Control | Keys.D2),
                 CreateTabMenuItem("重复文件", _duplicatesTabPage, Keys.Control | Keys.D3),
                 CreateTabMenuItem("项目管理", _collectionsTabPage, Keys.Control | Keys.D4),
-                CreateTabMenuItem("统计", _statisticsTabPage, Keys.Control | Keys.D5),
+                CreateTabMenuItem("云备份管理", _cloudBackupsTabPage, Keys.Control | Keys.D5),
+                CreateTabMenuItem("统计", _statisticsTabPage, Keys.Control | Keys.D6),
                 new ToolStripSeparator(),
                 CreateMenuItem("重置资产列表列宽", (_, _) =>
                     ResetGridColumnWidths(_assetGrid))
@@ -432,6 +445,8 @@ public sealed partial class MainForm
         _refreshAssetsMenuItem.Enabled = !_isBusy;
         _createProjectMenuItem.Enabled = !_isBusy;
         _fileSettingsMenuItem.Enabled = !_isBusy;
+        _backupDatabaseMenuItem.Enabled = !_isBusy && !_databaseBackupInProgress;
+        _openDatabaseBackupDirectoryMenuItem.Enabled = !_databaseBackupInProgress;
         _settingsMenuItem.Enabled = !_isBusy;
         _mainAssetMenuItem.Enabled = !_isBusy;
     }

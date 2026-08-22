@@ -1,11 +1,13 @@
-# CDSI Agent — Windows MVP Technical Design
+# CDSI Beacon — Historical Windows MVP Technical Design
 
 > Project: `cdsi-agent`
 > Platform: Windows First
 > UI: WinForms
 > Language: C# / .NET
 > Local Database: SQLite
-> Status: Draft v0.1
+> Status: Historical draft v0.1; not the current product specification
+
+> **Current baseline (v0.200):** Beacon has progressed beyond the milestone checklists in this document. The running WinForms application now includes multi-root scanning, project management, verified backups to Aliyun OSS / Tencent COS / Qiniu Kodo, cloud restore and deletion, OpenWeb publishing, database snapshots, pagination, filtering, statistics, logs, and single-instance behavior. CDSI Server integration, AI classification, embeddings, background body-text extraction, and telemetry are still not implemented. Use the root [README](../README.md) and [AGENTS.md](../AGENTS.md) as the current source of truth; use the [project/cloud model](CDSI_BEACON_PROJECT_CLOUD_MODEL.md) for the next storage architecture.
 
 ---
 
@@ -204,7 +206,7 @@ Recommended main layout:
 
 ```text
 ┌────────────────────────────────────────────────────┐
-│ CDSI Agent                                         │
+│ CDSI Beacon                                        │
 ├───────────────┬────────────────────────────────────┤
 │ Overview      │                                    │
 │ Scan          │                                    │
@@ -536,7 +538,7 @@ NotifyIcon
 Menu:
 
 ```text
-Open CDSI Agent
+Open CDSI Beacon
 Scan Now
 Pause Agent
 Sync Assets
@@ -1418,7 +1420,7 @@ Features:
 
 Success condition:
 
-> User can select scattered directories and CDSI Agent can build a reliable asset index without moving any files.
+> User can select scattered directories and CDSI Beacon can build a reliable asset index without moving any files.
 
 ---
 
@@ -1556,7 +1558,7 @@ Avoid introducing large frameworks unless they materially reduce complexity.
 
 The Windows MVP is successful when:
 
-- [ ] user can install and run CDSI Agent
+- [ ] user can install and run CDSI Beacon
 - [ ] user can select multiple local directories
 - [ ] scanner can process large directory trees safely
 - [ ] indexed assets persist in SQLite
@@ -1597,7 +1599,7 @@ Before implementing any feature:
 
 The Windows application should follow this rule:
 
-> The creator should not need to organize files before CDSI Agent can understand them.
+> The creator should not need to organize files before CDSI Beacon can understand them.
 
 The Agent first:
 
@@ -1617,4 +1619,4 @@ Synchronizes
 Backs up
 ```
 
-CDSI Agent should understand the user's existing digital world before attempting to change it.
+CDSI Beacon should understand the user's existing digital world before attempting to change it.

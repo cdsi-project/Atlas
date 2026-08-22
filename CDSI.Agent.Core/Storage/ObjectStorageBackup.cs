@@ -137,6 +137,15 @@ public sealed record ObjectStorageTransferResult(
     ObjectStorageObjectInfo Object,
     bool Uploaded);
 
+public sealed record ObjectStorageCopyRequest(
+    ObjectStorageConnection Connection,
+    Guid AssetId,
+    string SourceObjectKey,
+    string DestinationObjectKey,
+    long Size,
+    string? Sha256,
+    string? SourceETag);
+
 public sealed record ObjectStorageLocation(
     Guid Id,
     Guid AssetId,

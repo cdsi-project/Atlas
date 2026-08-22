@@ -14,6 +14,7 @@ using CDSI.Agent.Core.Fingerprints;
 using CDSI.Agent.Core.Metadata;
 using CDSI.Agent.Core.Scanning;
 using CDSI.Agent.Core.Transfers;
+using CDSI.Agent.Infrastructure.Persistence;
 
 namespace CDSI.Agent.WinForms;
 
@@ -28,19 +29,18 @@ public sealed partial class MainForm : Form
     private readonly OpenWebArticlePublishingService _openWebPublishingService;
     private readonly ObjectStorageBackupService _objectStorageBackupService;
     private readonly ObjectStorageRestoreService _objectStorageRestoreService;
+    private readonly ObjectStorageManagementService _objectStorageManagementService;
     private readonly ManagedAssetTransferService _transferService;
     private readonly RuntimeLogService _runtimeLog;
     private readonly FingerprintApplicationService _fingerprintService;
     private readonly MetadataExtractionApplicationService _metadataService;
+    private readonly LocalDatabaseBackupService _localDatabaseBackupService;
+    private readonly System.Windows.Forms.Timer _databaseBackupTimer = new();
     private readonly TableLayoutPanel _progressPanel = new();
     private readonly RowStyle _progressPanelRowStyle = new(SizeType.Absolute, 0);
     private readonly ProgressBar _progressBar = new();
     private readonly Label _progressLabel = new();
     private readonly Label _currentPathLabel = new();
-    private readonly Label _fileCountValueLabel = new();
-    private readonly Label _totalSizeValueLabel = new();
-    private readonly Label _videoCountValueLabel = new();
-    private readonly Label _videoDurationValueLabel = new();
     private readonly Label _assetDetailTitleLabel = new();
     private readonly Label _assetDetailSummaryLabel = new();
     private readonly DataGridView _assetGrid = new();
@@ -71,9 +71,11 @@ public sealed partial class MainForm : Form
         OpenWebArticlePublishingService openWebPublishingService,
         ObjectStorageBackupService objectStorageBackupService,
         ObjectStorageRestoreService objectStorageRestoreService,
+        ObjectStorageManagementService objectStorageManagementService,
         AssetCollectionService assetCollectionService,
         AssetTagService assetTagService,
         ManagedAssetTransferService transferService,
+        LocalDatabaseBackupService localDatabaseBackupService,
         string dataDirectory,
         RuntimeLogService runtimeLog)
     {
@@ -90,18 +92,19 @@ public sealed partial class MainForm : Form
         _openWebPublishingService = openWebPublishingService;
         _objectStorageBackupService = objectStorageBackupService;
         _objectStorageRestoreService = objectStorageRestoreService;
+        _objectStorageManagementService = objectStorageManagementService;
         _assetCollectionService = assetCollectionService;
         _assetTagService = assetTagService;
         _transferService = transferService;
+        _localDatabaseBackupService = localDatabaseBackupService;
         _runtimeLog = runtimeLog ?? throw new ArgumentNullException(nameof(runtimeLog));
         InitializeLayout(_dataDirectory);
 
+        _databaseBackupTimer.Interval = (int)TimeSpan.FromHours(1).TotalMilliseconds;
+        _databaseBackupTimer.Tick += DatabaseBackupTimer_Tick;
+
         Shown += MainForm_Shown;
-        FormClosing += (_, _) =>
-        {
-            _scanCancellation?.Cancel();
-            StopLocalVolumeMonitoring();
-        };
+        FormClosing += MainForm_FormClosing;
     }
 
     private void InitializeLayout(string dataDirectory)
@@ -198,17 +201,12 @@ public sealed partial class MainForm : Form
         ConfigureDuplicateGrid();
         ConfigureAssetDirectoryTab();
         ConfigureAssetCollectionTab();
+        ConfigureCloudBackupManagementTab();
         ConfigureStatisticsTab();
         _assetGrid.SelectionChanged += AssetGrid_SelectionChanged;
 
         _assetsTabPage.Padding = new Padding(0);
         _assetsTabPage.BackColor = Color.White;
-        var statisticsPanel =
-            CreateStatisticsPanel(
-                _fileCountValueLabel,
-                _totalSizeValueLabel,
-                _videoCountValueLabel,
-                _videoDurationValueLabel);
         var detailsPanel =
             CreateAssetDetailsPanel(
                 _assetDetailTitleLabel,
@@ -217,8 +215,7 @@ public sealed partial class MainForm : Form
             ConfigureAssetFilterPanel(),
             _assetGrid,
             ConfigureAssetPagination(),
-            detailsPanel,
-            statisticsPanel);
+            detailsPanel);
         _assetsTabPage.Controls.Add(assetTabLayout);
         _duplicatesTabPage.Padding = new Padding(0);
         _duplicatesTabPage.BackColor = Color.White;
@@ -231,6 +228,7 @@ public sealed partial class MainForm : Form
                 _assetDirectoriesTabPage,
                 _duplicatesTabPage,
                 _collectionsTabPage,
+                _cloudBackupsTabPage,
                 _statisticsTabPage
             ]);
 
@@ -321,48 +319,17 @@ public sealed partial class MainForm : Form
         tabControl.Padding = new Point(12, 5);
     }
 
-    internal static TableLayoutPanel CreateStatisticsPanel(
-        Label fileCountValueLabel,
-        Label totalSizeValueLabel,
-        Label videoCountValueLabel,
-        Label videoDurationValueLabel)
-    {
-        var panel = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 4,
-            RowCount = 1,
-            GrowStyle = TableLayoutPanelGrowStyle.FixedSize,
-            Margin = Padding.Empty,
-            Padding = new Padding(8, 4, 8, 4),
-            BackColor = Color.White
-        };
-        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
-        for (var column = 0; column < panel.ColumnCount; column++)
-        {
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
-        }
-
-        panel.Controls.Add(CreateStatisticItem("文件总数", fileCountValueLabel), 0, 0);
-        panel.Controls.Add(CreateStatisticItem("占用空间", totalSizeValueLabel), 1, 0);
-        panel.Controls.Add(CreateStatisticItem("视频文件", videoCountValueLabel), 2, 0);
-        panel.Controls.Add(CreateStatisticItem("视频总时长", videoDurationValueLabel), 3, 0);
-        return panel;
-    }
-
     internal static TableLayoutPanel CreateAssetTabLayout(
         Control filterPanel,
         DataGridView assetGrid,
         Control paginationPanel,
-        Control detailsPanel,
-        Control statisticsPanel)
+        Control detailsPanel)
     {
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 5,
+            RowCount = 4,
             Margin = Padding.Empty,
             Padding = Padding.Empty
         };
@@ -370,13 +337,11 @@ public sealed partial class MainForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
         layout.Controls.Add(filterPanel, 0, 0);
         layout.Controls.Add(assetGrid, 0, 1);
         layout.Controls.Add(paginationPanel, 0, 2);
         layout.Controls.Add(detailsPanel, 0, 3);
-        layout.Controls.Add(statisticsPanel, 0, 4);
         return layout;
     }
 
@@ -391,32 +356,19 @@ public sealed partial class MainForm : Form
             RowCount = 2,
             GrowStyle = TableLayoutPanelGrowStyle.FixedSize,
             Margin = Padding.Empty,
-            Padding = new Padding(8, 6, 8, 8),
+            Padding = new Padding(8, 4, 8, 4),
             BackColor = Color.White
         };
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+        panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
         panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
-        panel.Controls.Add(CreateDetailHeader("资产详情"), 0, 0);
-
-        var summaryPanel = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 2,
-            Margin = Padding.Empty,
-            Padding = Padding.Empty
-        };
-        summaryPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        summaryPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-        summaryPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
         titleLabel.Dock = DockStyle.Fill;
         titleLabel.Margin = Padding.Empty;
         titleLabel.Text = "未选择资产";
         titleLabel.AutoEllipsis = true;
-        titleLabel.Font = new Font("Segoe UI Semibold", 10F);
+        titleLabel.TextAlign = ContentAlignment.MiddleLeft;
+        titleLabel.Font = new Font("Segoe UI Semibold", 9.5F);
         titleLabel.ForeColor = Color.FromArgb(31, 37, 43);
         titleLabel.AccessibleName = "资产标题";
 
@@ -424,68 +376,14 @@ public sealed partial class MainForm : Form
         summaryLabel.Margin = Padding.Empty;
         summaryLabel.Text = string.Empty;
         summaryLabel.AutoEllipsis = true;
+        summaryLabel.TextAlign = ContentAlignment.MiddleLeft;
         summaryLabel.ForeColor = Color.FromArgb(88, 98, 106);
         summaryLabel.AccessibleName = "资产摘要";
 
-
-        summaryPanel.Controls.Add(titleLabel, 0, 0);
-        summaryPanel.Controls.Add(summaryLabel, 0, 1);
-        panel.Controls.Add(summaryPanel, 0, 1);
+        panel.Controls.Add(titleLabel, 0, 0);
+        panel.Controls.Add(summaryLabel, 0, 1);
         return panel;
     }
-
-    private static Label CreateDetailHeader(string text)
-    {
-        return new Label
-        {
-            Dock = DockStyle.Fill,
-            Margin = Padding.Empty,
-            Text = text,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Font = new Font("Segoe UI Semibold", 8.5F),
-            ForeColor = Color.FromArgb(112, 121, 129)
-        };
-    }
-    private static TableLayoutPanel CreateStatisticItem(string title, Label valueLabel)
-    {
-        var item = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 2,
-            GrowStyle = TableLayoutPanelGrowStyle.FixedSize,
-            Margin = new Padding(4, 0, 4, 0),
-            Padding = new Padding(8, 1, 8, 1),
-            BackColor = Color.White
-        };
-        item.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        item.RowStyles.Add(new RowStyle(SizeType.Absolute, 18));
-        item.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
-        var titleLabel = new Label
-        {
-            Dock = DockStyle.Fill,
-            Margin = Padding.Empty,
-            Text = title,
-            TextAlign = ContentAlignment.MiddleLeft,
-            Font = new Font("Segoe UI", 8.5F),
-            ForeColor = Color.FromArgb(112, 121, 129)
-        };
-
-        valueLabel.Dock = DockStyle.Fill;
-        valueLabel.Margin = Padding.Empty;
-        valueLabel.Text = "0";
-        valueLabel.TextAlign = ContentAlignment.MiddleLeft;
-        valueLabel.AutoEllipsis = true;
-        valueLabel.Font = new Font("Segoe UI Semibold", 10.5F);
-        valueLabel.ForeColor = Color.FromArgb(31, 37, 43);
-        valueLabel.AccessibleName = title;
-
-        item.Controls.Add(titleLabel, 0, 0);
-        item.Controls.Add(valueLabel, 0, 1);
-        return item;
-    }
-
     private void ConfigureAssetGrid()
     {
         ConfigureGrid(_assetGrid);
@@ -797,8 +695,13 @@ public sealed partial class MainForm : Form
                     return;
                 }
 
-                await _workspaceService.ConfigureAsync(setupForm.SelectedPath);
+                var setupResult = await _workspaceService.ConfigureAsync(
+                    setupForm.SelectedPath);
+                workspace = setupResult.Workspace;
             }
+
+            await TryCreateAutomaticDatabaseBackupAsync(workspace.Path);
+            _databaseBackupTimer.Start();
 
             var volumeResult = await _volumeReconciliationService.ReconcileAsync();
             EnableLocalVolumeMonitoring();
@@ -828,6 +731,7 @@ public sealed partial class MainForm : Form
             _gitProfileService);
         var settingsResult = settingsForm.ShowDialog(this);
         await _volumeReconciliationService.ReconcileAsync();
+        await TryCreateAutomaticDatabaseBackupAsync();
         if (settingsResult == DialogResult.OK &&
             settingsForm.InitialScanRootIds.Count > 0)
         {
@@ -1106,11 +1010,6 @@ public sealed partial class MainForm : Form
             }
         }
 
-        _fileCountValueLabel.Text = statistics.AssetCount.ToString("N0");
-        _totalSizeValueLabel.Text = FormatFileSize(statistics.TotalSizeBytes);
-        _videoCountValueLabel.Text = statistics.VideoAssetCount.ToString("N0");
-        _videoDurationValueLabel.Text =
-            FormatTotalDuration(statistics.VideoDurationMilliseconds);
         UpdateStatisticsDashboard(statistics);
 
         UpdateAssetPaginationControls(assetCount);
@@ -1135,6 +1034,7 @@ public sealed partial class MainForm : Form
             ? $"全部资产 ({assetCount:N0})"
             : $"全部资产 ({assetCount:N0}/{totalAssetCount:N0})";
         await RefreshAssetCollectionsAsync();
+        await RefreshCloudBackupsAsync();
         _duplicatesTabPage.Text = $"重复文件 ({duplicateGroups.Count:N0})";
         var assetCountStatus = filter.IsEmpty
             ? $"资产位置 {assetCount:N0}"
@@ -1175,7 +1075,7 @@ public sealed partial class MainForm : Form
             ? $"备份：{backupStatus} · 时间 {FormatBackupTime(asset.LatestHealthyBackupAt)}"
             : "备份：未备份";
         return string.Join(
-            Environment.NewLine,
+            "  |  ",
             $"{asset.MimeType ?? "未知类型"} · {FormatFileSize(asset.Size)} · 修改 {asset.ModifiedAt.ToLocalTime():yyyy-MM-dd HH:mm} · 索引 {asset.DiscoveredAt.ToLocalTime():yyyy-MM-dd HH:mm}",
             tagSummary,
             backupSummary,
@@ -1194,8 +1094,14 @@ public sealed partial class MainForm : Form
         _collectionMemberGrid.Enabled = !busy;
         _createCollectionButton.Enabled = !busy;
         _assetDirectoryGrid.Enabled = !busy;
+        _cloudBackupProjectGrid.Enabled = !busy;
+        _cloudBackupGrid.Enabled = !busy;
+        _cloudBackupSearchTextBox.Enabled = !busy;
+        _searchCloudBackupsButton.Enabled = !busy;
+        _refreshCloudBackupsButton.Enabled = !busy;
         UpdateCollectionActionState();
         UpdateAssetDirectoryActionState();
+        UpdateCloudBackupActionState();
         UpdateAssetFilterControlState();
         UpdateMainMenuState();
         UseWaitCursor = busy && !allowCancel;

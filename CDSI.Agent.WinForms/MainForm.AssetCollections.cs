@@ -18,6 +18,8 @@ public sealed partial class MainForm
     private readonly ContextMenuStrip _projectContextMenu = new();
     private readonly ToolStripMenuItem _syncProjectContextMenuItem = new();
     private readonly ToolStripMenuItem _deleteProjectContextMenuItem = new();
+    private readonly ContextMenuStrip _collectionMemberContextMenu = new();
+    private readonly ToolStripMenuItem _removeCollectionMembersMenuItem = new();
     private IReadOnlyList<AssetCollectionSummary> _availableCollections = [];
     private bool _isBusy;
     private bool _refreshingCollections;
@@ -27,7 +29,6 @@ public sealed partial class MainForm
         ConfigureGrid(_collectionGrid);
         _collectionGrid.AccessibleName = "项目列表";
         ConfigureGrid(_collectionMemberGrid);
-        EnableAssetMultiSelection(_collectionMemberGrid);
         _collectionMemberGrid.AccessibleName = "项目内资产列表";
         ConfigureProjectManagementGridColumns(
             _collectionGrid,
@@ -47,6 +48,8 @@ public sealed partial class MainForm
         _createCollectionButton.Click += async (_, _) => await CreateCollectionAsync();
         _syncCollectionButton.Click += async (_, _) => await SyncSelectedCollectionAsync();
         _collectionGrid.SelectionChanged += CollectionGrid_SelectionChanged;
+        _collectionMemberGrid.SelectionChanged += (_, _) =>
+            UpdateCollectionActionState();
         ConfigureProjectContextMenu(
             _projectContextMenu,
             _syncProjectContextMenuItem,
@@ -58,10 +61,12 @@ public sealed partial class MainForm
         _deleteProjectContextMenuItem.ShortcutKeyDisplayString = "Delete";
         _projectContextMenu.Opening += (_, args) =>
         {
-            var hasProject = GetSelectedCollection() is not null;
-            args.Cancel = !hasProject;
-            _syncProjectContextMenuItem.Enabled = !_isBusy && hasProject;
-            _deleteProjectContextMenuItem.Enabled = !_isBusy && hasProject;
+            var selectedProjects = GetSelectedCollections();
+            args.Cancel = selectedProjects.Count == 0;
+            _syncProjectContextMenuItem.Enabled = !_isBusy &&
+                selectedProjects.Count == 1;
+            _deleteProjectContextMenuItem.Enabled = !_isBusy &&
+                selectedProjects.Count > 0;
         };
         _collectionGrid.ContextMenuStrip = _projectContextMenu;
         _collectionGrid.MouseDown += (_, args) =>
@@ -78,12 +83,48 @@ public sealed partial class MainForm
                     _collectionGrid,
                     hit.RowIndex,
                     hit.ColumnIndex,
-                    Keys.None);
+                    ModifierKeys);
             }
             else
             {
                 _collectionGrid.ClearSelection();
                 _collectionGrid.CurrentCell = null;
+            }
+        };
+
+        ConfigureCollectionMemberContextMenu(
+            _collectionMemberContextMenu,
+            _removeCollectionMembersMenuItem);
+        _removeCollectionMembersMenuItem.ForeColor = Color.FromArgb(137, 49, 49);
+        _removeCollectionMembersMenuItem.Click += async (_, _) =>
+            await RemoveSelectedCollectionMembersAsync();
+        _collectionMemberContextMenu.Opening += (_, args) =>
+        {
+            var hasMembers = GetSelectedCollectionMembers().Count > 0;
+            args.Cancel = !hasMembers || GetSelectedCollection() is null;
+            _removeCollectionMembersMenuItem.Enabled = !_isBusy && hasMembers;
+        };
+        _collectionMemberGrid.ContextMenuStrip = _collectionMemberContextMenu;
+        _collectionMemberGrid.MouseDown += (_, args) =>
+        {
+            if (args.Button != MouseButtons.Right)
+            {
+                return;
+            }
+
+            var hit = _collectionMemberGrid.HitTest(args.X, args.Y);
+            if (hit.RowIndex >= 0)
+            {
+                ApplyAssetGridRightClickSelection(
+                    _collectionMemberGrid,
+                    hit.RowIndex,
+                    hit.ColumnIndex,
+                    ModifierKeys);
+            }
+            else
+            {
+                _collectionMemberGrid.ClearSelection();
+                _collectionMemberGrid.CurrentCell = null;
             }
         };
 
@@ -111,6 +152,17 @@ public sealed partial class MainForm
         contextMenu.Items.Add(syncItem);
         contextMenu.Items.Add(new ToolStripSeparator());
         contextMenu.Items.Add(deleteItem);
+    }
+
+    internal static void ConfigureCollectionMemberContextMenu(
+        ContextMenuStrip contextMenu,
+        ToolStripMenuItem removeItem)
+    {
+        ArgumentNullException.ThrowIfNull(contextMenu);
+        ArgumentNullException.ThrowIfNull(removeItem);
+        removeItem.Text = "移出项目";
+        contextMenu.Items.Clear();
+        contextMenu.Items.Add(removeItem);
     }
 
     internal static void ConfigureProjectManagementGridColumns(
@@ -156,6 +208,8 @@ public sealed partial class MainForm
 
         EnableFreeColumnResizing(projectGrid);
         EnableFreeColumnResizing(memberGrid);
+        EnableAssetMultiSelection(projectGrid);
+        EnableAssetMultiSelection(memberGrid);
     }
 
     internal static Control CreateAssetCollectionLayout(
@@ -663,6 +717,57 @@ public sealed partial class MainForm
             : $"已将 {added:N0} 个资产加入项目";
     }
 
+    private async Task RemoveSelectedCollectionMembersAsync()
+    {
+        var project = GetSelectedCollection();
+        var members = GetSelectedCollectionMembers();
+        if (project is null || members.Count == 0)
+        {
+            return;
+        }
+
+        if (MessageBox.Show(
+                this,
+                CreateCollectionMemberRemovalConfirmation(
+                    project,
+                    members.Count),
+                "移出项目",
+                MessageBoxButtons.OKCancel,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2) != DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            var removed = await _assetCollectionService.RemoveAssetsAsync(
+                project.Id,
+                members.Select(member => member.Asset.AssetId).ToArray());
+            await RefreshAssetCollectionsAsync(project.Id);
+            await RefreshAssetPageAsync();
+            _statusLabel.Text =
+                $"已将 {removed:N0} 个资产移出项目“{project.Name}”；本地文件未更改";
+        }
+        catch (Exception exception)
+        {
+            ShowError("无法将资产移出项目", exception);
+        }
+    }
+
+    internal static string CreateCollectionMemberRemovalConfirmation(
+        AssetCollectionSummary project,
+        int memberCount)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(memberCount);
+        return
+            $"确定将所选 {memberCount:N0} 个资产移出项目“{project.Name}”吗？" +
+            $"{Environment.NewLine}{Environment.NewLine}" +
+            "只移除项目成员关系，不会删除、移动或修改本地文件，" +
+            "不会从全部资产中移除，也不会删除已有云端备份。";
+    }
+
     private async Task SyncSelectedCollectionAsync()
     {
         var selected = GetSelectedCollection();
@@ -710,15 +815,15 @@ public sealed partial class MainForm
 
     private async Task DeleteSelectedProjectAsync()
     {
-        var selected = GetSelectedCollection();
-        if (selected is null)
+        var selected = GetSelectedCollections();
+        if (selected.Count == 0)
         {
             return;
         }
 
         var confirmation = MessageBox.Show(
             this,
-            CreateProjectDeletionConfirmation(selected),
+            CreateProjectsDeletionConfirmation(selected),
             "删除项目",
             MessageBoxButtons.OKCancel,
             MessageBoxIcon.Warning,
@@ -728,17 +833,79 @@ public sealed partial class MainForm
             return;
         }
 
+        SetBusy(true, allowCancel: false);
+        var deletedProjects = new List<string>();
+        var failures = new List<string>();
         try
         {
-            var deleted = await _assetCollectionService.DeleteAsync(selected.Id);
+            foreach (var project in selected)
+            {
+                try
+                {
+                    var deleted = await _assetCollectionService.DeleteAsync(project.Id);
+                    deletedProjects.Add(deleted.Name);
+                }
+                catch (Exception exception)
+                {
+                    _runtimeLog.WriteError(
+                        $"删除项目失败：{project.Name}",
+                        exception);
+                    failures.Add($"{project.Name}: {exception.Message}");
+                }
+            }
+
             await RefreshAssetCollectionsAsync();
             await RefreshAssetPageAsync();
-            _statusLabel.Text = $"已删除项目：{deleted.Name}；资产文件和云端备份未更改";
+            _statusLabel.Text = failures.Count == 0
+                ? $"已删除 {deletedProjects.Count:N0} 个项目；资产文件和云端备份未更改"
+                : $"项目删除完成，成功 {deletedProjects.Count:N0} 个，失败 {failures.Count:N0} 个";
+            if (failures.Count > 0)
+            {
+                MessageBox.Show(
+                    this,
+                    string.Join(Environment.NewLine, failures.Take(8)),
+                    "部分项目未删除",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
         }
         catch (Exception exception)
         {
-            ShowError("无法删除项目", exception);
+            ShowError("删除项目后的刷新未能完成", exception);
         }
+        finally
+        {
+            SetBusy(false);
+        }
+    }
+
+    internal static string CreateProjectsDeletionConfirmation(
+        IReadOnlyList<AssetCollectionSummary> projects)
+    {
+        ArgumentNullException.ThrowIfNull(projects);
+        ArgumentOutOfRangeException.ThrowIfZero(projects.Count);
+        if (projects.Count == 1)
+        {
+            return CreateProjectDeletionConfirmation(projects[0]);
+        }
+
+        var projectNames = string.Join(
+            "、",
+            projects.Take(5).Select(project => project.Name));
+        if (projects.Count > 5)
+        {
+            projectNames += $"等 {projects.Count:N0} 个项目";
+        }
+
+        return
+            $"确定删除所选 {projects.Count:N0} 个项目吗？" +
+            $"{Environment.NewLine}{Environment.NewLine}" +
+            $"项目：{projectNames}" +
+            $"{Environment.NewLine}" +
+            $"将移除这些项目以及合计 {projects.Sum(project => project.AssetCount):N0} 条项目成员关系。" +
+            $"{Environment.NewLine}{Environment.NewLine}" +
+            "不会删除、移动或修改资产文件，也不会删除已有云端备份。" +
+            $"{Environment.NewLine}此操作无法撤销。";
     }
 
     internal static string CreateProjectDeletionConfirmation(
@@ -760,6 +927,7 @@ public sealed partial class MainForm
             return;
         }
 
+        UpdateCollectionActionState();
         try
         {
             await RefreshSelectedCollectionMembersAsync();
@@ -887,12 +1055,37 @@ public sealed partial class MainForm
         return _collectionGrid.CurrentRow?.Tag as AssetCollectionSummary;
     }
 
+    private IReadOnlyList<AssetCollectionSummary> GetSelectedCollections()
+    {
+        return _collectionGrid.SelectedRows
+            .Cast<DataGridViewRow>()
+            .OrderBy(row => row.Index)
+            .Select(row => row.Tag)
+            .OfType<AssetCollectionSummary>()
+            .ToArray();
+    }
+
+    private IReadOnlyList<AssetCollectionMember> GetSelectedCollectionMembers()
+    {
+        return _collectionMemberGrid.SelectedRows
+            .Cast<DataGridViewRow>()
+            .OrderBy(row => row.Index)
+            .Select(row => row.Tag)
+            .OfType<AssetCollectionMember>()
+            .ToArray();
+    }
+
     private void UpdateCollectionActionState()
     {
-        var hasCollection = GetSelectedCollection() is not null;
-        _syncCollectionButton.Enabled = !_isBusy && hasCollection;
-        _syncProjectContextMenuItem.Enabled = !_isBusy && hasCollection;
-        _deleteProjectContextMenuItem.Enabled = !_isBusy && hasCollection;
+        var selectedProjects = GetSelectedCollections();
+        var canSync = !_isBusy && selectedProjects.Count == 1;
+        _syncCollectionButton.Enabled = canSync;
+        _syncProjectContextMenuItem.Enabled = canSync;
+        _deleteProjectContextMenuItem.Enabled = !_isBusy &&
+            selectedProjects.Count > 0;
+        _removeCollectionMembersMenuItem.Enabled = !_isBusy &&
+            GetSelectedCollection() is not null &&
+            GetSelectedCollectionMembers().Count > 0;
     }
 
     internal static string FormatCollectionType(AssetCollectionType type)

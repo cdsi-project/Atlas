@@ -377,6 +377,181 @@ public sealed partial class SqliteAssetRepository : IObjectStorageUploadReposito
         return result;
     }
 
+    public async Task<IReadOnlyList<ObjectStorageRestoreSource>>
+        ListManagedObjectStorageBackupsAsync(
+            CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT
+                a.id, a.original_filename, a.size, a.modified_at, a.sha256,
+                l.id, l.asset_id, l.storage_profile_id, l.object_key, l.status,
+                l.size, l.sha256, l.etag, l.created_at, l.updated_at,
+                l.last_verified_at,
+                (
+                    SELECT local.path
+                    FROM asset_locations local
+                    WHERE local.asset_id = a.id
+                      AND local.location_type = 'Local'
+                      AND local.status = 'Available'
+                    ORDER BY
+                        CASE local.ownership WHEN 'Managed' THEN 0 ELSE 1 END,
+                        local.last_seen_at DESC
+                    LIMIT 1
+                ) AS local_path,
+                COALESCE((
+                    SELECT json_group_array(project_name)
+                    FROM (
+                        SELECT c.name AS project_name
+                        FROM asset_collection_items ci
+                        INNER JOIN asset_collections c ON c.id = ci.collection_id
+                        WHERE ci.asset_id = a.id
+                        ORDER BY c.name COLLATE NOCASE, c.id
+                    )
+                ), '[]') AS project_names_json
+            FROM assets a
+            INNER JOIN object_storage_locations l ON l.asset_id = a.id
+            ORDER BY l.updated_at DESC, a.original_filename COLLATE NOCASE;
+            """;
+        return await ReadRestoreSourcesAsync(command, cancellationToken);
+    }
+
+    public async Task<ObjectStorageRestoreSource?> GetManagedObjectStorageBackupAsync(
+        Guid storageLocationId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT
+                a.id, a.original_filename, a.size, a.modified_at, a.sha256,
+                l.id, l.asset_id, l.storage_profile_id, l.object_key, l.status,
+                l.size, l.sha256, l.etag, l.created_at, l.updated_at,
+                l.last_verified_at,
+                (
+                    SELECT local.path
+                    FROM asset_locations local
+                    WHERE local.asset_id = a.id
+                      AND local.location_type = 'Local'
+                      AND local.status = 'Available'
+                    ORDER BY
+                        CASE local.ownership WHEN 'Managed' THEN 0 ELSE 1 END,
+                        local.last_seen_at DESC
+                    LIMIT 1
+                ) AS local_path,
+                COALESCE((
+                    SELECT json_group_array(project_name)
+                    FROM (
+                        SELECT c.name AS project_name
+                        FROM asset_collection_items ci
+                        INNER JOIN asset_collections c ON c.id = ci.collection_id
+                        WHERE ci.asset_id = a.id
+                        ORDER BY c.name COLLATE NOCASE, c.id
+                    )
+                ), '[]') AS project_names_json
+            FROM assets a
+            INNER JOIN object_storage_locations l ON l.asset_id = a.id
+            WHERE l.id = $id;
+            """;
+        command.Parameters.AddWithValue("$id", storageLocationId.ToString("D"));
+        var sources = await ReadRestoreSourcesAsync(command, cancellationToken);
+        return sources.SingleOrDefault();
+    }
+
+    public async Task<bool> ReplaceObjectStorageLocationAsync(
+        ObjectStorageLocation location,
+        string expectedObjectKey,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            UPDATE object_storage_locations
+            SET object_key = $object_key,
+                status = $status,
+                size = $size,
+                sha256 = $sha256,
+                etag = $etag,
+                updated_at = $updated_at,
+                last_verified_at = $last_verified_at
+            WHERE id = $id AND object_key = $expected_object_key;
+            """;
+        command.Parameters.AddWithValue("$id", location.Id.ToString("D"));
+        command.Parameters.AddWithValue("$expected_object_key", expectedObjectKey);
+        command.Parameters.AddWithValue("$object_key", location.ObjectKey);
+        command.Parameters.AddWithValue("$status", location.Status.ToString());
+        command.Parameters.AddWithValue("$size", location.Size);
+        command.Parameters.AddWithValue(
+            "$sha256",
+            (object?)location.Sha256 ?? DBNull.Value);
+        command.Parameters.AddWithValue("$etag", (object?)location.ETag ?? DBNull.Value);
+        command.Parameters.AddWithValue("$updated_at", location.UpdatedAt.ToString("O"));
+        command.Parameters.AddWithValue(
+            "$last_verified_at",
+            location.LastVerifiedAt is null
+                ? DBNull.Value
+                : location.LastVerifiedAt.Value.ToString("O"));
+        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+    }
+
+    public async Task<bool> DeleteObjectStorageLocationAsync(
+        Guid storageLocationId,
+        string expectedObjectKey,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            DELETE FROM object_storage_locations
+            WHERE id = $id AND object_key = $expected_object_key;
+            """;
+        command.Parameters.AddWithValue("$id", storageLocationId.ToString("D"));
+        command.Parameters.AddWithValue("$expected_object_key", expectedObjectKey);
+        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+    }
+
+    private static async Task<IReadOnlyList<ObjectStorageRestoreSource>>
+        ReadRestoreSourcesAsync(
+            SqliteCommand command,
+            CancellationToken cancellationToken)
+    {
+        var result = new List<ObjectStorageRestoreSource>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var location = new ObjectStorageLocation(
+                Guid.Parse(reader.GetString(5)),
+                Guid.Parse(reader.GetString(6)),
+                Guid.Parse(reader.GetString(7)),
+                reader.GetString(8),
+                Enum.Parse<StorageVerificationStatus>(reader.GetString(9)),
+                reader.GetInt64(10),
+                reader.IsDBNull(11) ? null : reader.GetString(11),
+                reader.IsDBNull(12) ? null : reader.GetString(12),
+                ParseTimestamp(reader.GetString(13)),
+                ParseTimestamp(reader.GetString(14)),
+                reader.IsDBNull(15) ? null : ParseTimestamp(reader.GetString(15)));
+            result.Add(new ObjectStorageRestoreSource(
+                Guid.Parse(reader.GetString(0)),
+                reader.GetString(1),
+                reader.GetInt64(2),
+                ParseTimestamp(reader.GetString(3)),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                location,
+                reader.IsDBNull(16) ? null : reader.GetString(16))
+            {
+                ProjectNames = ReadJsonStringArray(reader, 17)
+            });
+        }
+
+        return result;
+    }
+
     private static void AddUploadJobParameters(
         SqliteCommand command,
         ObjectStorageUploadJob job)

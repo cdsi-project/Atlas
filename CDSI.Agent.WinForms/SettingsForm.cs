@@ -395,7 +395,7 @@ public sealed partial class SettingsForm : Form
             workspace?.Path ?? WorkspaceApplicationService.GetSuggestedDefaultPath();
         _workspaceStatusLabel.Text = workspace is null
             ? "尚未配置"
-            : $"Inbox: {workspace.InboxPath}";
+            : FormatWorkspaceStatus(workspace.Path, workspace.InboxPath);
     }
 
     private async Task RefreshRootsAsync()
@@ -461,13 +461,22 @@ public sealed partial class SettingsForm : Form
 
             var result = await _workspaceService.ConfigureAsync(path);
             _workspacePathTextBox.Text = result.Workspace.Path;
-            _workspaceStatusLabel.Text = $"Inbox: {result.Layout.InboxPath}";
+            _workspaceStatusLabel.Text = FormatWorkspaceStatus(
+                result.Workspace.Path,
+                result.Layout.InboxPath);
         }
         catch (Exception exception)
         {
             ShowError("无法设置工作目录", exception);
         }
     }
+
+    private static string FormatWorkspaceStatus(string workspacePath, string inboxPath)
+    {
+        return $"Inbox: {inboxPath}{Environment.NewLine}" +
+            $"数据库备份: {Path.Combine(workspacePath, "System", "DatabaseBackups")}";
+    }
+
     private async void AddRootButton_Click(object? sender, EventArgs e)
     {
         using var dialog = new ScanRootDialog();

@@ -166,6 +166,21 @@ public sealed class AssetCollectionFormTests
     }
 
     [Fact]
+    public void CollectionMemberContextMenu_OffersRemoveFromProject()
+    {
+        using var contextMenu = new ContextMenuStrip();
+        using var removeItem = new ToolStripMenuItem();
+
+        MainForm.ConfigureCollectionMemberContextMenu(
+            contextMenu,
+            removeItem);
+
+        Assert.Single(contextMenu.Items);
+        Assert.Same(removeItem, contextMenu.Items[0]);
+        Assert.Equal("移出项目", removeItem.Text);
+    }
+
+    [Fact]
     public void AddToProjectMenu_ShowsThreeProjectsThenMore()
     {
         var projects = Enumerable.Range(1, 4)
@@ -355,6 +370,40 @@ public sealed class AssetCollectionFormTests
         Assert.Contains("不会删除、移动或修改资产文件", message);
         Assert.Contains("不会删除已有云端备份", message);
         Assert.Contains("无法撤销", message);
+    }
+
+    [Fact]
+    public void MultipleProjectDeletionConfirmation_ListsTheBatchScope()
+    {
+        var projects = new[]
+        {
+            CreateProject("项目 A") with { AssetCount = 2 },
+            CreateProject("项目 B") with { AssetCount = 3 }
+        };
+
+        var message = MainForm.CreateProjectsDeletionConfirmation(projects);
+
+        Assert.Contains("2 个项目", message);
+        Assert.Contains("项目 A、项目 B", message);
+        Assert.Contains("合计 5 条项目成员关系", message);
+        Assert.Contains("不会删除、移动或修改资产文件", message);
+        Assert.Contains("不会删除已有云端备份", message);
+    }
+
+    [Fact]
+    public void CollectionMemberRemovalConfirmation_PreservesAssetsAndBackups()
+    {
+        var project = CreateProject("纪录片");
+
+        var message = MainForm.CreateCollectionMemberRemovalConfirmation(
+            project,
+            memberCount: 3);
+
+        Assert.Contains("3 个资产", message);
+        Assert.Contains("项目“纪录片”", message);
+        Assert.Contains("只移除项目成员关系", message);
+        Assert.Contains("不会从全部资产中移除", message);
+        Assert.Contains("不会删除已有云端备份", message);
     }
 
     private static AssetCollectionSummary CreateProject(string name)

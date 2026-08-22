@@ -72,6 +72,40 @@ public static class ObjectStorageObjectKey
         return true;
     }
 
+    public static bool TryRenameFile(
+        string? currentObjectKey,
+        string? newFilename,
+        out string objectKey,
+        out string? errorMessage)
+    {
+        objectKey = string.Empty;
+        if (string.IsNullOrWhiteSpace(currentObjectKey))
+        {
+            errorMessage = "云端对象键不能为空。";
+            return false;
+        }
+
+        if (!TryValidatePathSegment(newFilename, "云端文件名", out errorMessage))
+        {
+            return false;
+        }
+
+        var separatorIndex = currentObjectKey.LastIndexOf('/');
+        var prefix = separatorIndex < 0
+            ? string.Empty
+            : currentObjectKey[..(separatorIndex + 1)];
+        var candidate = prefix + newFilename!.Trim();
+        if (Encoding.UTF8.GetByteCount(candidate) > MaximumUtf8ByteCount)
+        {
+            errorMessage = "云端文件名过长。";
+            return false;
+        }
+
+        objectKey = candidate;
+        errorMessage = null;
+        return true;
+    }
+
     private static bool TryValidatePathSegment(
         string? value,
         string displayName,

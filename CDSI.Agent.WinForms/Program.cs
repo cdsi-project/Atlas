@@ -45,7 +45,11 @@ static class Program
             ApplicationConfiguration.Initialize();
             runtimeLog = new RuntimeLogService(dataDirectory);
 
-            var repository = new SqliteAssetRepository(Path.Combine(dataDirectory, "cdsi.db"));
+            var databasePath = Path.Combine(dataDirectory, "cdsi.db");
+            var repository = new SqliteAssetRepository(databasePath);
+            var localDatabaseBackupService = new LocalDatabaseBackupService(
+                databasePath,
+                MainForm.GetApplicationVersion());
             var fingerprintEngine = new Sha256FileFingerprintService();
             var scanService = new ScanApplicationService(new FileSystemScanner(), repository);
             var workspaceProvisioner = new WorkspaceProvisioner();
@@ -93,6 +97,10 @@ static class Program
                 storageService,
                 workspaceProvisioner,
                 objectStorageAdapters);
+            var objectStorageManagementService = new ObjectStorageManagementService(
+                repository,
+                storageService,
+                objectStorageAdapters);
             var transferService = new ManagedAssetTransferService(
                 repository,
                 workspaceProvisioner,
@@ -121,9 +129,11 @@ static class Program
                 openWebPublishingService,
                 objectStorageBackupService,
                 objectStorageRestoreService,
+                objectStorageManagementService,
                 assetCollectionService,
                 assetTagService,
                 transferService,
+                localDatabaseBackupService,
                 dataDirectory,
                 runtimeLog);
             mainForm.Shown += (_, _) => singleInstance.StartListening(

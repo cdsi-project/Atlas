@@ -41,7 +41,11 @@ public sealed record ObjectStorageRestoreSource(
     long AssetSize,
     DateTimeOffset AssetModifiedAt,
     string? AssetSha256,
-    ObjectStorageLocation Location);
+    ObjectStorageLocation Location,
+    string? LocalPath = null)
+{
+    public IReadOnlyList<string> ProjectNames { get; init; } = [];
+}
 
 public sealed record ConfiguredObjectStorageRestoreSource(
     ObjectStorageRestoreSource Source,

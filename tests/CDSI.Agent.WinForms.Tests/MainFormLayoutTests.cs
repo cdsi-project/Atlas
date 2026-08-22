@@ -1,6 +1,8 @@
 using CDSI.Agent.WinForms;
+using CDSI.Agent.Application.Storage;
 using CDSI.Agent.Core.Assets;
 using CDSI.Agent.Core.Duplicates;
+using CDSI.Agent.Core.Storage;
 
 namespace CDSI.Agent.WinForms.Tests;
 
@@ -53,13 +55,14 @@ public sealed class MainFormLayoutTests
             new("资产目录"),
             new("重复文件"),
             new("项目管理"),
+            new("云备份管理"),
             new("统计")
         ];
 
         MainForm.ConfigureMainTabs(tabControl, tabPages);
 
         Assert.Equal(
-            ["全部资产", "资产目录", "重复文件", "项目管理", "统计"],
+            ["全部资产", "资产目录", "重复文件", "项目管理", "云备份管理", "统计"],
             tabControl.TabPages.Cast<TabPage>().Select(page => page.Text));
         Assert.Equal(DockStyle.Fill, tabControl.Dock);
         Assert.Equal(new Point(12, 5), tabControl.Padding);
@@ -253,37 +256,6 @@ public sealed class MainFormLayoutTests
     }
 
     [Fact]
-    public void CreateStatisticsPanel_ReservesVisibleValueRows()
-    {
-        Label[] valueLabels = [new(), new(), new(), new()];
-        using var panel = MainForm.CreateStatisticsPanel(
-            valueLabels[0],
-            valueLabels[1],
-            valueLabels[2],
-            valueLabels[3]);
-        panel.Size = new Size(800, 58);
-        panel.CreateControl();
-        panel.PerformLayout();
-
-        foreach (var item in panel.Controls.OfType<TableLayoutPanel>())
-        {
-            item.PerformLayout();
-            Assert.Single(item.ColumnStyles);
-            Assert.Equal(SizeType.Percent, item.ColumnStyles[0].SizeType);
-        }
-
-        Assert.Equal(4, panel.Controls.Count);
-        Assert.Single(panel.RowStyles);
-        Assert.Equal(SizeType.Percent, panel.RowStyles[0].SizeType);
-        Assert.All(valueLabels, label =>
-        {
-            Assert.Equal("0", label.Text);
-            Assert.True(label.Width > 0);
-            Assert.True(label.Height >= 20);
-        });
-    }
-
-    [Fact]
     public void CreateStatisticsDashboard_GroupsMetricsInAResponsiveGrid()
     {
         Label[] values = [new(), new(), new(), new(), new(), new(), new()];
@@ -432,30 +404,142 @@ public sealed class MainFormLayoutTests
             });
         Assert.Equal(ScrollBars.Both, projectGrid.ScrollBars);
         Assert.Equal(ScrollBars.Both, memberGrid.ScrollBars);
+        Assert.True(projectGrid.MultiSelect);
+        Assert.True(memberGrid.MultiSelect);
+        Assert.Equal(
+            DataGridViewSelectionMode.FullRowSelect,
+            projectGrid.SelectionMode);
+        Assert.Equal(
+            DataGridViewSelectionMode.FullRowSelect,
+            memberGrid.SelectionMode);
     }
 
     [Fact]
-    public void CreateAssetTabLayout_PlacesStatisticsAtTheBottom()
+    public void CloudBackupManagementGrids_UseProjectAndBackupColumns()
+    {
+        using var projectGrid = new DataGridView();
+        using var backupGrid = new DataGridView();
+
+        MainForm.ConfigureCloudBackupManagementGridColumns(
+            projectGrid,
+            backupGrid);
+
+        Assert.Equal(
+            [
+                "项目", "云提供商", "项目资源数", "云端副本",
+                "占用空间", "最近备份"
+            ],
+            projectGrid.Columns
+                .Cast<DataGridViewColumn>()
+                .Select(column => column.HeaderText));
+        Assert.Equal(
+            [
+                "本地资产", "所属项目", "云端文件名", "对象键",
+                "大小", "校验状态", "备份时间"
+            ],
+            backupGrid.Columns
+                .Cast<DataGridViewColumn>()
+                .Select(column => column.HeaderText));
+        Assert.All(
+            projectGrid.Columns.Cast<DataGridViewColumn>()
+                .Concat(backupGrid.Columns.Cast<DataGridViewColumn>()),
+            column =>
+            {
+                Assert.Equal(DataGridViewAutoSizeColumnMode.None, column.AutoSizeMode);
+                Assert.Equal(DataGridViewTriState.True, column.Resizable);
+            });
+    }
+
+    [Fact]
+    public void CloudBackupManagementLayout_UsesProjectAndBackupPanes()
+    {
+        using var projectGrid = new DataGridView();
+        using var backupGrid = new DataGridView();
+        using var split = MainForm.CreateCloudBackupProjectSplit(
+            projectGrid,
+            backupGrid);
+
+        Assert.Equal(Orientation.Vertical, split.Orientation);
+        Assert.Contains(projectGrid, Descendants(split.Panel1));
+        Assert.Contains(backupGrid, Descendants(split.Panel2));
+        Assert.Contains(
+            Descendants(split.Panel1).OfType<Label>(),
+            label => label.Text == "备份项目");
+        Assert.Contains(
+            Descendants(split.Panel2).OfType<Label>(),
+            label => label.Text == "云端备份");
+    }
+
+    [Fact]
+    public void GroupCloudBackupsByProject_HandlesMultipleProjectsAndUnassignedBackups()
+    {
+        var firstAssetId = Guid.NewGuid();
+        var secondAssetId = Guid.NewGuid();
+        var backups = new[]
+        {
+            CreateCloudBackup(
+                firstAssetId,
+                10,
+                "项目甲/原片.mov",
+                ["项目甲", "项目乙"],
+                ObjectStorageProvider.AliyunOss),
+            CreateCloudBackup(
+                firstAssetId,
+                12,
+                "项目甲/代理文件.mov",
+                ["项目甲", "项目乙"],
+                ObjectStorageProvider.TencentCos),
+            CreateCloudBackup(
+                secondAssetId,
+                20,
+                "项目乙/成片.mov",
+                ["项目甲", "项目乙"],
+                ObjectStorageProvider.QiniuKodo),
+            CreateCloudBackup(Guid.NewGuid(), 30, $"assets/{Guid.NewGuid():N}/旧版.mov", [])
+        };
+
+        var groups = MainForm.GroupCloudBackupsByProject(backups);
+
+        Assert.Equal(["项目甲", "项目乙", "未归属项目"],
+            groups.Select(group => group.Name));
+        var primary = groups[0];
+        Assert.False(primary.IsUnassigned);
+        Assert.Equal(1, primary.AssetCount);
+        Assert.Equal(2, primary.Backups.Count);
+        Assert.Equal(22, primary.TotalSizeBytes);
+        Assert.Equal(
+            "阿里云 OSS、腾讯云 COS",
+            MainForm.FormatCloudBackupProjectProviders(primary));
+        Assert.Single(groups[1].Backups);
+        Assert.Equal(secondAssetId, groups[1].Backups[0].Source.AssetId);
+        Assert.True(groups[2].IsUnassigned);
+        Assert.Equal(30, groups[2].TotalSizeBytes);
+        Assert.Equal("项目甲", MainForm.GetCloudBackupProjectName("项目甲/原片.mov"));
+        Assert.Null(MainForm.GetCloudBackupProjectName("asset.mov"));
+        Assert.Null(MainForm.GetCloudBackupProjectName("assets/id/asset.mov"));
+    }
+
+    [Fact]
+    public void CreateAssetTabLayout_GivesTheRemovedStatisticsSpaceToTheGrid()
     {
         using var filterPanel = new Panel();
         using var assetGrid = new DataGridView();
         using var paginationPanel = new Panel();
         using var detailsPanel = new Panel();
-        using var statisticsPanel = new Panel();
         using var layout = MainForm.CreateAssetTabLayout(
             filterPanel,
             assetGrid,
             paginationPanel,
-            detailsPanel,
-            statisticsPanel);
+            detailsPanel);
 
-        Assert.Equal(5, layout.RowCount);
+        Assert.Equal(4, layout.RowCount);
         Assert.Equal(0, layout.GetRow(filterPanel));
         Assert.Equal(1, layout.GetRow(assetGrid));
         Assert.Equal(2, layout.GetRow(paginationPanel));
         Assert.Equal(3, layout.GetRow(detailsPanel));
-        Assert.Equal(4, layout.GetRow(statisticsPanel));
-        Assert.Equal(58, layout.RowStyles[4].Height);
+        Assert.Equal(SizeType.Percent, layout.RowStyles[1].SizeType);
+        Assert.Equal(100, layout.RowStyles[1].Height);
+        Assert.Equal(64, layout.RowStyles[3].Height);
     }
 
     [Fact]
@@ -466,21 +550,20 @@ public sealed class MainFormLayoutTests
         using var panel = MainForm.CreateAssetDetailsPanel(
             titleLabel,
             summaryLabel);
-        panel.Size = new Size(900, 150);
+        panel.Size = new Size(900, 64);
         panel.CreateControl();
         panel.PerformLayout();
-        var summaryPanel = Assert.Single(
-            panel.Controls.OfType<TableLayoutPanel>());
-        summaryPanel.PerformLayout();
 
         Assert.Single(panel.ColumnStyles);
         Assert.Equal(SizeType.Percent, panel.ColumnStyles[0].SizeType);
         Assert.Equal(2, panel.Controls.Count);
-        Assert.Equal(
-            "资产详情",
-            Assert.Single(panel.Controls.OfType<Label>()).Text);
+        Assert.Equal(2, panel.RowCount);
+        Assert.Same(titleLabel, panel.GetControlFromPosition(0, 0));
+        Assert.Same(summaryLabel, panel.GetControlFromPosition(0, 1));
         Assert.True(titleLabel.Width > 800);
         Assert.True(summaryLabel.Width > 800);
+        Assert.True(titleLabel.AutoEllipsis);
+        Assert.True(summaryLabel.AutoEllipsis);
         Assert.DoesNotContain(
             panel.Controls.Cast<Control>(),
             control => control is TextBox);
@@ -800,6 +883,151 @@ public sealed class MainFormLayoutTests
         Assert.Equal(
             ["/select,", Path.GetFullPath(filePath)],
             startInfo.ArgumentList.ToArray());
+    }
+
+    [Fact]
+    public void CloudBackupContextMenu_OffersOpenFileLocationBeforeCloudActions()
+    {
+        using var contextMenu = new ContextMenuStrip();
+        using var openItem = new ToolStripMenuItem();
+        using var restoreItem = new ToolStripMenuItem();
+        using var deleteItem = new ToolStripMenuItem();
+
+        MainForm.ConfigureCloudBackupContextMenu(
+            contextMenu,
+            openItem,
+            restoreItem,
+            deleteItem);
+
+        Assert.Equal(5, contextMenu.Items.Count);
+        Assert.Same(openItem, contextMenu.Items[0]);
+        Assert.Equal("打开文件位置", openItem.Text);
+        Assert.IsType<ToolStripSeparator>(contextMenu.Items[1]);
+        Assert.Equal("取回", restoreItem.Text);
+        Assert.IsType<ToolStripSeparator>(contextMenu.Items[3]);
+        Assert.Equal("删除备份", deleteItem.Text);
+    }
+
+    [Fact]
+    public void CloudBackupProjectContextMenu_OffersProjectBackupDeletion()
+    {
+        using var contextMenu = new ContextMenuStrip();
+        using var deleteItem = new ToolStripMenuItem();
+
+        MainForm.ConfigureCloudBackupProjectContextMenu(
+            contextMenu,
+            deleteItem);
+
+        Assert.Single(contextMenu.Items);
+        Assert.Same(deleteItem, contextMenu.Items[0]);
+        Assert.Equal("删除备份项目", deleteItem.Text);
+    }
+
+    [Fact]
+    public void CloudBackupProjectDeletionConfirmation_PreservesLocalData()
+    {
+        var backup = CreateCloudBackup(
+            Guid.NewGuid(),
+            42,
+            "纪录片/成片.mov",
+            ["纪录片"],
+            ObjectStorageProvider.TencentCos);
+        var project = Assert.Single(
+            MainForm.GroupCloudBackupsByProject([backup]));
+
+        var confirmation =
+            MainForm.CreateCloudBackupProjectDeletionConfirmation(project);
+
+        Assert.Contains("备份项目“纪录片”", confirmation);
+        Assert.Contains("1 个云端备份", confirmation);
+        Assert.Contains("腾讯云 COS", confirmation);
+        Assert.Contains("本地项目、项目成员关系和本地文件不会删除", confirmation);
+        Assert.Contains("无法撤销", confirmation);
+    }
+
+    [Fact]
+    public void FilterCloudBackups_MatchesAssetCloudProfileProviderAndLocalPath()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var assetId = Guid.NewGuid();
+        var location = new ObjectStorageLocation(
+            Guid.NewGuid(),
+            assetId,
+            Guid.NewGuid(),
+            "纪录片/成片.MP4",
+            StorageVerificationStatus.Healthy,
+            42,
+            new string('a', 64),
+            "etag",
+            now,
+            now,
+            now);
+        var profile = new ObjectStorageProfile(
+            location.StorageProfileId,
+            "异地备份",
+            ObjectStorageProvider.TencentCos,
+            "cos.ap-guangzhou.myqcloud.com",
+            "creator-1250000000",
+            "ap-guangzhou",
+            true,
+            "secret-id",
+            now,
+            now);
+        var source = new ObjectStorageRestoreSource(
+            assetId,
+            "原片.mp4",
+            42,
+            now,
+            new string('a', 64),
+            location,
+            @"D:\Creator Assets\原片.mp4")
+        {
+            ProjectNames = ["纪录片项目"]
+        };
+        var backup = new ManagedObjectStorageBackup(source, profile, true);
+
+        Assert.Single(MainForm.FilterCloudBackups([backup], "原片"));
+        Assert.Single(MainForm.FilterCloudBackups([backup], "成片.mp4"));
+        Assert.Single(MainForm.FilterCloudBackups([backup], "纪录片/"));
+        Assert.Single(MainForm.FilterCloudBackups([backup], "异地备份"));
+        Assert.Single(MainForm.FilterCloudBackups([backup], "腾讯"));
+        Assert.Single(MainForm.FilterCloudBackups([backup], "creator assets"));
+        Assert.Single(MainForm.FilterCloudBackups([backup], "纪录片项目"));
+        Assert.Single(MainForm.FilterCloudBackups([backup], "  "));
+        Assert.Empty(MainForm.FilterCloudBackups([backup], "不存在"));
+    }
+
+    [Fact]
+    public void GetCloudBackupLocalPath_UsesThePathBoundToTheSelectedRow()
+    {
+        var localPath = Path.Combine(Path.GetTempPath(), "Creator Assets", "clip.mp4");
+        var location = new ObjectStorageLocation(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "项目一/clip.mp4",
+            StorageVerificationStatus.Healthy,
+            42,
+            new string('a', 64),
+            "etag",
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow);
+        var source = new ObjectStorageRestoreSource(
+            location.AssetId,
+            "clip.mp4",
+            42,
+            DateTimeOffset.UtcNow,
+            new string('a', 64),
+            location,
+            localPath);
+        using var row = new DataGridViewRow
+        {
+            Tag = new ManagedObjectStorageBackup(source, null, false)
+        };
+
+        Assert.Equal(localPath, MainForm.GetCloudBackupLocalPath(row));
+        Assert.Null(MainForm.GetCloudBackupLocalPath(null));
     }
 
     [Fact]
@@ -1157,5 +1385,54 @@ public sealed class MainFormLayoutTests
                 yield return descendant;
             }
         }
+    }
+
+    private static ManagedObjectStorageBackup CreateCloudBackup(
+        Guid assetId,
+        long size,
+        string objectKey,
+        IReadOnlyList<string> projectNames,
+        ObjectStorageProvider? provider = null)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var location = new ObjectStorageLocation(
+            Guid.NewGuid(),
+            assetId,
+            Guid.NewGuid(),
+            objectKey,
+            StorageVerificationStatus.Healthy,
+            size,
+            new string('a', 64),
+            "etag",
+            now,
+            now,
+            now);
+        var source = new ObjectStorageRestoreSource(
+            assetId,
+            "asset.bin",
+            size,
+            now,
+            new string('a', 64),
+            location)
+        {
+            ProjectNames = projectNames
+        };
+        var profile = provider is null
+            ? null
+            : new ObjectStorageProfile(
+                location.StorageProfileId,
+                provider.Value.ToString(),
+                provider.Value,
+                "storage.example.com",
+                "creator-assets",
+                "region",
+                true,
+                "access-key",
+                now,
+                now);
+        return new ManagedObjectStorageBackup(
+            source,
+            profile,
+            profile is not null);
     }
 }

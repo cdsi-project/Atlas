@@ -10,7 +10,7 @@ It runs on the creator's own device and is responsible for discovering, indexing
 
 The agent must be designed as a **local-first, privacy-conscious, non-destructive system**.
 
-The CDSI Server is the control plane. CDSI Beacon is the local execution plane. Cloud storage such as Aliyun OSS, AWS S3, Cloudflare R2, Tencent COS, MinIO, NAS, or local filesystem is the data/storage plane.
+In the target architecture, CDSI Server is the optional control plane, CDSI Beacon is the local execution plane, and cloud storage such as Aliyun OSS, AWS S3, Cloudflare R2, Tencent COS, MinIO, NAS, or local filesystem is the data/storage plane. The current v0.200 application operates without CDSI Server.
 
 ---
 
@@ -42,6 +42,25 @@ The agent should help answer questions such as:
 - Which assets have already been uploaded to object storage?
 - Which files are likely source assets, drafts, finals, covers, subtitles, references, or derivatives?
 - Which assets are related even if they are stored in different folders?
+
+### 1.1 Current Repository Baseline (v0.200)
+
+The current repository is a working Windows desktop application built with .NET 10, WinForms, and SQLite. Before planning or implementing a change, treat the following as the deployed baseline rather than as future requirements:
+
+- local workspace and multiple read-only scan roots
+- stable local Asset IDs and local Project IDs
+- paged asset search, tags, duplicate detection, media metadata, and statistics
+- project membership and project-bound cloud backup
+- Aliyun OSS, Tencent COS, and Qiniu Kodo storage adapters
+- verified multipart upload, restore, and explicit remote deletion
+- cloud-backup management grouped by project-name object-key prefix
+- OpenWeb publishing to multiple WordPress sites
+- local SQLite consistent snapshots, audit records, task progress, and run logs
+- single-instance Windows desktop behavior
+
+The current application does **not** connect to CDSI Server, use temporary server-issued credentials, run AI/embedding pipelines, extract document bodies in the background, or send telemetry. Git profiles are configuration only; they do not clone, commit, or push.
+
+The cloud project model is transitional in v0.200: local projects have stable IDs, but remote objects still use `<project name>/<original filename>` and the cloud UI groups records by that prefix. Stable remote ProjectId manifests and cross-device project reconstruction are next-stage work, not existing behavior.
 
 ---
 
@@ -134,6 +153,21 @@ Asset
 
 An asset may have multiple physical locations. The same physical file may move without changing the asset identity.
 
+### 2.3A Project Is the Managed Operation Boundary
+
+Assets may be discovered before they are classified, but cloud backup, project synchronization, project restore, and project-level cloud deletion must operate in an explicit Project context.
+
+Project identity must follow these rules:
+
+- `ProjectId` is stable and is the canonical identity.
+- Project name is mutable display metadata, not an identity or uniqueness key.
+- Local and cloud representations of one logical project must carry the same ProjectId in the target model.
+- Same-name projects must never be silently merged.
+- Deleting a local project, deleting its cloud backup, removing a member, and deleting a local file are independent explicit operations.
+- Legacy name-prefix cloud objects must remain readable during migration.
+
+Do not deepen the current v0.200 coupling between project identity and object-key prefix. Follow [docs/CDSI_BEACON_PROJECT_CLOUD_MODEL.md](docs/CDSI_BEACON_PROJECT_CLOUD_MODEL.md) when evolving project synchronization.
+
 ### 2.4 Non-Destructive by Default
 
 The default behavior must be:
@@ -164,7 +198,7 @@ filesystem metadata
 → file signatures
 → hashes
 → path / filename rules
-→ content extraction
+→ optional, policy-approved content extraction
 → embeddings
 → clustering / graph analysis
 → LLM interpretation
@@ -214,7 +248,7 @@ Asset
 Asset Location
 ```
 
-Not every Asset must belong to a Project or Content Entity. An asset may initially be `unclassified` or `inbox` until enough evidence exists.
+An Asset may initially be `unclassified` or outside every Project so discovery remains low-friction. Once the user performs managed cloud operations, the Project is the required operational boundary. An Asset may belong to more than one Project; membership is a relationship and must not change the Asset identity or physical file.
 
 ---
 
@@ -299,6 +333,10 @@ Do not store permanent public URLs as the canonical asset identity. Prefer `stor
 
 A `Project` is a logical work unit.
 
+Every Project must have a stable ProjectId independent of its display name. Project members, bound storage profiles, sync state, and future cloud manifests refer to this ID. Renaming a Project must not create a new logical Project or silently move/merge remote data.
+
+In v0.200, local project identity already follows this rule, while remote keys and cloud grouping still use the project name. Treat that as legacy-compatible behavior to migrate, not as the target storage model.
+
 Examples:
 
 ```text
@@ -363,7 +401,19 @@ created_by
 
 ## 8. Local Agent Pipeline
 
-The default analysis pipeline should be structured as follows:
+The implemented v0.200 deterministic pipeline is:
+
+```text
+Scan
+  ↓
+Fingerprint / Candidate Hashing
+  ↓
+Media Metadata Extraction
+  ↓
+Local Registry / Search / Duplicate Detection
+```
+
+Potential semantic analysis must remain a separate, optional, policy-controlled pipeline:
 
 ```text
 Scan
@@ -372,7 +422,7 @@ Fingerprint
   ↓
 Metadata Extraction
   ↓
-Content Extraction
+Opt-in Content Extraction
   ↓
 Feature Generation
   ↓
@@ -391,7 +441,7 @@ Inbox / Human Review
 Registry / Sync
 ```
 
-Each stage must be independently testable. Avoid building a monolithic `analyze_file()` or giant Agent class.
+Each stage must be independently testable. Avoid building a monolithic `analyze_file()` or giant Agent class. Do not reintroduce background body-text extraction into the current scan path without an explicit product decision, privacy review, migration plan, and UI policy.
 
 ---
 
@@ -538,7 +588,11 @@ If a specialized extractor fails, the generic asset record should still survive.
 
 ## 14. Text Extraction
 
-Where practical, normalize text-bearing assets into a common extracted-text representation.
+Current behavior intentionally does not extract, cache, display, or search document body text. The legacy `asset_text` table may remain for non-destructive database compatibility, but current code must not depend on it.
+
+Markdown and TXT contents are read only when the user explicitly publishes a selected article to OpenWeb; Beacon converts user-oriented Markdown and Front Matter to the WordPress REST representation internally.
+
+If content extraction is reconsidered later, it must be opt-in and normalize text-bearing assets into a common extracted-text representation where practical.
 
 Examples:
 
@@ -826,20 +880,20 @@ The agent should minimize unnecessary prompts. Batch review is preferable to int
 
 Storage must be implemented through adapters.
 
-Initial targets:
+Implemented targets:
 
 ```text
 Local filesystem
 Aliyun OSS
-S3-compatible storage
+Tencent COS
+Qiniu Kodo through its S3-compatible API
 ```
 
 Potential later targets:
 
 ```text
-AWS S3
+AWS S3 and other S3-compatible providers
 Cloudflare R2
-Tencent COS
 MinIO
 NAS
 ```
@@ -861,11 +915,15 @@ signed_download
 
 Do not design CDSI around one vendor.
 
+Storage adapters operate on objects, but user-facing backup and restore workflows operate on Projects. A project may bind zero, one, or multiple storage profiles. Per-asset storage-location records remain necessary for integrity checks and partial retry, but must roll up into an explicit project sync state.
+
 ---
 
 ## 26. Direct-to-Storage Upload
 
 Large assets should normally upload directly from the local device to storage.
+
+In v0.200, users explicitly configure provider credentials and Beacon reads them from Windows Credential Manager only while performing a confirmed operation. There is no CDSI Server dependency. The following server-issued authorization flow is a future target:
 
 Preferred flow:
 
@@ -889,13 +947,13 @@ OSS / S3
 CDSI Server
 ```
 
-Never embed permanent cloud access secrets in the agent. Use temporary credentials or pre-signed operations.
+Never embed permanent cloud access secrets in source, binaries, logs, or SQLite. Prefer temporary credentials or pre-signed operations once CDSI Server integration exists; until then, keep user-provided secrets isolated in Windows Credential Manager and never read them during unrelated operations.
 
 ---
 
 ## 27. Upload Intent
 
-An upload should be modeled as an explicit operation.
+A synchronization should be modeled as an explicit Project operation containing per-provider and per-asset upload intents.
 
 Conceptual lifecycle:
 
@@ -922,7 +980,7 @@ integrity/checksum where supported
 asset/storage key mapping
 ```
 
-before considering the remote location healthy.
+before considering the remote location healthy. A Project is fully synchronized to one provider only when its manifest and every intended member are verified; partial success must remain visible and resumable.
 
 ---
 
@@ -972,25 +1030,43 @@ Do not claim an asset is safely backed up merely because an upload request succe
 
 A local embedded database is recommended. SQLite is acceptable unless a stronger requirement emerges.
 
-Potential tables/entities:
+Current and expected tables/entities include:
 
 ```text
+schema_migrations
 devices
 scan_roots
+scan_jobs
 assets
 asset_locations
 asset_metadata
-asset_features
-asset_embeddings
-asset_relations
-projects
-clusters
-inbox_items
-sync_jobs
-upload_sessions
-classification_feedback
+managed_workspaces
+local_volumes
+asset_directory_exclusions
+asset_collections
+asset_collection_items
+asset_collection_backup_profiles
+asset_collection_deletion_audit
+asset_tags
+asset_tag_links
+storage_profiles
+object_storage_locations
+file_operations
+file_operation_items
+upload_jobs
+upload_items
+multipart_upload_sessions
+restore_jobs
+restore_items
+openweb_sources
+openweb_publications
+git_profiles
 agent_settings
 ```
+
+The current schema uses `asset_collections` as the persisted project model. Database snapshot manifests live beside snapshot files in the managed workspace rather than in a database table. The legacy `asset_text` table remains only for backward-compatible, non-destructive migration behavior.
+
+Future semantic tables such as asset features, embeddings, relations, clusters, and inbox items should be added only when their owning feature is implemented. Do not infer that a table listed in an older design document already exists.
 
 Database migrations must be versioned. Do not place core state only in transient memory.
 
@@ -1304,29 +1380,18 @@ Preserve clean module boundaries.
 
 ## 45. Recommended Initial Implementation Order
 
-Unless the existing repository strongly suggests another order:
+This section is historical planning context. The repository has already completed and extended the deterministic Windows MVP through v0.200. For current behavior, use the README and Section 1.1. Remaining work should now prioritize stable project identity across local and cloud state:
 
 ```text
-1. Local database / migrations
-2. Device identity
-3. Scan root configuration
-4. Filesystem scanner
-5. File fingerprinting
-6. Asset + AssetLocation models
-7. Exact duplicate detection
-8. Basic metadata extractors
-9. Text/PDF/Office extraction
-10. Asset Inbox
-11. CDSI Server registration API
-12. Storage abstraction
-13. Aliyun OSS adapter
-14. Direct multipart upload
-15. Upload verification
-16. Semantic feature / embedding pipeline
-17. Clustering
-18. Project inference
-19. LLM cluster interpretation
-20. Asset graph / advanced relationships
+1. Stable ProjectId in remote project manifests
+2. Conflict detection for same-ID and same-name projects
+3. Project-level sync state and resumable reconciliation
+4. Whole-project restore and cross-device reconstruction
+5. Legacy name-prefix migration without destructive rewrites
+6. Provider connection and least-privilege checks
+7. Background scheduling and periodic integrity verification
+8. Optional CDSI Server / temporary authorization integration
+9. Optional Inbox and semantic analysis only after explicit product approval
 ```
 
 Do not start with the LLM layer.
@@ -1335,7 +1400,7 @@ Do not start with the LLM layer.
 
 ## 46. MVP Definition
 
-The first useful milestone should be able to:
+The original deterministic MVP is complete and retained here as an acceptance baseline. Current v0.200 can:
 
 - configure one or more local scan roots
 - scan directories safely
@@ -1345,15 +1410,15 @@ The first useful milestone should be able to:
 - detect exact duplicates
 - extract basic metadata
 - identify common file formats
-- display/list unclassified assets
+- display and search unclassified assets
 - register local asset locations
-- connect to CDSI Server
-- obtain temporary storage authorization
-- upload an asset directly to configured object storage
+- organize assets into projects
+- upload a project directly to configured object storage
 - verify the remote copy
+- restore or explicitly delete registered cloud backups
 - preserve local files unchanged
 
-This milestone does not require intelligent project classification yet.
+CDSI Server connectivity, temporary server-issued authorization, and intelligent project classification are not implemented and are not required for the current local-first product.
 
 ---
 
@@ -1484,6 +1549,11 @@ When modifying this repository:
 23. Use explicit interfaces between modules.
 24. Make failures observable.
 25. Keep operations resumable where practical.
+26. Treat the repository-root `VERSION` file as the only application version source.
+27. For each code-version commit, increment `VERSION` by `0.001`, run the full Release test suite, publish the self-contained single-file `win-x64` application, and smoke-check that the executable starts. A documentation-only change does not require a version bump or binary publish.
+28. Use `dotnet test .\CDSI.Agent.slnx -c Release --no-restore` for the standard full suite after dependencies are restored. Do not run build, test, and publish concurrently against the same output directories because MSBuild file locks can make results nondeterministic.
+29. Keep new cloud backup, restore, reconciliation, and remote deletion behavior project-scoped. Do not allow project names or object-key prefixes to become canonical identity.
+30. Preserve compatibility with v0.200 legacy cloud records and require explicit confirmation before any migration, merge, overwrite, or remote deletion.
 
 ---
 

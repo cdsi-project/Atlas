@@ -12,6 +12,7 @@ namespace CDSI.Agent.Infrastructure.Storage;
 public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
 {
     private const long DefaultPartSize = 16L * 1024 * 1024;
+    private const long SingleCopyMaximumSize = 1024L * 1024 * 1024;
     private const long MaximumPartCount = 10_000;
     private const string Sha256MetadataKey = "cdsi-sha256";
     private const string AssetIdMetadataKey = "cdsi-asset-id";
@@ -139,6 +140,57 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
             size);
     }
 
+    public async Task<ObjectStorageObjectInfo> CopyAsync(
+        ObjectStorageCopyRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        using var client = CreateClient(request.Connection);
+        if (request.Size < SingleCopyMaximumSize)
+        {
+            await client.CopyObjectAsync(
+                new CopyObjectRequest
+                {
+                    Bucket = request.Connection.Profile.BucketName,
+                    Key = request.DestinationObjectKey,
+                    SourceBucket = request.Connection.Profile.BucketName,
+                    SourceKey = request.SourceObjectKey,
+                    IfMatch = request.SourceETag,
+                    MetadataDirective = "COPY",
+                    ForbidOverwrite = true
+                },
+                cancellationToken: cancellationToken);
+        }
+        else
+        {
+            await CopyMultipartAsync(client, request, cancellationToken);
+        }
+
+        return await StatWithClientAsync(
+            client,
+            request.Connection.Profile.BucketName,
+            request.DestinationObjectKey,
+            cancellationToken)
+            ?? throw new IOException("OSS 复制完成后未找到目标对象。");
+    }
+
+    public async Task DeleteAsync(
+        ObjectStorageConnection connection,
+        string objectKey,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentException.ThrowIfNullOrWhiteSpace(objectKey);
+        using var client = CreateClient(connection);
+        await client.DeleteObjectAsync(
+            new DeleteObjectRequest
+            {
+                Bucket = connection.Profile.BucketName,
+                Key = objectKey
+            },
+            cancellationToken: cancellationToken);
+    }
+
     public async Task AbortMultipartUploadAsync(
         ObjectStorageConnection connection,
         MultipartUploadSession session,
@@ -161,6 +213,96 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
         catch (Exception exception) when (IsMissingUpload(exception))
         {
             // The remote upload session has already expired or been removed.
+        }
+    }
+
+    private static async Task CopyMultipartAsync(
+        Client client,
+        ObjectStorageCopyRequest request,
+        CancellationToken cancellationToken)
+    {
+        var bucket = request.Connection.Profile.BucketName;
+        var partSize = ComputePartSize(request.Size);
+        var totalParts = checked((int)((request.Size + partSize - 1) / partSize));
+        var initiated = await client.InitiateMultipartUploadAsync(
+            new InitiateMultipartUploadRequest
+            {
+                Bucket = bucket,
+                Key = request.DestinationObjectKey,
+                ForbidOverwrite = true,
+                Metadata = CreateMetadata(request)
+            },
+            cancellationToken: cancellationToken);
+        if (string.IsNullOrWhiteSpace(initiated.UploadId))
+        {
+            throw new IOException("OSS 未返回云端复制任务 ID。");
+        }
+
+        try
+        {
+            var parts = new List<UploadPart>(totalParts);
+            for (var partNumber = 1; partNumber <= totalParts; partNumber++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var offset = (partNumber - 1L) * partSize;
+                var size = Math.Min(partSize, request.Size - offset);
+                var result = await client.UploadPartCopyAsync(
+                    new UploadPartCopyRequest
+                    {
+                        Bucket = bucket,
+                        Key = request.DestinationObjectKey,
+                        UploadId = initiated.UploadId,
+                        PartNumber = partNumber,
+                        SourceBucket = bucket,
+                        SourceKey = request.SourceObjectKey,
+                        SourceRange = $"bytes={offset}-{offset + size - 1}",
+                        IfMatch = request.SourceETag
+                    },
+                    cancellationToken: cancellationToken);
+                if (string.IsNullOrWhiteSpace(result.ETag))
+                {
+                    throw new IOException("OSS 云端复制分片响应缺少 ETag。");
+                }
+
+                parts.Add(new UploadPart
+                {
+                    PartNumber = partNumber,
+                    ETag = result.ETag
+                });
+            }
+
+            await client.CompleteMultipartUploadAsync(
+                new CompleteMultipartUploadRequest
+                {
+                    Bucket = bucket,
+                    Key = request.DestinationObjectKey,
+                    UploadId = initiated.UploadId,
+                    ForbidOverwrite = true,
+                    CompleteMultipartUpload = new CompleteMultipartUpload
+                    {
+                        Parts = parts
+                    }
+                },
+                cancellationToken: cancellationToken);
+        }
+        catch
+        {
+            try
+            {
+                await client.AbortMultipartUploadAsync(
+                    new AbortMultipartUploadRequest
+                    {
+                        Bucket = bucket,
+                        Key = request.DestinationObjectKey,
+                        UploadId = initiated.UploadId
+                    },
+                    cancellationToken: CancellationToken.None);
+            }
+            catch
+            {
+            }
+
+            throw;
         }
     }
 
@@ -546,6 +688,21 @@ public sealed class AliyunOssStorageAdapter : IObjectStorageAdapter
             [Sha256MetadataKey] = request.Sha256,
             [AssetIdMetadataKey] = request.AssetId.ToString("D")
         };
+    }
+
+    private static Dictionary<string, string> CreateMetadata(
+        ObjectStorageCopyRequest request)
+    {
+        var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [AssetIdMetadataKey] = request.AssetId.ToString("D")
+        };
+        if (!string.IsNullOrWhiteSpace(request.Sha256))
+        {
+            metadata[Sha256MetadataKey] = request.Sha256;
+        }
+
+        return metadata;
     }
 
     private static string? ReadMetadata(

@@ -5,6 +5,36 @@ namespace CDSI.Agent.Core.Tests.Storage;
 public sealed class ObjectStorageObjectKeyTests
 {
     [Fact]
+    public void TryRenameFile_PreservesTheExistingDirectory()
+    {
+        var success = ObjectStorageObjectKey.TryRenameFile(
+            "项目一/原文件.mp4",
+            "成片.mp4",
+            out var objectKey,
+            out var errorMessage);
+
+        Assert.True(success);
+        Assert.Null(errorMessage);
+        Assert.Equal("项目一/成片.mp4", objectKey);
+    }
+
+    [Theory]
+    [InlineData("folder/name.mp4")]
+    [InlineData("folder\\name.mp4")]
+    [InlineData("..")]
+    public void TryRenameFile_RejectsAPathInsteadOfAFilename(string filename)
+    {
+        var success = ObjectStorageObjectKey.TryRenameFile(
+            "项目一/原文件.mp4",
+            filename,
+            out _,
+            out var errorMessage);
+
+        Assert.False(success);
+        Assert.NotNull(errorMessage);
+    }
+
+    [Fact]
     public void TryCreateForAsset_PreservesTheRequestedUnicodeFilename()
     {
         var assetId = Guid.Parse("00112233-4455-6677-8899-aabbccddeeff");

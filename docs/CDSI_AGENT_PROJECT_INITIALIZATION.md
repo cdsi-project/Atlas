@@ -1,4 +1,4 @@
-# CDSI Agent — Project Initialization Guide
+# CDSI Beacon — Historical Project Initialization Guide
 
 > Project: `cdsi-agent`
 > Target Platform: Windows
@@ -7,6 +7,9 @@
 > UI Framework: WinForms
 > IDE: Visual Studio 2026
 > Intended Consumer: Codex / Engineering
+> Status: Historical initialization record; not a current implementation checklist
+
+> **Current baseline (v0.200):** The solution has already been initialized as `CDSI.Agent.slnx`, with the four root projects `CDSI.Agent.Core`, `CDSI.Agent.Application`, `CDSI.Agent.Infrastructure`, and `CDSI.Agent.WinForms`, plus four test projects under `tests`. Object-storage backup, OpenWeb publishing, project management, database snapshots, and the current WinForms UI have been implemented. Statements below such as “Do not implement OSS yet,” the original milestone numbering, suggested folder layout, and three-test-project list describe the repository's starting plan only. Use the root [README](../README.md), [AGENTS.md](../AGENTS.md), and [project/cloud model](CDSI_BEACON_PROJECT_CLOUD_MODEL.md) for current work.
 
 ---
 
@@ -824,7 +827,7 @@ Modify
 
 user files.
 
-The first CDSI Agent milestone is read-only with respect to creator assets.
+The first CDSI Beacon milestone is read-only with respect to creator assets.
 
 Writing is allowed only to CDSI-owned local state:
 

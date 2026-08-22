@@ -24,6 +24,19 @@ public interface IObjectStorageAdapter
         IProgress<ObjectStorageDownloadProgress>? progress = null,
         CancellationToken cancellationToken = default);
 
+    Task<ObjectStorageObjectInfo> CopyAsync(
+        ObjectStorageCopyRequest request,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException(
+            $"{Provider} 存储适配器不支持云端对象重命名。");
+
+    Task DeleteAsync(
+        ObjectStorageConnection connection,
+        string objectKey,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException(
+            $"{Provider} 存储适配器不支持删除云端对象。");
+
     Task AbortMultipartUploadAsync(
         ObjectStorageConnection connection,
         MultipartUploadSession session,

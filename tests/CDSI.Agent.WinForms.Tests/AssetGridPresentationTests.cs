@@ -84,6 +84,8 @@ public sealed class AssetGridPresentationTests
         Assert.Contains(
             $"时间 {backupTime.ToLocalTime():yyyy-MM-dd HH:mm}",
             summary);
+        Assert.DoesNotContain(Environment.NewLine, summary);
+        Assert.Contains("  |  ", summary);
     }
 
     [Fact]

@@ -48,4 +48,21 @@ public interface IObjectStorageUploadRepository
     Task<IReadOnlyList<ObjectStorageRestoreSource>> ListObjectStorageRestoreSourcesAsync(
         Guid assetId,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ObjectStorageRestoreSource>> ListManagedObjectStorageBackupsAsync(
+        CancellationToken cancellationToken = default);
+
+    Task<ObjectStorageRestoreSource?> GetManagedObjectStorageBackupAsync(
+        Guid storageLocationId,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> ReplaceObjectStorageLocationAsync(
+        ObjectStorageLocation location,
+        string expectedObjectKey,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> DeleteObjectStorageLocationAsync(
+        Guid storageLocationId,
+        string expectedObjectKey,
+        CancellationToken cancellationToken = default);
 }
