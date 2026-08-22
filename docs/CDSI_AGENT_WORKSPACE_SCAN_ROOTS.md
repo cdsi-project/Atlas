@@ -1,12 +1,12 @@
 # CDSI Beacon — Workspace and Scan Roots Specification
 
-> Project: `cdsi-agent`
+> Project: CDSI Beacon (repository: `cdsi-agent`)
 >
 > Document Type: Architecture / Implementation Specification
 >
 > Target: Codex / Engineering
 >
-> Status: Implemented baseline with historical design sections; reviewed for v0.200
+> Status: Implemented v0.200 baseline with historical design sections
 
 > **Implementation note:** Beacon now creates and persists a managed workspace, supports multiple read-only scan roots, per-root file-type / extension policies, enable and soft-remove actions, overlap checks, volume-identity remapping, explicit copy / move operations, and scan-root exclusion without deleting source files. The milestone checkboxes near the end are retained as historical planning records and must not be used to infer current implementation status. `FileSystemWatcher`, periodic background reconciliation, NAS reconnect automation, and automatic upload remain future work. Cloud backup is now project-scoped; see the [project/cloud model](CDSI_BEACON_PROJECT_CLOUD_MODEL.md).
 

@@ -1,13 +1,13 @@
 # CDSI Beacon — Historical Windows MVP Technical Design
 
-> Project: `cdsi-agent`
+> Project: CDSI Beacon (repository: `cdsi-agent`)
 > Platform: Windows First
 > UI: WinForms
 > Language: C# / .NET
 > Local Database: SQLite
 > Status: Historical draft v0.1; not the current product specification
 
-> **Current baseline (v0.200):** Beacon has progressed beyond the milestone checklists in this document. The running WinForms application now includes multi-root scanning, project management, verified backups to Aliyun OSS / Tencent COS / Qiniu Kodo, cloud restore and deletion, OpenWeb publishing, database snapshots, pagination, filtering, statistics, logs, and single-instance behavior. CDSI Server integration, AI classification, embeddings, background body-text extraction, and telemetry are still not implemented. Use the root [README](../README.md) and [AGENTS.md](../AGENTS.md) as the current source of truth; use the [project/cloud model](CDSI_BEACON_PROJECT_CLOUD_MODEL.md) for the next storage architecture.
+> **Current released baseline (v0.200):** Beacon has progressed beyond the milestone checklists in this document. The WinForms implementation now includes multi-root scanning, project management, verified backups to Aliyun OSS / Tencent COS / Qiniu Kodo, selected-replica cloud restore and deletion, OpenWeb publishing, database snapshots, pagination, filtering, statistics, logs, and single-instance behavior. CDSI Server integration, AI classification, embeddings, background body-text extraction, and telemetry are still not implemented. Use the root [README](../README.md) and [AGENTS.md](../AGENTS.md) as the current source of truth; use the [project/cloud model](CDSI_BEACON_PROJECT_CLOUD_MODEL.md) for the next storage architecture.
 
 ---
 

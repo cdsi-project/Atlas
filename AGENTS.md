@@ -45,7 +45,7 @@ The agent should help answer questions such as:
 
 ### 1.1 Current Repository Baseline (v0.200)
 
-The current repository is a working Windows desktop application built with .NET 10, WinForms, and SQLite. Before planning or implementing a change, treat the following as the deployed baseline rather than as future requirements:
+The current released baseline is v0.200, a working Windows desktop application built with .NET 10, WinForms, and SQLite. Before planning or implementing a change, distinguish these implemented capabilities from future requirements:
 
 - local workspace and multiple read-only scan roots
 - stable local Asset IDs and local Project IDs
@@ -155,7 +155,7 @@ An asset may have multiple physical locations. The same physical file may move w
 
 ### 2.3A Project Is the Managed Operation Boundary
 
-Assets may be discovered before they are classified, but cloud backup, project synchronization, project restore, and project-level cloud deletion must operate in an explicit Project context.
+Assets may be discovered before they are classified. New cloud backup uploads must operate in an explicit Project context. In the current implementation, restore and remote deletion still act on explicitly selected registered replicas, and the cloud-management UI groups them by object-key prefix. Whole-project restore, manifest-backed synchronization, and stable project-level remote deletion are target behavior, not current behavior.
 
 Project identity must follow these rules:
 
@@ -915,7 +915,7 @@ signed_download
 
 Do not design CDSI around one vendor.
 
-Storage adapters operate on objects, but user-facing backup and restore workflows operate on Projects. A project may bind zero, one, or multiple storage profiles. Per-asset storage-location records remain necessary for integrity checks and partial retry, but must roll up into an explicit project sync state.
+Storage adapters operate on objects. New backup uploads operate on Projects, while current restore and deletion operate on explicitly selected registered replicas. In the target model, all user-facing backup, restore, and reconciliation workflows roll up into Projects. A project may bind zero, one, or multiple storage profiles, and per-asset storage-location records remain necessary for integrity checks and partial retry.
 
 ---
 
@@ -1030,41 +1030,18 @@ Do not claim an asset is safely backed up merely because an upload request succe
 
 A local embedded database is recommended. SQLite is acceptable unless a stronger requirement emerges.
 
-Current and expected tables/entities include:
+`CDSI.Agent.Infrastructure/Persistence/DatabaseMigrator.cs` is the authoritative
+schema definition. Do not duplicate a full table-name inventory in this guide;
+it will drift from migrations. The current persistence model covers workspaces,
+volumes and scan roots, assets and locations, metadata, tags, projects and
+membership, storage profiles and remote locations, file/upload/restore audits,
+OpenWeb publications, Git profiles, and application settings.
 
-```text
-schema_migrations
-devices
-scan_roots
-scan_jobs
-assets
-asset_locations
-asset_metadata
-managed_workspaces
-local_volumes
-asset_directory_exclusions
-asset_collections
-asset_collection_items
-asset_collection_backup_profiles
-asset_collection_deletion_audit
-asset_tags
-asset_tag_links
-storage_profiles
-object_storage_locations
-file_operations
-file_operation_items
-upload_jobs
-upload_items
-multipart_upload_sessions
-restore_jobs
-restore_items
-openweb_sources
-openweb_publications
-git_profiles
-agent_settings
-```
-
-The current schema uses `asset_collections` as the persisted project model. Database snapshot manifests live beside snapshot files in the managed workspace rather than in a database table. The legacy `asset_text` table remains only for backward-compatible, non-destructive migration behavior.
+The current schema uses `asset_collections` as the persisted project model.
+Database snapshots and their JSON manifests are filesystem artifacts under the
+managed workspace's `System/DatabaseBackups` directory, not SQLite rows. The
+legacy `asset_text` table remains only for backward-compatible, non-destructive
+migration behavior.
 
 Future semantic tables such as asset features, embeddings, relations, clusters, and inbox items should be added only when their owning feature is implemented. Do not infer that a table listed in an older design document already exists.
 
@@ -1380,7 +1357,7 @@ Preserve clean module boundaries.
 
 ## 45. Recommended Initial Implementation Order
 
-This section is historical planning context. The repository has already completed and extended the deterministic Windows MVP through v0.200. For current behavior, use the README and Section 1.1. Remaining work should now prioritize stable project identity across local and cloud state:
+This section is historical planning context. The current working tree targeted for v0.200 has completed and extended the deterministic Windows MVP. For current behavior, use the README and Section 1.1. Remaining work should now prioritize stable project identity across local and cloud state:
 
 ```text
 1. Stable ProjectId in remote project manifests
@@ -1400,7 +1377,7 @@ Do not start with the LLM layer.
 
 ## 46. MVP Definition
 
-The original deterministic MVP is complete and retained here as an acceptance baseline. Current v0.200 can:
+The original deterministic MVP is complete and retained here as an acceptance baseline. The current working tree can:
 
 - configure one or more local scan roots
 - scan directories safely
@@ -1550,10 +1527,10 @@ When modifying this repository:
 24. Make failures observable.
 25. Keep operations resumable where practical.
 26. Treat the repository-root `VERSION` file as the only application version source.
-27. For each code-version commit, increment `VERSION` by `0.001`, run the full Release test suite, publish the self-contained single-file `win-x64` application, and smoke-check that the executable starts. A documentation-only change does not require a version bump or binary publish.
+27. For a code-version or release commit, update `VERSION` according to the repository's `0.001` version sequence and run the full Release test suite. Create the self-contained single-file `win-x64` publish output and smoke-check it when preparing a binary release; a documentation-only change does not require a version bump or binary publish.
 28. Use `dotnet test .\CDSI.Agent.slnx -c Release --no-restore` for the standard full suite after dependencies are restored. Do not run build, test, and publish concurrently against the same output directories because MSBuild file locks can make results nondeterministic.
-29. Keep new cloud backup, restore, reconciliation, and remote deletion behavior project-scoped. Do not allow project names or object-key prefixes to become canonical identity.
-30. Preserve compatibility with v0.200 legacy cloud records and require explicit confirmation before any migration, merge, overwrite, or remote deletion.
+29. Keep new cloud uploads project-scoped. When adding whole-project restore, reconciliation, or deletion, use stable ProjectId/manifest identity; do not allow project names or object-key prefixes to become canonical identity. Preserve the current selected-replica restore/delete workflows until their replacement is complete.
+30. Preserve compatibility with legacy name-prefix cloud records used by the current working tree and earlier versions. Require explicit confirmation before any migration, merge, overwrite, or remote deletion.
 
 ---
 

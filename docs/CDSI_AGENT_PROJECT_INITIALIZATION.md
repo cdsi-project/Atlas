@@ -1,6 +1,6 @@
 # CDSI Beacon — Historical Project Initialization Guide
 
-> Project: `cdsi-agent`
+> Project: CDSI Beacon (repository: `cdsi-agent`)
 > Target Platform: Windows
 > Language: C#
 > Runtime: .NET 10
@@ -9,7 +9,7 @@
 > Intended Consumer: Codex / Engineering
 > Status: Historical initialization record; not a current implementation checklist
 
-> **Current baseline (v0.200):** The solution has already been initialized as `CDSI.Agent.slnx`, with the four root projects `CDSI.Agent.Core`, `CDSI.Agent.Application`, `CDSI.Agent.Infrastructure`, and `CDSI.Agent.WinForms`, plus four test projects under `tests`. Object-storage backup, OpenWeb publishing, project management, database snapshots, and the current WinForms UI have been implemented. Statements below such as “Do not implement OSS yet,” the original milestone numbering, suggested folder layout, and three-test-project list describe the repository's starting plan only. Use the root [README](../README.md), [AGENTS.md](../AGENTS.md), and [project/cloud model](CDSI_BEACON_PROJECT_CLOUD_MODEL.md) for current work.
+> **Current released baseline (v0.200):** The solution has already been initialized as `CDSI.Agent.slnx`, with the four root projects `CDSI.Agent.Core`, `CDSI.Agent.Application`, `CDSI.Agent.Infrastructure`, and `CDSI.Agent.WinForms`, plus four test projects under `tests`. Object-storage backup, OpenWeb publishing, project management, database snapshots, and the current WinForms UI have been implemented. Statements below such as “Do not implement OSS yet,” the original milestone numbering, suggested folder layout, and three-test-project list describe the repository's starting plan only. Use the root [README](../README.md), [AGENTS.md](../AGENTS.md), and [project/cloud model](CDSI_BEACON_PROJECT_CLOUD_MODEL.md) for current work.
 
 ---
 
