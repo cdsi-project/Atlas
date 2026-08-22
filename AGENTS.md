@@ -10,7 +10,7 @@ It runs on the creator's own device and is responsible for discovering, indexing
 
 The agent must be designed as a **local-first, privacy-conscious, non-destructive system**.
 
-In the target architecture, CDSI Server is the optional control plane, CDSI Beacon is the local execution plane, and cloud storage such as Aliyun OSS, AWS S3, Cloudflare R2, Tencent COS, MinIO, NAS, or local filesystem is the data/storage plane. The current v0.200 application operates without CDSI Server.
+In the target architecture, CDSI Server is the optional control plane, CDSI Beacon is the local execution plane, and cloud storage such as Aliyun OSS, AWS S3, Cloudflare R2, Tencent COS, MinIO, NAS, or local filesystem is the data/storage plane. The current released v0.200 application operates without CDSI Server.
 
 ---
 
