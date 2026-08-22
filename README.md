@@ -61,7 +61,7 @@ CDSI Beacon 是 CDSI 的本地资产发现与索引应用。它在创作者自�
 - 按对象存储兼容规则校验 Bucket，并规范化提供商、Endpoint、地域和 HTTPS 设置
 - SQLite 只保存非敏感配置；AccessKey Secret、各源站的 WordPress 应用程序密码和 Git 密码按配置独立保存到 Windows 凭据管理器
 - 在资产列表中显示稳定的资产 ID，资产身份不依赖文件名或存储位置
-- 应用层在上传前再次校验所选资产的项目成员关系，不能绕过界面直接备份未分类资产
+- 当前界面的项目同步路径在上传前再次校验所选资产的项目成员关系，不会通过该路径备份未加入项目的资产；底层保留旧式无项目备份入口用于兼容既有记录
 - 新备份的远端对象使用 <code>storage_profile_id + &lt;项目名称&gt;/&lt;原文件名&gt;</code> 标识；旧版本创建的 <code>assets/&lt;AssetId&gt;/...</code> 备份记录仍可校验和取回
 - 上传以只读流处理本地文件；大文件使用分片上传，并将 UploadId 和已完成分片保存到 SQLite 以支持重试续传
 - 上传前拒绝覆盖同一对象键下内容不同的对象；相同大小和 SHA-256 的对象可幂等复用
@@ -125,49 +125,11 @@ Beacon 当前以“项目”作为新云端备份的发起边界：资产可以�
 
 Beacon 当前支持使用阿里云 OSS、七牛云 Kodo 或腾讯云 COS 保存可校验的资产副本。Beacon 不会代替用户开通云服务、创建 Bucket、创建访问凭据或修改云端权限，也不会因为保存配置而自动连接或上传文件。
 
-### 阿里云 OSS 云端准备
+### 云服务商官方文档
 
-1. 在阿里云 OSS 控制台创建一个 Bucket。建议为 Beacon 使用独立的私有 Bucket，并根据数据所在地、访问延迟和费用选择地域及存储类型。
-2. 查询该 Bucket 对应的[地域 ID 和外网 Endpoint](https://help.aliyun.com/zh/oss/user-guide/regions-and-endpoints)。普通 Windows 电脑应使用外网 Endpoint；带 <code>-internal</code> 的内网 Endpoint 只适用于同地域的阿里云内网环境。
-3. 创建专用于 Beacon 的 [RAM 用户和 AccessKey](https://help.aliyun.com/zh/oss/developer-reference/use-the-accesskey-pair-of-a-ram-user-to-initiate-a-request)，不要使用阿里云主账号 AccessKey。AccessKey Secret 只在创建时显示一次，应立即妥善保存。
-4. 为 RAM 用户授予目标 Bucket 的最小权限。Beacon 需要写入和校验对象、断点续传以及取回文件；将下例中的 <code>YOUR_BUCKET</code> 替换为实际 Bucket 名称：
-
-~~~json
-{
-  "Version": "1",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "oss:GetObject",
-        "oss:PutObject",
-        "oss:ListParts",
-        "oss:AbortMultipartUpload",
-        "oss:DeleteObject"
-      ],
-      "Resource": [
-        "acs:oss:*:*:YOUR_BUCKET/*"
-      ]
-    }
-  ]
-}
-~~~
-
-其中 <code>oss:GetObject</code> 同时用于上传前后的 HEAD 元数据校验、文件取回和删除前核验；<code>oss:PutObject</code> 用于普通上传和分片上传；<code>oss:DeleteObject</code> 只在用户确认删除云端备份后使用；<code>oss:ListParts</code> 和 <code>oss:AbortMultipartUpload</code> 用于恢复或清理分片任务。Beacon 不需要列出全部 Bucket。阿里云的操作与权限对应关系可参考[分片上传权限说明](https://help.aliyun.com/zh/oss/user-guide/multipart-upload/)和 [HeadObject 权限说明](https://help.aliyun.com/zh/oss/developer-reference/headobject/)。
-
-### 七牛云 Kodo 云端准备
-
-1. 在七牛云对象存储控制台创建一个空间，建议为 Beacon 使用独立的私有空间。
-2. 在七牛云的 [S3 Endpoint 与区域 ID 对照表](https://developer.qiniu.com/kodo/4088/s3-access-domainname)中找到空间所在区域。例如华东-浙江对应 Endpoint <code>s3.cn-east-1.qiniucs.com</code>、Region ID <code>cn-east-1</code>。这里填写 S3 Endpoint，不填写空间绑定的公开访问域名，也不在 Endpoint 前添加空间名称。
-3. 创建或选择具有目标空间读写权限的 AccessKey / SecretKey。Beacon 通过七牛云的 [S3 兼容 API](https://developer.qiniu.com/kodo/4087/compatible-s3-api)执行 HeadObject、GetObject、PutObject、DeleteObject 和分片操作；凭据必须允许读取、写入和删除目标对象，以及列出和中止分片任务。
-4. 在空间概览中确认“空间 S3 域名”对应的 S3 空间名称，并将它作为 Beacon 的 Bucket 填写；它可能与常规空间名称不同。当前版本使用路径式 S3 访问，并将 Region ID 用于请求签名；Endpoint、S3 空间名称、空间区域和 Region ID 必须相互对应。
-
-### 腾讯云 COS 云端准备
-
-1. 在腾讯云 COS 控制台创建一个私有存储桶，并在存储桶概览中确认地域与完整存储桶名称。Beacon 的 Bucket 必须填写带 APPID 后缀的全名，例如 <code>examplebucket-1250000000</code>。
-2. 根据腾讯云的[地域和访问域名](https://cloud.tencent.com/document/product/436/6224)填写服务 Endpoint 与 Region ID。广州地域示例为 Endpoint <code>cos.ap-guangzhou.myqcloud.com</code>、Region ID <code>ap-guangzhou</code>；Endpoint 不包含 Bucket 名称。
-3. 在访问管理 CAM 中为 Beacon 创建专用子账号密钥，AccessKey ID 一栏填写 SecretId，AccessKey Secret 一栏填写 SecretKey。按最小权限原则授予目标存储桶的 <code>cos:HeadObject</code>、<code>cos:GetObject</code>、<code>cos:PutObject</code>、<code>cos:DeleteObject</code>、<code>cos:InitiateMultipartUpload</code>、<code>cos:ListParts</code>、<code>cos:UploadPart</code>、<code>cos:CompleteMultipartUpload</code> 和 <code>cos:AbortMultipartUpload</code> 权限。
-4. Beacon 按腾讯云的 [AWS S3 SDK 兼容方式](https://cloud.tencent.com/document/product/436/37421)访问 COS，并使用虚拟主机式域名。2024 年及以后创建的 COS 存储桶不支持路径式域名，因此不要把 Bucket 拼到 Endpoint 路径中。
+- [阿里云对象存储 OSS 官方文档](https://help.aliyun.com/zh/oss/)
+- [七牛云对象存储 Kodo 官方文档](https://developer.qiniu.com/kodo)
+- [腾讯云对象存储 COS 官方文档](https://cloud.tencent.com/document/product/436)
 
 ### 在 Beacon 中添加配置
 
@@ -197,7 +159,7 @@ Endpoint 可填写主机名，也可填写与“使用 HTTPS”选项一致的�
 5. 大文件自动使用分片上传，失败或取消后可重试续传。上传完成后，Beacon 会通过对象大小和 <code>cdsi-sha256</code> 元数据校验结果；通过校验的备份在资产列表中以绿色显示。
 6. 需要恢复时，可在“全部资产”中选择资产并右键“从 OSS 取回”，也可在“云备份管理”中先选择项目，再选择一个或多个副本后右键“取回”。只能选择本机已登记、凭据有效且完整性状态正常的云端副本；目标可选 CDSI 工作目录或用户指定目录。
 7. 下载先写入临时文件，大小和 SHA-256 校验通过后才登记为本地位置。目标存在相同内容时直接复用，存在不同内容时拒绝覆盖。旧版本以 <code>assets/&lt;AssetId&gt;/...</code> 保存的备份同样可以取回。
-8. 在“云备份管理”中右键选择“删除备份”会永久删除所选云端对象及其本机备份映射。Beacon 会在删除前核对对象大小和 SHA-256 并再次确认，不会删除本地文件或项目关系。
+8. 在“云备份管理”中右键选择“删除备份”会永久删除所选云端对象及其本机备份映射。远端对象仍存在时，Beacon 会在删除前核对对象大小和 SHA-256 并再次确认；远端对象已经不存在时只清理本机失效映射。两种情况都不会删除本地文件或项目关系。
 9. 在左侧“备份项目”中右键选择“删除备份项目”，可一次删除该项目下的全部云端副本。此操作同样逐个核验并要求确认，不会删除本地项目、项目成员关系或本地文件。
 
 Beacon 保存的是 Bucket、对象键、大小、SHA-256 和校验状态，不依赖公开 URL。Bucket 可以保持私有，无需为备份文件开放匿名访问。
@@ -245,7 +207,7 @@ CDSI Beacon 采用本地优先、默认非破坏性的处理方式，但不能�
 - “移动”是需要用户确认的显式操作。系统只在目标副本写入、校验和登记成功后删除源文件，但移动仍会改变文件位置，执行前应核对确认清单并保留必要备份。
 - OSS 备份只上传用户明确选择并确认的文件。上传使用只读流，拒绝覆盖同一对象键下内容不同的远端对象，完成后验证对象大小和 SHA-256 元数据。
 - 云端取回只下载用户明确选择并确认的健康备份。下载先写临时文件，大小和 SHA-256 校验通过后才登记；目标已有不同内容时拒绝覆盖，失败的临时文件不会成为资产位置。
-- 删除云端备份只处理用户明确选择并确认的对象；删除前会核对大小和 SHA-256，操作不会删除本地文件或项目关系。
+- 删除云端备份只处理用户明确选择并确认的对象；远端对象仍存在时会在删除前核对大小和 SHA-256，已经不存在时只清理本机失效映射。操作不会删除本地文件或项目关系。
 - 删除备份配置不会删除 Bucket 中的对象；文件离线或扫描暂时失败也不会删除逻辑资产记录。
 
 ### 密码与凭据
