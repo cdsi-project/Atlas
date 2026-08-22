@@ -310,7 +310,7 @@ public sealed class ScanRootDialog : Form
             MessageBox.Show(
                 this,
                 "请选择当前可用的扫描目录。",
-                "CDSI Atlas",
+                "CDSI Beacon",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;

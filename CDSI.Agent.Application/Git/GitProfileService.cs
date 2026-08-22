@@ -372,7 +372,7 @@ public sealed class GitProfileService
         if (!File.Exists(privateKeyPath))
         {
             throw new ArgumentException(
-                "所选公钥缺少对应的私钥文件，Atlas 不会读取该私钥。",
+                "所选公钥缺少对应的私钥文件，Beacon 不会读取该私钥。",
                 nameof(value));
         }
 

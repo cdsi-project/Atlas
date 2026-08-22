@@ -208,7 +208,7 @@ internal sealed class AssetDetailsForm : Form
             MessageBox.Show(
                 this,
                 $"文件当前位置不存在：{Environment.NewLine}{_asset.Path}",
-                "CDSI Atlas",
+                "CDSI Beacon",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;

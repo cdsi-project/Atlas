@@ -34,6 +34,7 @@ static class Program
         RuntimeLogService? runtimeLog = null;
         try
         {
+            // Retain the legacy mutex name so Atlas and Beacon cannot run together.
             using var singleInstance = new SingleInstanceCoordinator("CDSI.Atlas");
             if (!singleInstance.IsPrimaryInstance)
             {
@@ -128,7 +129,7 @@ static class Program
             mainForm.Shown += (_, _) => singleInstance.StartListening(
                 () => MainWindowActivator.RequestActivation(mainForm));
             System.Windows.Forms.Application.Run(mainForm);
-            runtimeLog.WriteInformation("CDSI Atlas 正常退出");
+            runtimeLog.WriteInformation("CDSI Beacon 正常退出");
         }
         catch (Exception exception)
         {

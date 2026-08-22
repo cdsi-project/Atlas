@@ -318,7 +318,7 @@ public sealed class ConfigurationFormLayoutTests
             Guid.NewGuid(),
             "主仓库",
             CDSI.Agent.Core.Git.GitHostingProvider.Gitee,
-            "https://gitee.com/cdsi-project/atlas.git",
+            "https://gitee.com/cdsi-project/beacon.git",
             "master",
             CDSI.Agent.Core.Git.GitAuthenticationMethod.Password,
             "cdsi-project",
@@ -371,7 +371,7 @@ public sealed class ConfigurationFormLayoutTests
             Guid.NewGuid(),
             "SSH 仓库",
             CDSI.Agent.Core.Git.GitHostingProvider.GitHub,
-            "git@github.com:cdsi-project/Atlas.git",
+            "git@github.com:cdsi-project/Beacon.git",
             "main",
             CDSI.Agent.Core.Git.GitAuthenticationMethod.Ssh,
             string.Empty,
@@ -449,7 +449,7 @@ public sealed class ConfigurationFormLayoutTests
     }
 
     [Fact]
-    public void SshKeyGenerationCommand_UsesANewExplicitFile()
+    public void SshKeySupport_FindsLegacyAtlasKeyPair()
     {
         var sshDirectory = Path.Combine(
             Path.GetTempPath(),
@@ -459,13 +459,43 @@ public sealed class ConfigurationFormLayoutTests
         {
             File.WriteAllText(Path.Combine(sshDirectory, "id_ed25519_atlas"), "private");
             File.WriteAllText(Path.Combine(sshDirectory, "id_ed25519_atlas.pub"), "public");
+
+            var pair = SshKeySupport.FindDefaultKeyPair(sshDirectory);
+
+            Assert.NotNull(pair);
+            Assert.EndsWith(
+                "id_ed25519_atlas.pub",
+                pair.PublicKeyPath,
+                StringComparison.Ordinal);
+            Assert.EndsWith(
+                "id_ed25519_atlas",
+                pair.PrivateKeyPath,
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(sshDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void SshKeyGenerationCommand_UsesANewExplicitFile()
+    {
+        var sshDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"cdsi-ssh-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(sshDirectory);
+        try
+        {
+            File.WriteAllText(Path.Combine(sshDirectory, "id_ed25519_beacon"), "private");
+            File.WriteAllText(Path.Combine(sshDirectory, "id_ed25519_beacon.pub"), "public");
             var pair = SshKeySupport.CreateUnusedKeyPairPaths(sshDirectory);
             var startInfo = SshKeySupport.CreateSshKeyGenerationStartInfo(
                 "creator@example.com",
                 pair.PrivateKeyPath);
 
             Assert.EndsWith(
-                "id_ed25519_atlas_2",
+                "id_ed25519_beacon_2",
                 pair.PrivateKeyPath,
                 StringComparison.Ordinal);
             Assert.Equal("ssh-keygen.exe", startInfo.FileName);

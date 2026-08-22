@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-CDSI Atlas uses third-party software. The CDSI Atlas license does not replace
+CDSI Beacon uses third-party software. The CDSI Beacon license does not replace
 the licenses of these components. Copyright remains with the respective
 authors and contributors.
 

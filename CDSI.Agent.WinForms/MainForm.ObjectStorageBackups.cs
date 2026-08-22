@@ -153,7 +153,7 @@ public sealed partial class MainForm
             MessageBox.Show(
                 this,
                 "选择中包含不可用的本地位置，请重新选择可用文件。",
-                "CDSI Atlas",
+                "CDSI Beacon",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;
@@ -178,7 +178,7 @@ public sealed partial class MainForm
                 $"该项目绑定的 {boundProfileIds.Length:N0} 个云端备份配置中，有 " +
                 $"{boundProfileIds.Length - profiles.Count:N0} 个不存在或缺少有效凭据。" +
                 "请检查“设置”的“备份配置”。",
-                "CDSI Atlas",
+                "CDSI Beacon",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;
@@ -189,7 +189,7 @@ public sealed partial class MainForm
             MessageBox.Show(
                 this,
                 "尚未配置带有效凭据的备份存储。请先在“设置”的“备份配置”中添加配置。",
-                "CDSI Atlas",
+                "CDSI Beacon",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;
@@ -341,7 +341,7 @@ public sealed partial class MainForm
         MessageBox.Show(
             this,
             $"{_statusLabel.Text}{Environment.NewLine}{Environment.NewLine}{details}",
-            "CDSI Atlas",
+            "CDSI Beacon",
             MessageBoxButtons.OK,
             completedTargets == totalTargets
                 ? MessageBoxIcon.Information
@@ -384,7 +384,7 @@ public sealed partial class MainForm
             MessageBox.Show(
                 this,
                 $"备份和完整性校验完成，共处理 {result.CompletedItems:N0} 个资产。",
-                "CDSI Atlas",
+                "CDSI Beacon",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;
@@ -412,7 +412,7 @@ public sealed partial class MainForm
             string.IsNullOrWhiteSpace(details)
                 ? _statusLabel.Text
                 : $"{_statusLabel.Text}{Environment.NewLine}{Environment.NewLine}{details}",
-            "CDSI Atlas",
+            "CDSI Beacon",
             MessageBoxButtons.OK,
             result.Status == UploadJobStatus.Cancelled
                 ? MessageBoxIcon.Information

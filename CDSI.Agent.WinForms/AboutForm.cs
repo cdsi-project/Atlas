@@ -4,11 +4,11 @@ namespace CDSI.Agent.WinForms;
 
 internal sealed class AboutForm : Form
 {
-    internal const string RepositoryUrl = "https://github.com/cdsi-project/Atlas";
+    internal const string RepositoryUrl = "https://github.com/cdsi-project/Beacon";
 
     public AboutForm(string version)
     {
-        Text = "关于 CDSI Atlas";
+        Text = "关于 CDSI Beacon";
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(460, 250);
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -34,7 +34,7 @@ internal sealed class AboutForm : Form
         layout.Controls.Add(new Label
         {
             Dock = DockStyle.Fill,
-            Text = "CDSI Atlas",
+            Text = "CDSI Beacon",
             TextAlign = ContentAlignment.MiddleLeft,
             Font = new Font("Segoe UI Semibold", 20F),
             ForeColor = Color.FromArgb(31, 37, 43)
@@ -57,10 +57,10 @@ internal sealed class AboutForm : Form
         var repositoryLink = new LinkLabel
         {
             Dock = DockStyle.Fill,
-            Text = "GitHub: github.com/cdsi-project/Atlas",
+            Text = "GitHub: github.com/cdsi-project/Beacon",
             TextAlign = ContentAlignment.MiddleLeft,
             LinkColor = Color.FromArgb(24, 121, 78),
-            AccessibleName = "CDSI Atlas GitHub 仓库"
+            AccessibleName = "CDSI Beacon GitHub 仓库"
         };
         repositoryLink.LinkClicked += (_, _) =>
         {

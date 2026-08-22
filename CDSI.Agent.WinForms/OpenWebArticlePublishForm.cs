@@ -185,7 +185,7 @@ public sealed class OpenWebArticlePublishForm : Form
             MessageBox.Show(
                 this,
                 "必须填写文章标题。",
-                "CDSI Atlas",
+                "CDSI Beacon",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             _titleTextBox.Focus();

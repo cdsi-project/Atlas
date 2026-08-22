@@ -256,7 +256,7 @@ public sealed partial class MainForm
             MessageBox.Show(
                 this,
                 exception.Message,
-                "CDSI Atlas",
+                "CDSI Beacon",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;

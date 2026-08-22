@@ -2,21 +2,21 @@
 
 ## Project
 
-**Repository:** `cdsi-agent`
+**Repository:** `Beacon`
 
-`cdsi-agent` is the local execution runtime of CDSI.
+CDSI Beacon is the local execution runtime of CDSI.
 
 It runs on the creator's own device and is responsible for discovering, indexing, understanding, organizing, verifying, and synchronizing local digital assets.
 
 The agent must be designed as a **local-first, privacy-conscious, non-destructive system**.
 
-The CDSI Server is the control plane. `cdsi-agent` is the local execution plane. Cloud storage such as Aliyun OSS, AWS S3, Cloudflare R2, Tencent COS, MinIO, NAS, or local filesystem is the data/storage plane.
+The CDSI Server is the control plane. CDSI Beacon is the local execution plane. Cloud storage such as Aliyun OSS, AWS S3, Cloudflare R2, Tencent COS, MinIO, NAS, or local filesystem is the data/storage plane.
 
 ---
 
 ## 1. Core Product Definition
 
-`cdsi-agent` is NOT:
+CDSI Beacon is NOT:
 
 - a generic file manager
 - a cloud drive client
@@ -26,7 +26,7 @@ The CDSI Server is the control plane. `cdsi-agent` is the local execution plane.
 - a tool that silently reorganizes user files
 - a tool that requires all files to be uploaded to CDSI Server
 
-`cdsi-agent` SHOULD become:
+CDSI Beacon SHOULD become:
 
 > A local digital asset discovery, understanding, organization, integrity, and synchronization agent for creators.
 
@@ -1269,7 +1269,7 @@ Adapt to the actual codebase rather than forcing this exact layout.
 Conceptual structure:
 
 ```text
-cdsi-agent/
+Beacon/
 ├── AGENTS.md
 ├── README.md
 ├── docs/
@@ -1493,7 +1493,7 @@ Before implementing a feature, ask:
 
 > Does this help the creator discover, understand, organize, protect, locate, verify, or synchronize assets while preserving ownership and control?
 
-If not, it is probably outside the core responsibility of `cdsi-agent`.
+If not, it is probably outside the core responsibility of CDSI Beacon.
 
 ---
 

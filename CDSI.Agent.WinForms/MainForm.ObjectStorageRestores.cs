@@ -46,7 +46,7 @@ public sealed partial class MainForm
             MessageBox.Show(
                 this,
                 $"以下资产没有带有效凭据且已通过校验的 OSS 备份：{Environment.NewLine}{string.Join(Environment.NewLine, unavailable)}",
-                "CDSI Atlas",
+                "CDSI Beacon",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;
@@ -148,7 +148,7 @@ public sealed partial class MainForm
             MessageBox.Show(
                 this,
                 $"取回和完整性校验完成，共处理 {result.CompletedItems:N0} 个资产。",
-                "CDSI Atlas",
+                "CDSI Beacon",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;
@@ -176,7 +176,7 @@ public sealed partial class MainForm
             string.IsNullOrWhiteSpace(details)
                 ? _statusLabel.Text
                 : $"{_statusLabel.Text}{Environment.NewLine}{Environment.NewLine}{details}",
-            "CDSI Atlas",
+            "CDSI Beacon",
             MessageBoxButtons.OK,
             result.Status == RestoreJobStatus.Cancelled
                 ? MessageBoxIcon.Information

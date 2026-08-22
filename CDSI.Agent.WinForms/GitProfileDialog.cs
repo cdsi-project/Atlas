@@ -98,7 +98,7 @@ public sealed class GitProfileDialog : Form
 
         var securityNote = new Label
         {
-            Text = "密码仅保存到 Windows 凭据管理器。SSH 模式只记录公钥路径，Atlas 不读取私钥。保存配置不会连接或修改仓库。",
+            Text = "密码仅保存到 Windows 凭据管理器。SSH 模式只记录公钥路径，Beacon 不读取私钥。保存配置不会连接或修改仓库。",
             Dock = DockStyle.Fill,
             ForeColor = Color.FromArgb(88, 98, 106),
             TextAlign = ContentAlignment.TopLeft,
@@ -421,7 +421,7 @@ public sealed class GitProfileDialog : Form
         if (confirm &&
             MessageBox.Show(
                 this,
-                $"Atlas 将打开系统 ssh-keygen，并在以下未占用位置生成新密钥：{Environment.NewLine}{keyPair.PrivateKeyPath}{Environment.NewLine}{Environment.NewLine}请由您设置密钥口令。Atlas 不会覆盖、读取或保存已有私钥。是否继续？",
+                $"Beacon 将打开系统 ssh-keygen，并在以下未占用位置生成新密钥：{Environment.NewLine}{keyPair.PrivateKeyPath}{Environment.NewLine}{Environment.NewLine}请由您设置密钥口令。Beacon 不会覆盖、读取或保存已有私钥。是否继续？",
                 "生成新 SSH 密钥",
                 MessageBoxButtons.OKCancel,
                 MessageBoxIcon.Information) != DialogResult.OK)

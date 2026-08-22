@@ -24,7 +24,7 @@ public sealed partial class MainForm
             MessageBox.Show(
                 this,
                 "当前只支持发布位置可用的 Markdown 或 TXT 文章。",
-                "CDSI Atlas",
+                "CDSI Beacon",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;
@@ -47,7 +47,7 @@ public sealed partial class MainForm
             MessageBox.Show(
                 this,
                 "尚未配置 OpenWeb 源站，请先在设置中添加。",
-                "CDSI Atlas",
+                "CDSI Beacon",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;
@@ -117,7 +117,7 @@ public sealed partial class MainForm
         var dialogResult = MessageBox.Show(
             this,
             message,
-            "CDSI Atlas",
+            "CDSI Beacon",
             buttons,
             MessageBoxIcon.Information);
         if (dialogResult == DialogResult.Yes)

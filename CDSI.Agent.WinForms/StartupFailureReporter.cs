@@ -48,8 +48,8 @@ internal static class StartupFailureReporter
             ? string.Empty
             : $"\n\n诊断日志：{logPath}";
         MessageBox.Show(
-            $"CDSI Atlas 启动失败。\n\n{RedactSensitiveText(exception.Message)}{logText}",
-            "CDSI Atlas",
+            $"CDSI Beacon 启动失败。\n\n{RedactSensitiveText(exception.Message)}{logText}",
+            "CDSI Beacon",
             MessageBoxButtons.OK,
             MessageBoxIcon.Error);
     }

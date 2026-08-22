@@ -13,9 +13,9 @@ public sealed class AboutFormTests
             Descendants(form).OfType<LinkLabel>());
 
         Assert.Equal(
-            "GitHub: github.com/cdsi-project/Atlas",
+            "GitHub: github.com/cdsi-project/Beacon",
             repositoryLink.Text);
-        Assert.Equal("CDSI Atlas GitHub 仓库", repositoryLink.AccessibleName);
+        Assert.Equal("CDSI Beacon GitHub 仓库", repositoryLink.AccessibleName);
     }
 
     [Fact]
@@ -24,7 +24,7 @@ public sealed class AboutFormTests
         var startInfo = AboutForm.CreateRepositoryStartInfo();
 
         Assert.Equal(
-            "https://github.com/cdsi-project/Atlas",
+            "https://github.com/cdsi-project/Beacon",
             startInfo.FileName);
         Assert.True(startInfo.UseShellExecute);
     }

@@ -167,7 +167,7 @@ internal sealed class AssetCollectionDialog : Form
             MessageBox.Show(
                 this,
                 "请输入资产清单名称。",
-                "CDSI Atlas",
+                "CDSI Beacon",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             _nameTextBox.Focus();
@@ -179,7 +179,7 @@ internal sealed class AssetCollectionDialog : Form
             MessageBox.Show(
                 this,
                 "请至少勾选一个云端备份配置，或取消“开启云端备份”。",
-                "CDSI Atlas",
+                "CDSI Beacon",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             _backupProfileListBox.Focus();

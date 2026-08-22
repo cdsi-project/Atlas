@@ -125,7 +125,7 @@ public sealed partial class MainForm
         var thirdPartyItem = new ToolStripMenuItem("第三方许可(&T)");
         thirdPartyItem.Click += (_, _) =>
             ShowLegalDocuments(LegalDocumentPage.ThirdPartyNotices);
-        var aboutItem = new ToolStripMenuItem("关于 CDSI Atlas(&A)");
+        var aboutItem = new ToolStripMenuItem("关于 CDSI Beacon(&A)");
         aboutItem.Click += (_, _) => ShowAboutDialog();
         helpMenu.DropDownItems.AddRange(
             [
@@ -306,7 +306,7 @@ public sealed partial class MainForm
                 MessageBox.Show(
                     this,
                     "尚未配置 CDSI 工作目录。",
-                    "CDSI Atlas",
+                    "CDSI Beacon",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
                 return;
@@ -367,7 +367,7 @@ public sealed partial class MainForm
             this,
             "扫描、索引、哈希、标签和资产清单默认只在本机处理。\n\n" +
             "只有在您明确执行 OSS 备份、OSS 取回或 OpenWeb 发布时，应用才进行相应网络传输。\n\n" +
-            "标签和清单不会修改、移动或重命名源文件；AccessKey Secret、WordPress 密码和 Git 密码保存在当前 Windows 用户的凭据管理器中，Atlas 不读取 SSH 私钥。",
+            "标签和清单不会修改、移动或重命名源文件；AccessKey Secret、WordPress 密码和 Git 密码保存在当前 Windows 用户的凭据管理器中，Beacon 不读取 SSH 私钥。",
             "数据安全与隐私",
             MessageBoxButtons.OK,
             MessageBoxIcon.Information);

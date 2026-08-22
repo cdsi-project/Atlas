@@ -15,7 +15,7 @@ public sealed class RuntimeLogService
             $"runtime-{DateTimeOffset.Now:yyyyMMdd-HHmmss-fff}.log");
 
         WriteInformation(
-            $"CDSI Atlas v{MainForm.GetApplicationVersion()} 启动；" +
+            $"CDSI Beacon v{MainForm.GetApplicationVersion()} 启动；" +
             $"OS={Environment.OSVersion}；Runtime={Environment.Version}");
     }
 
@@ -62,7 +62,7 @@ public sealed class RuntimeLogService
             relativePath.Equals("..", StringComparison.Ordinal) ||
             relativePath.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
         {
-            throw new InvalidOperationException("只能读取 Atlas 日志目录中的文件。");
+            throw new InvalidOperationException("只能读取 Beacon 日志目录中的文件。");
         }
 
         using var stream = new FileStream(
@@ -88,7 +88,7 @@ public sealed class RuntimeLogService
         }
         catch
         {
-            // Logging must never prevent Atlas from starting or completing an operation.
+            // Logging must never prevent Beacon from starting or completing an operation.
         }
     }
 }

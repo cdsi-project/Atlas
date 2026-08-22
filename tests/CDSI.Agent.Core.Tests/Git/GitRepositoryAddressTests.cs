@@ -7,16 +7,16 @@ public sealed class GitRepositoryAddressTests
     [Theory]
     [InlineData(
         GitHostingProvider.GitHub,
-        " HTTPS://GitHub.com/cdsi-project/Atlas.git/ ",
-        "https://github.com/cdsi-project/Atlas.git")]
+        " HTTPS://GitHub.com/cdsi-project/Beacon.git/ ",
+        "https://github.com/cdsi-project/Beacon.git")]
     [InlineData(
         GitHostingProvider.GitHub,
-        "git@github.com:cdsi-project/Atlas.git",
-        "git@github.com:cdsi-project/Atlas.git")]
+        "git@github.com:cdsi-project/Beacon.git",
+        "git@github.com:cdsi-project/Beacon.git")]
     [InlineData(
         GitHostingProvider.Gitee,
-        "ssh://git@gitee.com/cdsi-project/atlas.git",
-        "ssh://git@gitee.com/cdsi-project/atlas.git")]
+        "ssh://git@gitee.com/cdsi-project/beacon.git",
+        "ssh://git@gitee.com/cdsi-project/beacon.git")]
     public void TryNormalize_AcceptsSupportedHttpsAndSshAddresses(
         GitHostingProvider provider,
         string value,

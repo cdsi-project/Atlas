@@ -9,7 +9,9 @@ internal static class SshKeySupport
     [
         "id_ed25519",
         "id_ecdsa",
-        "id_rsa"
+        "id_rsa",
+        "id_ed25519_beacon",
+        "id_ed25519_atlas"
     ];
 
     internal static string GetDefaultSshDirectory()
@@ -55,7 +57,7 @@ internal static class SshKeySupport
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sshDirectory);
         var directory = Path.GetFullPath(sshDirectory);
-        const string baseName = "id_ed25519_atlas";
+        const string baseName = "id_ed25519_beacon";
         for (var suffix = 1; ; suffix++)
         {
             var keyName = suffix == 1 ? baseName : $"{baseName}_{suffix}";

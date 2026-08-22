@@ -109,7 +109,7 @@ public sealed partial class MainForm : Form
         SuspendLayout();
 
         var applicationVersion = GetApplicationVersion();
-        Text = $"CDSI Atlas v{applicationVersion}";
+        Text = $"CDSI Beacon v{applicationVersion}";
         ConfigureStartupWindow(this);
         BackColor = Color.FromArgb(247, 248, 250);
         Font = new Font("Segoe UI", 9F);
@@ -137,7 +137,7 @@ public sealed partial class MainForm : Form
         header.Controls.Add(new Label
         {
             AutoSize = true,
-            Text = "CDSI Atlas",
+            Text = "CDSI Beacon",
             Font = new Font("Segoe UI Semibold", 18F),
             ForeColor = Color.White,
             Location = new Point(25, 11)
@@ -846,7 +846,7 @@ public sealed partial class MainForm : Form
             MessageBox.Show(
                 this,
                 "没有已启用的扫描目录。",
-                "CDSI Atlas",
+                "CDSI Beacon",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;

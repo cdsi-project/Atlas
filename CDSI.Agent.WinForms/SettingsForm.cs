@@ -45,7 +45,7 @@ public sealed partial class SettingsForm : Form
         _openWebSettingsService = openWebSettingsService;
         _gitProfileService = gitProfileService;
 
-        Text = "CDSI Atlas 设置";
+        Text = "CDSI Beacon 设置";
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(820, 520);
         MinimumSize = new Size(720, 460);

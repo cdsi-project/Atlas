@@ -105,7 +105,7 @@ internal sealed class AssetTagDialog : Form
             MessageBox.Show(
                 this,
                 "请输入标签名称。",
-                "CDSI Atlas",
+                "CDSI Beacon",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             _tagNameComboBox.Focus();

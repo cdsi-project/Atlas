@@ -14,8 +14,8 @@
     <Company>CDSI Project</Company>
     <Copyright>Copyright (c) 2026 CDSI Project</Copyright>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/cdsi-project/Atlas</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/cdsi-project/Atlas.git</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/cdsi-project/Beacon</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/cdsi-project/Beacon.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
   </PropertyGroup>
 </Project>

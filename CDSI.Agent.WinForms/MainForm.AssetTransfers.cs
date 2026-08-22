@@ -246,7 +246,7 @@ public sealed partial class MainForm
             MessageBox.Show(
                 this,
                 $"文件当前位置不存在：{Environment.NewLine}{path}",
-                "CDSI Atlas",
+                "CDSI Beacon",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;
@@ -347,7 +347,7 @@ public sealed partial class MainForm
             MessageBox.Show(
                 this,
                 "选择中包含不可用的本地位置，请重新选择可用文件。",
-                "CDSI Atlas",
+                "CDSI Beacon",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;
@@ -441,7 +441,7 @@ public sealed partial class MainForm
             MessageBox.Show(
                 this,
                 $"{actionText}完成，共处理 {result.CompletedItems:N0} 个文件。",
-                "CDSI Atlas",
+                "CDSI Beacon",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;
@@ -468,7 +468,7 @@ public sealed partial class MainForm
             string.IsNullOrWhiteSpace(details)
                 ? _statusLabel.Text
                 : $"{_statusLabel.Text}{Environment.NewLine}{Environment.NewLine}{details}",
-            "CDSI Atlas",
+            "CDSI Beacon",
             MessageBoxButtons.OK,
             result.Status == FileOperationStatus.Cancelled
                 ? MessageBoxIcon.Information

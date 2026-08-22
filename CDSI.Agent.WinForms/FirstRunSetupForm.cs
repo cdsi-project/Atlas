@@ -98,7 +98,7 @@ public sealed class FirstRunSetupForm : Form
             MessageBox.Show(
                 this,
                 "请选择工作目录。",
-                "CDSI Atlas",
+                "CDSI Beacon",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             e.Cancel = true;

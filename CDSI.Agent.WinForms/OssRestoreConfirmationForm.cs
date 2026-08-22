@@ -328,7 +328,7 @@ internal sealed class OssRestoreConfirmationForm : Form
             MessageBox.Show(
                 this,
                 errorMessage,
-                "CDSI Atlas",
+                "CDSI Beacon",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;

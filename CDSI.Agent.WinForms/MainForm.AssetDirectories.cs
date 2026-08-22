@@ -211,7 +211,7 @@ public sealed partial class MainForm
             MessageBox.Show(
                 this,
                 $"目录当前不可用：{Environment.NewLine}{directory.Path}",
-                "CDSI Atlas",
+                "CDSI Beacon",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;

@@ -381,7 +381,7 @@ public sealed class AssetCollectionFormTests
                 name,
                 provider,
                 "https://storage.example.com",
-                "atlas-assets",
+                "beacon-assets",
                 "region-1",
                 UseHttps: true,
                 "access-key-id",

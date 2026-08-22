@@ -679,7 +679,7 @@ public sealed partial class MainForm
                 MessageBox.Show(
                     this,
                     "该项目还没有资产。",
-                    "CDSI Atlas",
+                    "CDSI Beacon",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
                 return;
@@ -690,7 +690,7 @@ public sealed partial class MainForm
                 MessageBox.Show(
                     this,
                     $"项目中有 {plan.UnavailableAssetCount:N0} 个本地位置缺失的资产。请恢复这些文件后再同步整个项目。",
-                    "CDSI Atlas",
+                    "CDSI Beacon",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
                 return;

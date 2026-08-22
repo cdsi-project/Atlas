@@ -1,8 +1,8 @@
-# CDSI Atlas
+# CDSI Beacon
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
-CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己的 Windows 设备上扫描所选目录，建立独立于文件路径的资产与位置记录。扫描和分析不会修改源文件；复制、移动、OSS 备份或取回只会在用户明确选择文件并确认后执行。
+CDSI Beacon 是 CDSI 的本地资产发现与索引应用。它在创作者自己的 Windows 设备上扫描所选目录，建立独立于文件路径的资产与位置记录。扫描和分析不会修改源文件；复制、移动、OSS 备份或取回只会在用户明确选择文件并确认后执行。
 
 当前仓库实现 Milestone 0.9：带受管工作目录、多扫描目录、逻辑资产清单、显式受管资产操作、可验证 OSS 备份、重复文件检测、基础媒体理解和 OpenWeb 文章发布的资产索引闭环。
 
@@ -14,7 +14,7 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 - “扫描”菜单可选择常规扫描或完整校验扫描，并可取消当前任务或刷新资产索引
 - “任务中心”实时显示当前任务状态、进度、处理路径和数据目录，并可取消支持取消的任务；“工具 > 运行日志”可查看当前会话及历史日志，并可打开本机日志目录
 - 主窗口进度区位于选项卡内容下方、状态栏上方；空闲时自动收起，扫描、传输或发布任务运行时显示阶段、进度条和当前处理路径
-- Atlas 将启动、正常退出和界面操作错误写入本机 <code>%LOCALAPPDATA%\CDSI\Logs</code>；窗口创建前发生启动异常时也会在此生成诊断日志，写入前会遮蔽常见密码、令牌、签名和 URL 查询参数
+- Beacon 将启动、正常退出和界面操作错误写入本机 <code>%LOCALAPPDATA%\CDSI\Logs</code>；窗口创建前发生启动异常时也会在此生成诊断日志，写入前会遮蔽常见密码、令牌、签名和 URL 查询参数
 - 首次启动配置一个受管工作目录，并自动创建 <code>Inbox</code>、<code>Assets</code>、<code>Exports</code>、<code>Cache</code>、<code>Temp</code> 和 <code>System</code>
 - 工作目录可后续修改；切换时不搬移、不删除旧目录中的任何文件
 - 将受管工作目录的 <code>Inbox</code> 作为受管扫描入口
@@ -50,7 +50,7 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 - 在设置页添加多个 OpenWeb 源站；双击源站可编辑，右键可编辑、打开、复制域名、设为默认或删除本机配置；域名规范化后持久化到本机 SQLite
 - 在设置页添加多个 GitHub 或 Gitee（码云）仓库配置；双击配置可编辑，右键可编辑、打开平台网站、复制仓库地址、设为默认或删除本机配置，支持密码与 SSH 两种访问方式
 - 密码方式使用 HTTPS 仓库地址，用户名和密码分别配置；GitHub 可将个人访问令牌作为密码。SSH 方式使用 SSH 仓库地址，默认查找用户 <code>.ssh</code> 目录中的 Ed25519、ECDSA 或 RSA 密钥对
-- 未发现 SSH 密钥时由界面提示；只有用户确认后才打开系统 <code>ssh-keygen</code> 交互程序，Atlas 不会静默生成或覆盖密钥，也不会读取私钥
+- 未发现 SSH 密钥时由界面提示；只有用户确认后才打开系统 <code>ssh-keygen</code> 交互程序，Beacon 不会静默生成或覆盖密钥，也不会读取私钥
 - 保存 Git 配置不会自动连接、克隆、提交或推送文件
 - 每个源站独立配置 WordPress 用户名和应用程序密码；发布 Markdown/TXT 资产时默认选中默认源站，也可临时切换目标源站
 - Markdown 发布支持 YAML Front Matter 中的 <code>slug</code>、<code>categories</code>、<code>category</code>、<code>tags</code> 和 <code>tag</code>；分类和标签按名称匹配，不存在时在用户明确发布文章的过程中创建
@@ -114,14 +114,14 @@ CDSI Atlas 是 CDSI 的本地资产发现与索引应用。它在创作者自己
 
 ## 备份配置与使用
 
-Atlas 当前支持使用阿里云 OSS、七牛云 Kodo 或腾讯云 COS 保存可校验的资产副本。Atlas 不会代替用户开通云服务、创建 Bucket、创建访问凭据或修改云端权限，也不会因为保存配置而自动连接或上传文件。
+Beacon 当前支持使用阿里云 OSS、七牛云 Kodo 或腾讯云 COS 保存可校验的资产副本。Beacon 不会代替用户开通云服务、创建 Bucket、创建访问凭据或修改云端权限，也不会因为保存配置而自动连接或上传文件。
 
 ### 阿里云 OSS 云端准备
 
-1. 在阿里云 OSS 控制台创建一个 Bucket。建议为 Atlas 使用独立的私有 Bucket，并根据数据所在地、访问延迟和费用选择地域及存储类型。
+1. 在阿里云 OSS 控制台创建一个 Bucket。建议为 Beacon 使用独立的私有 Bucket，并根据数据所在地、访问延迟和费用选择地域及存储类型。
 2. 查询该 Bucket 对应的[地域 ID 和外网 Endpoint](https://help.aliyun.com/zh/oss/user-guide/regions-and-endpoints)。普通 Windows 电脑应使用外网 Endpoint；带 <code>-internal</code> 的内网 Endpoint 只适用于同地域的阿里云内网环境。
-3. 创建专用于 Atlas 的 [RAM 用户和 AccessKey](https://help.aliyun.com/zh/oss/developer-reference/use-the-accesskey-pair-of-a-ram-user-to-initiate-a-request)，不要使用阿里云主账号 AccessKey。AccessKey Secret 只在创建时显示一次，应立即妥善保存。
-4. 为 RAM 用户授予目标 Bucket 的最小权限。Atlas 需要写入和校验对象、断点续传以及取回文件；将下例中的 <code>YOUR_BUCKET</code> 替换为实际 Bucket 名称：
+3. 创建专用于 Beacon 的 [RAM 用户和 AccessKey](https://help.aliyun.com/zh/oss/developer-reference/use-the-accesskey-pair-of-a-ram-user-to-initiate-a-request)，不要使用阿里云主账号 AccessKey。AccessKey Secret 只在创建时显示一次，应立即妥善保存。
+4. 为 RAM 用户授予目标 Bucket 的最小权限。Beacon 需要写入和校验对象、断点续传以及取回文件；将下例中的 <code>YOUR_BUCKET</code> 替换为实际 Bucket 名称：
 
 ~~~json
 {
@@ -143,23 +143,23 @@ Atlas 当前支持使用阿里云 OSS、七牛云 Kodo 或腾讯云 COS 保存�
 }
 ~~~
 
-其中 <code>oss:GetObject</code> 同时用于上传前后的 HEAD 元数据校验和文件取回；<code>oss:PutObject</code> 用于普通及分片上传；<code>oss:ListParts</code> 和 <code>oss:AbortMultipartUpload</code> 用于恢复或清理分片上传。Atlas 不需要列出全部 Bucket，也不需要删除 Object 的权限。阿里云的操作与权限对应关系可参考[分片上传权限说明](https://help.aliyun.com/zh/oss/user-guide/multipart-upload/)和 [HeadObject 权限说明](https://help.aliyun.com/zh/oss/developer-reference/headobject/)。
+其中 <code>oss:GetObject</code> 同时用于上传前后的 HEAD 元数据校验和文件取回；<code>oss:PutObject</code> 用于普通及分片上传；<code>oss:ListParts</code> 和 <code>oss:AbortMultipartUpload</code> 用于恢复或清理分片上传。Beacon 不需要列出全部 Bucket，也不需要删除 Object 的权限。阿里云的操作与权限对应关系可参考[分片上传权限说明](https://help.aliyun.com/zh/oss/user-guide/multipart-upload/)和 [HeadObject 权限说明](https://help.aliyun.com/zh/oss/developer-reference/headobject/)。
 
 ### 七牛云 Kodo 云端准备
 
-1. 在七牛云对象存储控制台创建一个空间，建议为 Atlas 使用独立的私有空间。
+1. 在七牛云对象存储控制台创建一个空间，建议为 Beacon 使用独立的私有空间。
 2. 在七牛云的 [S3 Endpoint 与区域 ID 对照表](https://developer.qiniu.com/kodo/4088/s3-access-domainname)中找到空间所在区域。例如华东-浙江对应 Endpoint <code>s3.cn-east-1.qiniucs.com</code>、Region ID <code>cn-east-1</code>。这里填写 S3 Endpoint，不填写空间绑定的公开访问域名，也不在 Endpoint 前添加空间名称。
-3. 创建或选择具有目标空间读写权限的 AccessKey / SecretKey。Atlas 通过七牛云的 [S3 兼容 API](https://developer.qiniu.com/kodo/4087/compatible-s3-api)执行 HeadObject、GetObject、PutObject 和分片上传；凭据必须允许读取对象、写入对象、列出已上传分片和中止分片上传。Atlas 不需要删除对象权限。
-4. 在空间概览中确认“空间 S3 域名”对应的 S3 空间名称，并将它作为 Atlas 的 Bucket 填写；它可能与常规空间名称不同。当前版本使用路径式 S3 访问，并将 Region ID 用于请求签名；Endpoint、S3 空间名称、空间区域和 Region ID 必须相互对应。
+3. 创建或选择具有目标空间读写权限的 AccessKey / SecretKey。Beacon 通过七牛云的 [S3 兼容 API](https://developer.qiniu.com/kodo/4087/compatible-s3-api)执行 HeadObject、GetObject、PutObject 和分片上传；凭据必须允许读取对象、写入对象、列出已上传分片和中止分片上传。Beacon 不需要删除对象权限。
+4. 在空间概览中确认“空间 S3 域名”对应的 S3 空间名称，并将它作为 Beacon 的 Bucket 填写；它可能与常规空间名称不同。当前版本使用路径式 S3 访问，并将 Region ID 用于请求签名；Endpoint、S3 空间名称、空间区域和 Region ID 必须相互对应。
 
 ### 腾讯云 COS 云端准备
 
-1. 在腾讯云 COS 控制台创建一个私有存储桶，并在存储桶概览中确认地域与完整存储桶名称。Atlas 的 Bucket 必须填写带 APPID 后缀的全名，例如 <code>examplebucket-1250000000</code>。
+1. 在腾讯云 COS 控制台创建一个私有存储桶，并在存储桶概览中确认地域与完整存储桶名称。Beacon 的 Bucket 必须填写带 APPID 后缀的全名，例如 <code>examplebucket-1250000000</code>。
 2. 根据腾讯云的[地域和访问域名](https://cloud.tencent.com/document/product/436/6224)填写服务 Endpoint 与 Region ID。广州地域示例为 Endpoint <code>cos.ap-guangzhou.myqcloud.com</code>、Region ID <code>ap-guangzhou</code>；Endpoint 不包含 Bucket 名称。
-3. 在访问管理 CAM 中为 Atlas 创建专用子账号密钥，AccessKey ID 一栏填写 SecretId，AccessKey Secret 一栏填写 SecretKey。按最小权限原则授予目标存储桶的 <code>cos:HeadObject</code>、<code>cos:GetObject</code>、<code>cos:PutObject</code>、<code>cos:InitiateMultipartUpload</code>、<code>cos:ListParts</code>、<code>cos:UploadPart</code>、<code>cos:CompleteMultipartUpload</code> 和 <code>cos:AbortMultipartUpload</code> 权限。
-4. Atlas 按腾讯云的 [AWS S3 SDK 兼容方式](https://cloud.tencent.com/document/product/436/37421)访问 COS，并使用虚拟主机式域名。2024 年及以后创建的 COS 存储桶不支持路径式域名，因此不要把 Bucket 拼到 Endpoint 路径中。
+3. 在访问管理 CAM 中为 Beacon 创建专用子账号密钥，AccessKey ID 一栏填写 SecretId，AccessKey Secret 一栏填写 SecretKey。按最小权限原则授予目标存储桶的 <code>cos:HeadObject</code>、<code>cos:GetObject</code>、<code>cos:PutObject</code>、<code>cos:InitiateMultipartUpload</code>、<code>cos:ListParts</code>、<code>cos:UploadPart</code>、<code>cos:CompleteMultipartUpload</code> 和 <code>cos:AbortMultipartUpload</code> 权限。
+4. Beacon 按腾讯云的 [AWS S3 SDK 兼容方式](https://cloud.tencent.com/document/product/436/37421)访问 COS，并使用虚拟主机式域名。2024 年及以后创建的 COS 存储桶不支持路径式域名，因此不要把 Bucket 拼到 Endpoint 路径中。
 
-### 在 Atlas 中添加配置
+### 在 Beacon 中添加配置
 
 打开“设置”一级菜单，进入“备份配置”页签，点击“添加配置”并填写：
 
@@ -184,24 +184,24 @@ Endpoint 可填写主机名，也可填写与“使用 HTTPS”选项一致的�
 2. 在“全部资产”中单选或多选本地可用资产，右键选择“同步到云端”。菜单会列出所有所选资产共同所属的项目；没有共同项目时，选择“加入项目并备份...”可加入已有项目或新建项目后继续。
 3. 在确认窗口选择目标备份配置并核对项目和源文件清单；确认后才开始上传。即使随后取消上传或上传失败，已完成的项目分类仍会保留。
 4. 也可在“项目管理”中右键项目并选择“同步到云端”。项目名称作为每个对象存储目标的目录名，项目内文件名保持原样，即 <code>&lt;项目名称&gt;/&lt;原文件名&gt;</code>。同一项目存在同名文件时会拒绝同步，避免多个资产写入同一个对象。
-5. 大文件自动使用分片上传，失败或取消后可重试续传。上传完成后，Atlas 会通过对象大小和 <code>cdsi-sha256</code> 元数据校验结果；通过校验的备份在资产列表中以绿色显示。
+5. 大文件自动使用分片上传，失败或取消后可重试续传。上传完成后，Beacon 会通过对象大小和 <code>cdsi-sha256</code> 元数据校验结果；通过校验的备份在资产列表中以绿色显示。
 6. 需要恢复时，在“全部资产”中选择资产，右键选择“从 OSS 取回”。只能选择本机已登记且完整性状态正常的 OSS 副本；目标可选 CDSI 工作目录或用户指定目录。
 7. 下载先写入临时文件，大小和 SHA-256 校验通过后才登记为本地位置。目标存在相同内容时直接复用，存在不同内容时拒绝覆盖。旧版本以 <code>assets/&lt;AssetId&gt;/...</code> 保存的备份同样可以取回。
 
-Atlas 保存的是 Bucket、对象键、大小、SHA-256 和校验状态，不依赖公开 URL。Bucket 可以保持私有，无需为备份文件开放匿名访问。
+Beacon 保存的是 Bucket、对象键、大小、SHA-256 和校验状态，不依赖公开 URL。Bucket 可以保持私有，无需为备份文件开放匿名访问。
 
 ### 常见问题
 
 | 提示或现象 | 检查方法 |
 | --- | --- |
 | <code>403 AccessDenied</code> | 检查 AccessKey 是否拥有目标 Bucket 的读写及分片上传权限，并确认 Bucket 名称正确。 |
-| <code>404 NoSuchKey</code> | 检查已登记的对象是否被其他工具删除或改名，以及当前配置是否指向原 Bucket。Atlas 不会自动删除云端对象。 |
+| <code>404 NoSuchKey</code> | 检查已登记的对象是否被其他工具删除或改名，以及当前配置是否指向原 Bucket。Beacon 不会自动删除云端对象。 |
 | <code>SignatureDoesNotMatch</code> 或凭据无效 | 重新核对提供商、AccessKey ID/Secret 和 Region ID；遗失 Secret 后应在云服务商控制台创建并轮换新的访问凭据。 |
 | Endpoint 错误、超时或无法连接 | 确认 Endpoint 与 Bucket 地域一致；阿里云普通电脑使用外网 Endpoint，七牛云使用对应区域的 S3 Endpoint，腾讯云使用 <code>cos.&lt;Region&gt;.myqcloud.com</code>。 |
 | 提示缺少 AccessKey Secret | 双击配置重新编辑并填写 Secret；凭据按 Windows 用户保存，切换账户或迁移数据库不会自动迁移凭据。 |
-| 目标对象已存在且内容不同 | Atlas 默认拒绝覆盖。检查项目内的同名文件或云端已有对象，处理冲突后重试。 |
+| 目标对象已存在且内容不同 | Beacon 默认拒绝覆盖。检查项目内的同名文件或云端已有对象，处理冲突后重试。 |
 
-对象存储容量、请求次数、下行流量、低频或归档数据取回等费用由所选云服务商按 Bucket 配置计费。Atlas 不会设置生命周期、版本控制、服务端加密或归档解冻策略；启用这些云端功能前，应确认不会导致备份被自动删除、无法直接取回或产生额外费用。
+对象存储容量、请求次数、下行流量、低频或归档数据取回等费用由所选云服务商按 Bucket 配置计费。Beacon 不会设置生命周期、版本控制、服务端加密或归档解冻策略；启用这些云端功能前，应确认不会导致备份被自动删除、无法直接取回或产生额外费用。
 
 ### Markdown 发布元数据
 
@@ -223,7 +223,7 @@ Front Matter 不会进入文章正文。<code>categories</code> 和 <code>tags</
 
 ## 数据安全
 
-CDSI Atlas 采用本地优先、默认非破坏性的处理方式，但不能替代操作系统权限管理和独立备份。以下说明适用于当前版本。
+CDSI Beacon 采用本地优先、默认非破坏性的处理方式，但不能替代操作系统权限管理和独立备份。以下说明适用于当前版本。
 
 ### 文件安全
 
@@ -240,7 +240,7 @@ CDSI Atlas 采用本地优先、默认非破坏性的处理方式，但不能替
 - OSS AccessKey Secret、WordPress 应用程序密码和 Git 密码保存在当前 Windows 用户的凭据管理器中，不写入 <code>cdsi.db</code>；凭据按配置隔离保存，编辑配置时不会读取并回显已有密码。
 - SQLite 会保存连接所需的非密码信息，例如 AccessKey ID、Endpoint、Bucket、各 WordPress 源站域名和用户名，以及 Git 平台、仓库地址、访问方式、用户名、默认分支和 SSH 公钥路径。AccessKey ID 和仓库地址不是 Secret，但仍不建议公开。
 - 当前应用没有独立的主密码，也没有对 SQLite 数据库进行应用层加密；本机数据的访问控制依赖 Windows 账户权限。建议为 Windows 账户设置强密码。
-- SSH 私钥始终由系统 OpenSSH 和用户管理，Atlas 只检查对应私钥是否存在并保存公钥路径，不读取、复制或上传私钥。“生成新密钥”会在 <code>.ssh</code> 中选择未占用的 Atlas 专用文件名，不覆盖已有密钥；生成时应设置口令，并将公钥添加到所选 GitHub 或 Gitee 账号。
+- SSH 私钥始终由系统 OpenSSH 和用户管理，Beacon 只检查对应私钥是否存在并保存公钥路径，不读取、复制或上传私钥。“生成新密钥”会在 <code>.ssh</code> 中选择未占用的 Beacon 专用文件名，不覆盖已有密钥；生成时应设置口令，并将公钥添加到所选 GitHub 或 Gitee 账号。
 - WordPress 发布固定使用 HTTPS。备份配置允许选择 HTTP 或 HTTPS；为避免凭据和文件在传输中暴露，应始终启用 HTTPS。
 - 建议为 OSS 使用权限最小化、可轮换的专用凭据。备份至少需要目标对象的写入和读取元数据权限，取回需要 <code>oss:GetObject</code>；为 WordPress 使用应用程序密码而不是账户主密码。凭据泄露后应立即在服务端撤销并重新生成。
 
@@ -337,7 +337,7 @@ dotnet run --project CDSI.Agent.WinForms/CDSI.Agent.WinForms.csproj
 
 ## 开源许可
 
-CDSI Atlas 由 CDSI Project 以 [Apache License 2.0](LICENSE) 发布。该协议允许使用、修改、分发和商业使用，并包含明确的专利授权与免责声明。Apache-2.0 不授予 CDSI 名称、标识或商标的使用权。
+CDSI Beacon 由 CDSI Project 以 [Apache License 2.0](LICENSE) 发布。该协议允许使用、修改、分发和商业使用，并包含明确的专利授权与免责声明。Apache-2.0 不授予 CDSI 名称、标识或商标的使用权。
 
 项目使用的第三方组件继续受各自许可证约束，详见 [NOTICE](NOTICE) 和 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。WinForms 构建和发布会将三个许可文件复制到应用程序旁；发布源码或二进制版本时应同时保留这些文件，并特别遵守 TagLibSharp 的 LGPL-2.1-only 要求。
 
