@@ -880,14 +880,17 @@ The agent should minimize unnecessary prompts. Batch review is preferable to int
 
 Storage must be implemented through adapters.
 
-Implemented targets:
+Implemented object-storage adapters:
 
 ```text
-Local filesystem
 Aliyun OSS
 Tencent COS
 Qiniu Kodo through its S3-compatible API
 ```
+
+Local filesystem scanning and managed copy/move are also implemented, but they
+use filesystem and managed-transfer abstractions rather than
+`IObjectStorageAdapter`.
 
 Potential later targets:
 
@@ -1357,7 +1360,7 @@ Preserve clean module boundaries.
 
 ## 45. Recommended Initial Implementation Order
 
-This section is historical planning context. The current working tree targeted for v0.200 has completed and extended the deterministic Windows MVP. For current behavior, use the README and Section 1.1. Remaining work should now prioritize stable project identity across local and cloud state:
+This section is historical planning context. The released v0.200 implementation has completed and extended the deterministic Windows MVP. For current behavior, use the README and Section 1.1. Remaining work should now prioritize stable project identity across local and cloud state:
 
 ```text
 1. Stable ProjectId in remote project manifests
@@ -1377,7 +1380,7 @@ Do not start with the LLM layer.
 
 ## 46. MVP Definition
 
-The original deterministic MVP is complete and retained here as an acceptance baseline. The current working tree can:
+The original deterministic MVP is complete and retained here as an acceptance baseline. The released v0.200 application can:
 
 - configure one or more local scan roots
 - scan directories safely
@@ -1530,7 +1533,7 @@ When modifying this repository:
 27. For a code-version or release commit, update `VERSION` according to the repository's `0.001` version sequence and run the full Release test suite. Create the self-contained single-file `win-x64` publish output and smoke-check it when preparing a binary release; a documentation-only change does not require a version bump or binary publish.
 28. Use `dotnet test .\CDSI.Agent.slnx -c Release --no-restore` for the standard full suite after dependencies are restored. Do not run build, test, and publish concurrently against the same output directories because MSBuild file locks can make results nondeterministic.
 29. Keep new cloud uploads project-scoped. When adding whole-project restore, reconciliation, or deletion, use stable ProjectId/manifest identity; do not allow project names or object-key prefixes to become canonical identity. Preserve the current selected-replica restore/delete workflows until their replacement is complete.
-30. Preserve compatibility with legacy name-prefix cloud records used by the current working tree and earlier versions. Require explicit confirmation before any migration, merge, overwrite, or remote deletion.
+30. Preserve compatibility with legacy name-prefix cloud records used by released v0.200 and earlier versions. Require explicit confirmation before any migration, merge, overwrite, or remote deletion.
 
 ---
 
